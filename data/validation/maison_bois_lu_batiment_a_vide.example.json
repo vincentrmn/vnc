@@ -1,0 +1,67 @@
+{
+  "name": "maison_bois_lu_batiment_a_vide",
+  "synthetic": false,
+  "kind": "free_float",
+  "description": "Cas de validation RÉEL anonymisé (distillé d'une STD IDA ICE, projet maison unifamiliale jumelée bois/CLT + dalles béton, Luxembourg). Test 'bâtiment à vide' : free-float passif, sans occupation ni chauffage, fenêtres + stores, U mur 0,101. Références = température opérative min/max par pièce. Données brutes STD/CPE NON committées (CLAUDE.md §11) ; seul ce résumé anonymisé l'est. Orientations par pièce APPROXIMÉES (non extraites des plans) — sans impact sur le min (indépendant du solaire) et amorti sur le max par les stores.",
+  "climate_epw": "data/climate/Luxembourg_Findel_TMYx.epw",
+  "ventilation_ach": 0.05,
+  "tolerance": {
+    "top_c": 2.5
+  },
+  "params": {
+    "internal_gains_w_m2": 0.0,
+    "shading_factor": 0.30,
+    "glazing_fraction": 0.75,
+    "core_coupling_w_m2k": 45.0,
+    "core_capacity_kj_m2k": 120.0,
+    "core_ground_coupling_w_m2k": 0.5
+  },
+  "envelope": {
+    "u_wall_w_m2k": 0.101,
+    "u_roof_w_m2k": 0.10,
+    "u_floor_w_m2k": 0.15,
+    "u_window_w_m2k": 0.6,
+    "g_window": 0.5
+  },
+  "building": {
+    "id": "maison_bois_lu",
+    "inertia_class": "lourde",
+    "num_levels": 3,
+    "rooms": [
+      {"id": "sejour", "label": "sejour", "area_m2": 57.6, "height_m": 2.6, "level": 0,
+       "exterior_wall_orientations": ["S", "E"],
+       "openings": [{"id": "sejour_s", "area_m2": 8.65, "orientation": "S"}]},
+      {"id": "chambreP", "label": "chambre", "area_m2": 14.43, "height_m": 2.6, "level": 1,
+       "exterior_wall_orientations": ["E", "N"],
+       "openings": [{"id": "chP_e", "area_m2": 2.2, "orientation": "E"}]},
+      {"id": "SDD", "label": "autre", "area_m2": 7.25, "height_m": 2.6, "level": 1,
+       "exterior_wall_orientations": ["W"],
+       "openings": [{"id": "sdd_w", "area_m2": 1.1, "orientation": "W"}]},
+      {"id": "chambre2", "label": "chambre", "area_m2": 14.58, "height_m": 2.6, "level": 1,
+       "exterior_wall_orientations": ["W"],
+       "openings": [{"id": "ch2_w", "area_m2": 2.21, "orientation": "W"}]},
+      {"id": "chambre3", "label": "chambre", "area_m2": 14.5, "height_m": 2.6, "level": 1,
+       "exterior_wall_orientations": ["S"],
+       "openings": [{"id": "ch3_s", "area_m2": 2.22, "orientation": "S"}]},
+      {"id": "SDB", "label": "sdb", "area_m2": 5.88, "height_m": 2.6, "level": 1,
+       "exterior_wall_orientations": ["N"], "openings": []},
+      {"id": "palier", "label": "circulation", "area_m2": 6.07, "height_m": 2.6, "level": 1,
+       "exterior_wall_orientations": [], "openings": []},
+      {"id": "grenier", "label": "technique", "area_m2": 30.0, "height_m": 2.6, "level": 2,
+       "exterior_wall_orientations": ["S", "N"],
+       "openings": [{"id": "gr_s", "area_m2": 1.0, "orientation": "S"}]}
+    ]
+  },
+  "expected": {
+    "rooms": [
+      {"id": "sejour", "top_min_c": 7.0, "top_max_c": 26.4},
+      {"id": "chambreP", "top_min_c": 6.5, "top_max_c": 26.0},
+      {"id": "SDD", "top_min_c": 6.7, "top_max_c": 26.0},
+      {"id": "chambre2", "top_min_c": 6.7, "top_max_c": 26.0},
+      {"id": "chambre3", "top_min_c": 6.5, "top_max_c": 26.0},
+      {"id": "SDB", "top_min_c": 6.7, "top_max_c": 25.5},
+      {"id": "palier", "top_min_c": 6.7, "top_max_c": 25.6},
+      {"id": "grenier", "top_min_c": 6.2, "top_max_c": 25.7}
+    ]
+  }
+}
