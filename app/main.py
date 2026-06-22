@@ -1,17 +1,25 @@
-"""UI interne Streamlit (stub) — Zéphyr.
+"""UI interne Streamlit — Zéphyr.
 
-Pragmatique pour l'interne (CLAUDE.md §5). À ce stade : upload DXF (branché sur
-rien), formulaire de paramètres, et une **démo ROI fonctionnelle** (la seule
-brique calculatoire prête en Phase 1).
+Pragmatique pour l'interne (CLAUDE.md §5). En attendant l'ingestion DXF
+(Phase 3), on décrit un **bâtiment paramétrique** et on fait tourner le pipeline
+complet : thermal → ventilation → rules → roi, avec verdict + rapport.
 
-Lancer :  ``streamlit run app/main.py``
+Lancer :  ``uv run --extra app streamlit run app/main.py``
 """
 
 from __future__ import annotations
 
 import streamlit as st
 
-from zephyr.roi import ROIParameters, compute_roi, tornado
+from zephyr.builders import parametric_building
+from zephyr.climate import read_epw, synthetic_climate
+from zephyr.report import render_report_html
+from zephyr.roi import ROIParameters
+from zephyr.schemas import EnvelopeData, InertiaClass, Orientation, SiteContext, Verdict
+from zephyr.study import compute_study
+from zephyr.thermal import R5C1Params
+
+_VERDICT_COLOR = {Verdict.GO: "🟢", Verdict.CONDITIONNEL: "🟠", Verdict.NO_GO: "🔴"}
 
 
 def main() -> None:
@@ -25,52 +33,98 @@ def main() -> None:
     with st.sidebar:
         st.header("1. Plans (DXF)")
         st.file_uploader("Déposer un plan DXF vectorisé", type=["dxf"], disabled=True)
-        st.info("Ingestion DXF + validation géométrie : Phase 3 (à venir).")
+        st.info("Ingestion DXF + validation géométrie : Phase 3. Ici, saisie paramétrique.")
 
-        st.header("2. Paramètres ROI")
-        num_log = st.number_input("Nombre de logements", min_value=0, value=40)
-        s_log = st.number_input("Surface / logement (m²)", min_value=0.0, value=75.0)
-        s_tert = st.number_input("Surface tertiaire (m²)", min_value=0.0, value=1200.0)
-        price = st.number_input("Prix élec (€/kWh)", min_value=0.0, value=0.28, step=0.01)
-        penalty = st.number_input(
-            "Pénalité chauffage VNC (€/an) — sortie de `thermal`",
-            min_value=0.0,
-            value=4000.0,
-            help="Calculée par le module thermique (Phase 2). Conservatrice ici. Jamais 0.",
+        st.header("2. Bâtiment")
+        total_area = st.number_input("Surface ventilée totale (m²)", 50.0, 50000.0, 1200.0, 50.0)
+        n_levels = st.slider("Niveaux", 1, 8, 2)
+        window_ratio = st.slider("Ratio vitrage / surface", 0.05, 0.40, 0.15, 0.01)
+        through = st.checkbox("Pièces traversantes", value=True)
+        inertia = st.selectbox(
+            "Inertie", list(InertiaClass), index=2, format_func=lambda x: x.value
         )
 
-    params = ROIParameters(
-        num_logements=int(num_log),
-        surface_per_logement_m2=s_log,
-        surface_tertiaire_m2=s_tert,
+        st.header("3. Enveloppe")
+        u_wall = st.number_input("U murs (W/m²K)", 0.05, 1.5, 0.20, 0.01)
+        u_win = st.number_input("U vitrage (W/m²K)", 0.5, 3.0, 0.9, 0.1)
+
+        st.header("4. Site (qualitatif)")
+        noise = st.checkbox("Bruit extérieur excessif")
+        pollution = st.checkbox("Pollution / pollen élevés")
+        security = st.checkbox("Risque sécurité au RdC")
+
+        st.header("5. ROI")
+        price = st.number_input("Prix élec (€/kWh)", 0.05, 1.0, 0.28, 0.01)
+
+    building = parametric_building(
+        total_area,
+        num_levels=int(n_levels),
+        window_to_floor_ratio=window_ratio,
+        inertia=inertia,
+        through=through,
+        main_orientation=Orientation.S,
+    )
+    envelope = EnvelopeData(u_wall_w_m2k=u_wall, u_window_w_m2k=u_win, g_window=0.5)
+    site = SiteContext(
+        exterior_noise_high=noise, pollution_high=pollution, ground_floor_security_risk=security
+    )
+    roi_params = ROIParameters(
+        num_logements=0,
+        surface_per_logement_m2=0.0,
+        surface_tertiaire_m2=total_area,
         price_elec_eur_kwh=price,
     )
-    result = compute_roi(params, heating_penalty_eur_per_year=penalty)
 
-    st.subheader("Résultat ROI (VNC vs VMC DF)")
+    epw = st.session_state.get("epw_path")
+    climate = read_epw(epw) if epw else synthetic_climate()
+    if not epw:
+        st.warning("Climat synthétique (déposer un EPW pour un calcul réel).")
+
+    result = compute_study(
+        building,
+        climate,
+        roi_params=roi_params,
+        thermal_params=R5C1Params(),
+        envelope=envelope,
+        site=site,
+    )
+
+    icon = _VERDICT_COLOR[result.verdict]
+    st.subheader(f"{icon} Verdict : {result.verdict.value.upper()}")
+    if result.disqualifiers:
+        st.error("Disqualifiants : " + " ; ".join(result.disqualifiers))
+    if result.conditions:
+        st.warning("Conditions : " + " ; ".join(result.conditions))
+
     c1, c2, c3 = st.columns(3)
-    c1.metric("CAPEX VNC", f"{result.capex_vnc_eur:,.0f} €")
-    c2.metric("CAPEX VMC", f"{result.capex_vmc_eur:,.0f} €")
-    c3.metric(
-        "VAN économie VNC (actualisée)",
-        f"{result.npv_delta_eur:,.0f} €",
-        help="Coûts VMC − coûts VNC. >0 => VNC favorable.",
-    )
-    be = result.break_even_year
-    be_txt = f"an {be}" if be is not None else "au-delà de l'horizon"
-    st.write(f"**Break-even** : {be_txt}")
+    assert result.roi and result.thermal
+    c1.metric("CAPEX VNC", f"{result.roi.capex_vnc_eur:,.0f} €")
+    c2.metric("VAN économie VNC", f"{result.roi.npv_delta_eur:,.0f} €")
+    be = result.roi.break_even_year
+    c3.metric("Break-even", f"an {be}" if be is not None else "hors horizon")
 
-    st.line_chart(
-        {"VAN cumulée économie VNC (€)": result.npv_delta_cumulative_eur},
-    )
+    st.line_chart({"VAN cumulée économie VNC (€)": result.roi.npv_delta_cumulative_eur})
+
+    st.subheader("Thermique")
+    tc1, tc2, tc3 = st.columns(3)
+    tc1.metric("Pénalité chauffage", f"{result.thermal.heating_penalty_eur_per_year:,.0f} €/an")
+    tc2.metric("Surchauffe", f"{result.thermal.overheating_hours:.0f} h/an")
+    tc3.metric("Night-cooling", f"{result.thermal.night_cooling_benefit_kwh:,.0f} kWh/an")
 
     st.subheader("Sensibilité (tornado)")
-    bars = tornado(params, heating_penalty_eur_per_year=penalty)
-    st.bar_chart({b.parameter: b.swing for b in bars})
+    st.bar_chart({e.parameter: e.swing for e in result.roi.sensitivity})
+
+    with st.expander("Rapport HTML"):
+        st.download_button(
+            "Télécharger le rapport",
+            render_report_html(result),
+            file_name="prestude_vnc.html",
+            mime="text/html",
+        )
 
     with st.expander("Hypothèses & avertissements"):
         st.json(result.assumptions)
-        for w in result.warnings:
+        for w in result.roi.warnings:
             st.warning(w)
 
 
