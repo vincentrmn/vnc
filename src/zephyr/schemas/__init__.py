@@ -21,6 +21,7 @@ from zephyr.schemas.results import (
     StudyResult,
     ThermalResult,
     Verdict,
+    ZoneResult,
 )
 from zephyr.schemas.study import EnvelopeData, ProjectType, StudyInput
 
@@ -44,4 +45,5 @@ __all__ = [
     "StudyResult",
     "ThermalResult",
     "Verdict",
+    "ZoneResult",
 ]

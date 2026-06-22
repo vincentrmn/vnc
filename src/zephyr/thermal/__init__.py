@@ -24,7 +24,15 @@ import math
 from dataclasses import dataclass, field
 
 from zephyr.climate import ClimateData, vertical_irradiance
-from zephyr.schemas import Building, EnvelopeData, InertiaClass, Orientation, ThermalResult
+from zephyr.schemas import (
+    Building,
+    EnvelopeData,
+    InertiaClass,
+    Orientation,
+    Room,
+    ThermalResult,
+    ZoneResult,
+)
 
 # Constantes ISO 13790
 H_IS = 3.45  # W/m²K, couplage air <-> surface
@@ -90,43 +98,46 @@ class _ZoneModel:
     phi_sol: list[float]  # W (apports solaires horaires)
 
 
-def _windows_by_orientation(building: Building) -> dict[Orientation, float]:
-    """Surface vitrée totale par orientation (m²)."""
+def _room_windows_by_orientation(room: Room) -> dict[Orientation, float]:
+    """Surface vitrée d'une pièce par orientation (m²)."""
     out: dict[Orientation, float] = {}
-    for room in building.rooms:
-        for op in room.openings:
-            out[op.orientation] = out.get(op.orientation, 0.0) + op.area_m2
+    for op in room.openings:
+        out[op.orientation] = out.get(op.orientation, 0.0) + op.area_m2
     return out
 
 
-def _build_zone(
-    building: Building,
+def _build_room_zone(
+    room: Room,
+    inertia: InertiaClass,
     env: EnvelopeData,
     params: R5C1Params,
     irradiance: dict[Orientation, list[float]],
+    n_levels: int,
 ) -> _ZoneModel:
-    """Construit le modèle mono-zone 5R1C depuis géométrie + enveloppe.
+    """Construit le 5R1C d'**une pièce** (multi-zone).
 
-    Les surfaces opaques sont estimées par forme compacte (empreinte carrée),
-    approximation assumée de niveau pré-étude. `irradiance` donne, par
-    orientation, la série horaire d'irradiance verticale (W/m²).
+    Seules les **surfaces réellement extérieures** de la pièce sont prises en
+    compte :
+      - façades exposées (orientations de ``exterior_wall_orientations`` ∪ celles
+        des ouvrants), une façade ≈ √(surface)·HSP par orientation ;
+      - toiture si la pièce est au dernier niveau ;
+      - plancher sur sol si la pièce est au RdC (level 0) → couplé à T_sol.
+    Les murs/planchers/plafonds intérieurs sont **adiabatiques** (les pièces
+    voisines flottent à températures voisines en free-float).
     """
-    a_f = building.total_floor_area_m2
-    volume = building.total_volume_m3
-    heights = [r.height_m for r in building.rooms] or [2.6]
-    mean_h = sum(heights) / len(heights)
-    levels = max(building.num_levels, 1)
+    a_f = room.area_m2
+    h = room.height_m
+    volume = a_f * h
+    side = math.sqrt(max(a_f, 1.0))  # pièce ≈ carrée
 
-    footprint = a_f / levels
-    perimeter = 4.0 * math.sqrt(max(footprint, 1.0))
-    total_height = levels * mean_h
-    gross_wall = perimeter * total_height
-
-    windows = _windows_by_orientation(building)
+    ext_orients = set(room.exterior_wall_orientations) | {op.orientation for op in room.openings}
+    windows = _room_windows_by_orientation(room)
     a_w = sum(windows.values())
-    a_wall_opaque = max(gross_wall - a_w, 0.3 * gross_wall)
-    a_roof = footprint
-    a_floor = footprint
+
+    gross_wall = len(ext_orients) * side * h
+    a_wall_opaque = max(gross_wall - a_w, 0.1 * gross_wall) if gross_wall > 0 else 0.0
+    a_roof = a_f if room.level >= n_levels - 1 else 0.0
+    a_floor_ground = a_f if room.level <= 0 else 0.0
 
     u_wall = env.u_wall_w_m2k or _DEFAULT_ENVELOPE.u_wall_w_m2k
     u_roof = env.u_roof_w_m2k or _DEFAULT_ENVELOPE.u_roof_w_m2k
@@ -135,38 +146,34 @@ def _build_zone(
     g_win = env.g_window or _DEFAULT_ENVELOPE.g_window
     assert u_wall and u_roof and u_floor and u_win and g_win  # défauts garantis non-None
 
-    # Opaque hors-sol (murs + toiture) → air extérieur.
-    h_tr_op = u_wall * a_wall_opaque + u_roof * a_roof
-    # Plancher bas → SOL (température stable ~moyenne annuelle), pas l'air extérieur.
-    # ISO 13370 simplifié : couplage direct à T_sol via U plancher.
-    h_gr = u_floor * a_floor
+    h_tr_op = u_wall * a_wall_opaque + u_roof * a_roof  # opaque hors-sol → air
+    h_gr = u_floor * a_floor_ground  # plancher → sol (ISO 13370 simplifié)
     h_tr_w = u_win * a_w
 
-    c_m_per_m2, a_m_factor = _INERTIA[building.inertia_class]
+    c_m_per_m2, a_m_factor = _INERTIA[inertia]
     c_m = c_m_per_m2 * a_f
     a_m = a_m_factor * a_f
     a_t = LAMBDA_AT * a_f
     h_tr_is = H_IS * a_t
     h_tr_ms = H_MS * a_m
-    # H_tr_em : opaque côté masse (garde-fou si H_tr_op proche de H_tr_ms).
-    if h_tr_op >= h_tr_ms:
+    # H_tr_em : opaque côté masse (garde-fou si pas d'opaque hors-sol).
+    if h_tr_op <= 0:
+        h_tr_em = 0.0
+    elif h_tr_op >= h_tr_ms:
         h_tr_em = h_tr_op
     else:
         h_tr_em = 1.0 / (1.0 / h_tr_op - 1.0 / h_tr_ms)
 
     phi_int = params.internal_gains_w_m2 * a_f
 
-    # Apports solaires horaires (somme sur orientations vitrées).
-    phi_sol_total: list[float] = []
+    # Apports solaires horaires (somme sur orientations vitrées de la pièce).
+    n_hours = len(next(iter(irradiance.values()))) if irradiance else 8760
+    phi_sol_total = [0.0] * n_hours
     for orient, area in windows.items():
         irr = irradiance[orient]
         gain_area = g_win * params.glazing_fraction * params.shading_factor * area
-        if not phi_sol_total:
-            phi_sol_total = [0.0] * len(irr)
-        for i in range(len(irr)):
+        for i in range(n_hours):
             phi_sol_total[i] += gain_area * irr[i]
-    if not phi_sol_total:
-        phi_sol_total = [0.0] * 8760
 
     return _ZoneModel(
         a_f=a_f,
@@ -287,104 +294,162 @@ def _night_cooling_series(z: _ZoneModel, climate: ClimateData, params: R5C1Param
     return series
 
 
+def _infiltration_ach(params: R5C1Params, env: EnvelopeData) -> float:
+    """Renouvellement d'air par infiltration (vol/h)."""
+    if params.infiltration_ach is not None:
+        return params.infiltration_ach
+    n50 = env.air_permeability_ach50 or _DEFAULT_ENVELOPE.air_permeability_ach50 or 1.5
+    return n50 / 20.0  # règle de division usuelle
+
+
+def _ground_temp(params: R5C1Params, climate: ClimateData) -> float:
+    """Température de sol (ISO 13370 simplifié : ≈ moyenne annuelle de l'air)."""
+    if params.ground_temp_c is not None:
+        return params.ground_temp_c
+    return sum(climate.dry_bulb_c) / climate.n_hours
+
+
+def _irradiance_for(building: Building, climate: ClimateData) -> dict[Orientation, list[float]]:
+    """Irradiance verticale horaire pour chaque orientation vitrée présente."""
+    return {
+        op.orientation: vertical_irradiance(climate, op.orientation)
+        for room in building.rooms
+        for op in room.openings
+    }
+
+
+def simulate_free_float(
+    building: Building,
+    climate: ClimateData,
+    params: R5C1Params | None = None,
+    envelope: EnvelopeData | None = None,
+    ventilation_ach: float | None = None,
+) -> list[ZoneResult]:
+    """Free-float **passif** par pièce — reproduit le test STD « bâtiment à vide ».
+
+    Aucun chauffage, aucune stratégie de ventilation (pas de night-cooling) :
+    seule l'infiltration (ou ``ventilation_ach`` si fourni) agit. Renvoie les
+    extrêmes de température opérative par pièce — la grandeur calée sur IDA ICE.
+    """
+    params = params or R5C1Params()
+    env = envelope or _DEFAULT_ENVELOPE
+    irr = _irradiance_for(building, climate)
+    ground = _ground_temp(params, climate)
+    ach = ventilation_ach if ventilation_ach is not None else _infiltration_ach(params, env)
+
+    out: list[ZoneResult] = []
+    for room in building.rooms:
+        z = _build_room_zone(room, building.inertia_class, env, params, irr, building.num_levels)
+        h_ve = _h_ve_constant(z, ach)
+        air, _ = _simulate(
+            z, climate, [h_ve] * climate.n_hours, heating_setpoint=None, ground_temp=ground
+        )
+        oh = sum(1.0 for t in air if t > params.comfort_temp_c)
+        out.append(
+            ZoneResult(
+                zone_id=room.id, top_min_c=min(air), top_max_c=max(air), overheating_hours=oh
+            )
+        )
+    return out
+
+
 def simulate_5r1c(
     building: Building,
     climate: ClimateData,
     params: R5C1Params | None = None,
     envelope: EnvelopeData | None = None,
 ) -> ThermalResult:
-    """Simule le comportement thermique horaire (5R1C) et renvoie un `ThermalResult`.
+    """Simule le comportement thermique horaire (5R1C **multi-zone**).
 
-    Calcule la pénalité de chauffage VNC (vs VMC DF avec récupération), les heures
-    de surchauffe et un bénéfice de night-cooling. Cf. en-tête de module pour les
-    réserves de validation.
+    Pour chaque pièce : pénalité de chauffage VNC vs VMC DF (récup η), heures de
+    surchauffe (free-running + night-cooling) et extrêmes de température. Agrège
+    au bâtiment. Cf. en-tête de module pour les réserves de validation.
     """
     params = params or R5C1Params()
     env = envelope or _DEFAULT_ENVELOPE
+    irr = _irradiance_for(building, climate)
+    ground = _ground_temp(params, climate)
+    inf_ach = _infiltration_ach(params, env)
 
-    # Pré-calcul de l'irradiance verticale par orientation présente.
-    irradiance = {
-        op.orientation: vertical_irradiance(climate, op.orientation)
-        for room in building.rooms
-        for op in room.openings
-    }
+    penalty_kwh = 0.0
+    heat_vnc_total = 0.0
+    heat_vmc_total = 0.0
+    overheating_max = 0.0
+    dh_max = 0.0
+    night_benefit_kwh = 0.0
+    zones: list[ZoneResult] = []
 
-    z = _build_zone(building, env, params, irradiance)
+    for room in building.rooms:
+        z = _build_room_zone(room, building.inertia_class, env, params, irr, building.num_levels)
+        h_inf = _h_ve_constant(z, inf_ach)
+        h_hyg = _h_ve_constant(z, params.hygienic_ach)
 
-    # Infiltration (sans récupération pour les deux scénarios).
-    if params.infiltration_ach is not None:
-        inf_ach = params.infiltration_ach
-    else:
-        n50 = env.air_permeability_ach50 or _DEFAULT_ENVELOPE.air_permeability_ach50 or 1.5
-        inf_ach = n50 / 20.0  # règle de division usuelle
+        # Pénalité de chauffage : VNC (sans récup) vs VMC (récup η).
+        h_ve_vnc = h_inf + h_hyg
+        h_ve_vmc = h_inf + h_hyg * (1.0 - params.recovery_efficiency)
+        _, heat_vnc = _simulate(
+            z, climate, [h_ve_vnc] * climate.n_hours,
+            heating_setpoint=params.heating_setpoint_c, ground_temp=ground,
+        )
+        _, heat_vmc = _simulate(
+            z, climate, [h_ve_vmc] * climate.n_hours,
+            heating_setpoint=params.heating_setpoint_c, ground_temp=ground,
+        )
+        zone_penalty = max(heat_vnc - heat_vmc, 0.0)
+        penalty_kwh += zone_penalty
+        heat_vnc_total += heat_vnc
+        heat_vmc_total += heat_vmc
 
-    h_inf = _h_ve_constant(z, inf_ach)
-    h_hyg = _h_ve_constant(z, params.hygienic_ach)
+        # Surchauffe : free-running VNC avec night-cooling.
+        air_free, _ = _simulate(
+            z, climate, _night_cooling_series(z, climate, params),
+            heating_setpoint=None, ground_temp=ground,
+        )
+        oh = sum(1.0 for t in air_free if t > params.comfort_temp_c)
+        dh = sum(max(t - params.comfort_temp_c, 0.0) for t in air_free)
+        overheating_max = max(overheating_max, oh)
+        dh_max = max(dh_max, dh)
 
-    # Température de sol : override explicite, sinon moyenne annuelle du climat
-    # (ISO 13370 simplifié : le sol profond ≈ T air moyenne annuelle).
-    if params.ground_temp_c is not None:
-        ground_temp = params.ground_temp_c
-    else:
-        ground_temp = sum(climate.dry_bulb_c) / climate.n_hours
+        boost = _h_ve_constant(z, params.night_cooling_ach) - h_hyg
+        for i in range(climate.n_hours):
+            hour = i % 24
+            if (hour >= 22 or hour < 7) and climate.dry_bulb_c[i] < 23.0:
+                dt = air_free[i] - climate.dry_bulb_c[i]
+                if dt > 0:
+                    night_benefit_kwh += boost * dt / 1000.0
 
-    # --- Pénalité de chauffage : VNC (sans récup) vs VMC (récup η) ---
-    h_ve_vnc = h_inf + h_hyg
-    h_ve_vmc = h_inf + h_hyg * (1.0 - params.recovery_efficiency)
-    _, heat_vnc = _simulate(
-        z,
-        climate,
-        [h_ve_vnc] * climate.n_hours,
-        heating_setpoint=params.heating_setpoint_c,
-        ground_temp=ground_temp,
-    )
-    _, heat_vmc = _simulate(
-        z,
-        climate,
-        [h_ve_vmc] * climate.n_hours,
-        heating_setpoint=params.heating_setpoint_c,
-        ground_temp=ground_temp,
-    )
-    penalty_kwh = max(heat_vnc - heat_vmc, 0.0)
-    penalty_eur = penalty_kwh * params.heating_energy_price_eur_kwh
-
-    # --- Surchauffe : free-running VNC avec night-cooling ---
-    h_ve_summer = _night_cooling_series(z, climate, params)
-    air_free, _ = _simulate(
-        z, climate, h_ve_summer, heating_setpoint=None, ground_temp=ground_temp
-    )
-    overheating_hours = sum(1.0 for t in air_free if t > params.comfort_temp_c)
-    dh_overheat = sum(max(t - params.comfort_temp_c, 0.0) for t in air_free)
-
-    # --- Bénéfice night-cooling (chaleur évacuée la nuit, proxy) ---
-    boost = _h_ve_constant(z, params.night_cooling_ach) - h_hyg
-    night_benefit_wh = 0.0
-    for i in range(climate.n_hours):
-        hour = i % 24
-        if (hour >= 22 or hour < 7) and climate.dry_bulb_c[i] < 23.0:
-            dt = air_free[i] - climate.dry_bulb_c[i]
-            if dt > 0:
-                night_benefit_wh += boost * dt
-    night_benefit_kwh = max(night_benefit_wh / 1000.0, 0.0)
+        zones.append(
+            ZoneResult(
+                zone_id=room.id,
+                top_min_c=min(air_free),
+                top_max_c=max(air_free),
+                overheating_hours=oh,
+                heating_vnc_kwh=heat_vnc,
+                heating_penalty_kwh=zone_penalty,
+            )
+        )
 
     return ThermalResult(
-        overheating_hours=overheating_hours,
-        degree_hours_overheating=dh_overheat,
-        night_cooling_benefit_kwh=night_benefit_kwh,
+        overheating_hours=overheating_max,
+        degree_hours_overheating=dh_max,
+        night_cooling_benefit_kwh=max(night_benefit_kwh, 0.0),
         heating_penalty_kwh_per_year=penalty_kwh,
-        heating_penalty_eur_per_year=penalty_eur,
+        heating_penalty_eur_per_year=penalty_kwh * params.heating_energy_price_eur_kwh,
         equivalent_recovery_pct=None,  # dérivé/validé seulement (§7) — non posé
+        zones=zones,
         assumptions={
-            "modele": "5R1C ISO 13790 mono-zone (pré-étude, NON validé IDA ICE)",
+            "modele": "5R1C ISO 13790 MULTI-ZONE (pré-étude, NON validé IDA ICE)",
+            "n_zones": str(len(zones)),
             "inertie": building.inertia_class.value,
+            "murs_interieurs": "adiabatiques (free-float : pièces voisines ≈ même T)",
             "recovery_efficiency_vmc": f"{params.recovery_efficiency:.0%}",
             "hygienic_ach": f"{params.hygienic_ach}",
             "infiltration_ach": f"{inf_ach:.2f}",
-            "ground_temp_c": f"{ground_temp:.1f}",
+            "ground_temp_c": f"{ground:.1f}",
             "heating_setpoint_c": f"{params.heating_setpoint_c}",
             "comfort_temp_c": f"{params.comfort_temp_c}",
-            "heat_vnc_kwh": f"{heat_vnc:.0f}",
-            "heat_vmc_kwh": f"{heat_vmc:.0f}",
+            "heat_vnc_kwh": f"{heat_vnc_total:.0f}",
+            "heat_vmc_kwh": f"{heat_vmc_total:.0f}",
             "heating_energy_price_eur_kwh": f"{params.heating_energy_price_eur_kwh}",
             "penalite_note": "différence de deux runs (récup vs non) → robuste aux apports",
         },

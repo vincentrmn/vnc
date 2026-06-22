@@ -31,6 +31,21 @@ class Range(BaseModel):
         return f"{self.central:.0f} [{self.low:.0f} – {self.high:.0f}]"
 
 
+class ZoneResult(BaseModel):
+    """Résultat thermique d'une zone (pièce) en modèle multi-zone.
+
+    ``top_min_c`` / ``top_max_c`` sont les extrêmes de température opérative en
+    free-float (bâtiment à vide) — la grandeur comparée aux STD IDA ICE.
+    """
+
+    zone_id: str
+    top_min_c: float
+    top_max_c: float
+    overheating_hours: float = 0.0
+    heating_vnc_kwh: float | None = None
+    heating_penalty_kwh: float | None = None
+
+
 class ThermalResult(BaseModel):
     """Sortie du module `thermal` (5R1C).
 
@@ -65,6 +80,9 @@ class ThermalResult(BaseModel):
     equivalent_recovery_pct: float | None = Field(
         default=None,
         description="Récup équivalente dérivée (%), pour la com'. Sortie validée, jamais entrée.",
+    )
+    zones: list[ZoneResult] = Field(
+        default_factory=list, description="Détail par zone (modèle multi-zone)."
     )
     assumptions: dict[str, str] = Field(
         default_factory=dict, description="Hypothèses explicites du calcul thermique."
