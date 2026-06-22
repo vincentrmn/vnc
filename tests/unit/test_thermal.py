@@ -72,6 +72,24 @@ def test_heavy_inertia_reduces_overheating() -> None:
     assert heavy.overheating_hours <= light.overheating_hours
 
 
+def test_occupancy_profile_reduces_heating() -> None:
+    """Un profil d'apports internes réduit le besoin de chauffage (apports gratuits)."""
+    def heat(params: R5C1Params) -> float:
+        r = simulate_5r1c(_building(), CLIMATE, params)
+        return sum(z.heating_vnc_kwh or 0.0 for z in r.zones)
+
+    none = heat(R5C1Params(internal_gains_w_m2=0.0))
+    profile = [3.0] * 8 + [10.0] * 8 + [5.0] * 8  # occupation type logement
+    loaded = heat(R5C1Params(gains_profile_24h_w_m2=profile))
+    assert loaded < none  # les apports compensent une partie du chauffage
+
+
+def test_bad_gains_profile_rejected() -> None:
+    """Un profil d'apports mal dimensionné (≠ 24 valeurs) est refusé."""
+    with pytest.raises(ValueError):
+        simulate_5r1c(_building(), CLIMATE, R5C1Params(gains_profile_24h_w_m2=[4.0] * 10))
+
+
 def test_outputs_plausible_ranges() -> None:
     r = simulate_5r1c(_building(), CLIMATE)
     assert 0 <= r.overheating_hours <= 8760

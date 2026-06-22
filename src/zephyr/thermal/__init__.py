@@ -70,7 +70,10 @@ class R5C1Params:
     hygienic_ach: float = 0.5  # débit hygiénique (commande à la demande VNC)
     infiltration_ach: float | None = None  # déduit de n50/20 si None
     night_cooling_ach: float = 4.0  # boost ventilation nocturne VNC (été)
-    internal_gains_w_m2: float = 4.0
+    internal_gains_w_m2: float = 4.0  # apport constant (fallback si pas de profil)
+    # Profils d'occupation horaires (24 valeurs W/m²) — sinon apport constant.
+    gains_profile_24h_w_m2: list[float] | None = None
+    gains_weekend_24h_w_m2: list[float] | None = None  # si None → profil semaine
     recovery_efficiency: float = 0.80  # rendement échangeur VMC DF (70–90 %)
     glazing_fraction: float = 0.7  # part vitrée d'un ouvrant (cadre)
     shading_factor: float = 0.9  # ombrage moyen
@@ -100,7 +103,7 @@ class _ZoneModel:
     h_tr_em: float
     h_gr: float  # plancher bas → sol (ISO 13370 simplifié)
     volume: float
-    phi_int: float  # W (apports internes constants)
+    phi_int: list[float]  # W (apports internes horaires)
     phi_sol: list[float]  # W (apports solaires horaires)
 
 
@@ -119,6 +122,7 @@ def _build_room_zone(
     params: R5C1Params,
     irradiance: dict[Orientation, list[float]],
     n_levels: int,
+    gains_w_m2: list[float],
 ) -> _ZoneModel:
     """Construit le 5R1C d'**une pièce** (multi-zone).
 
@@ -170,7 +174,8 @@ def _build_room_zone(
     else:
         h_tr_em = 1.0 / (1.0 / h_tr_op - 1.0 / h_tr_ms)
 
-    phi_int = params.internal_gains_w_m2 * a_f
+    # Apports internes horaires (profil d'occupation × surface de la pièce).
+    phi_int = [g * a_f for g in gains_w_m2]
 
     # Apports solaires horaires (somme sur orientations vitrées de la pièce).
     n_hours = len(next(iter(irradiance.values()))) if irradiance else 8760
@@ -203,6 +208,7 @@ def _step(
     theta_m_prev: float,
     theta_e: float,
     phi_sol: float,
+    phi_int: float,
     h_ve: float,
     ground_temp: float,
     phi_hc: float,
@@ -222,8 +228,8 @@ def _step(
     h_tr_3 = 1.0 / (1.0 / h_tr_2 + 1.0 / z.h_tr_ms)
     theta_sup = theta_e
 
-    phi_ia = 0.5 * z.phi_int
-    common = 0.5 * z.phi_int + phi_sol
+    phi_ia = 0.5 * phi_int
+    common = 0.5 * phi_int + phi_sol
     phi_st = (1.0 - z.a_m / z.a_t - z.h_tr_w / (H_MS * z.a_t)) * common
     phi_m = (z.a_m / z.a_t) * common
 
@@ -252,39 +258,24 @@ def _step(
     return theta_air, theta_m_t
 
 
-def _simulate(
-    z: _ZoneModel,
-    climate: ClimateData,
-    h_ve_series: list[float],
-    *,
-    heating_setpoint: float | None,
-    ground_temp: float,
-) -> tuple[list[float], float]:
-    """Simule l'année. Si `heating_setpoint` est None → free-running (Φ_HC=0).
+def _gains_series_w_m2(params: R5C1Params, n_hours: int) -> list[float]:
+    """Série horaire d'apports internes (W/m²) à partir du profil d'occupation.
 
-    Sinon maintient θ_air ≥ setpoint (chauffage illimité, **pas** de
-    refroidissement actif). Renvoie (θ_air horaire, énergie de chauffage kWh).
+    Sans profil → apport constant ``internal_gains_w_m2``. Avec profil 24 h,
+    distinction semaine/week-end (alignement calendaire approché : jour 0 =
+    premier jour du fichier météo ; sans impact notable sur le bilan annuel).
     """
-    n = climate.n_hours
-    theta_m = 18.0  # init masse
-    air = [0.0] * n
-    heating_wh = 0.0
-    for i in range(n):
-        theta_e = climate.dry_bulb_c[i]
-        phi_sol = z.phi_sol[i] if i < len(z.phi_sol) else 0.0
-        h_ve = h_ve_series[i]
-        theta_air0, _ = _step(z, theta_m, theta_e, phi_sol, h_ve, ground_temp, 0.0)
-        if heating_setpoint is None or theta_air0 >= heating_setpoint:
-            phi_hc = 0.0
-        else:
-            theta_air10, _ = _step(z, theta_m, theta_e, phi_sol, h_ve, ground_temp, 10.0 * z.a_f)
-            denom = theta_air10 - theta_air0
-            phi_hc = 0.0 if denom == 0 else 10.0 * z.a_f * (heating_setpoint - theta_air0) / denom
-            phi_hc = max(phi_hc, 0.0)
-        theta_air, theta_m = _step(z, theta_m, theta_e, phi_sol, h_ve, ground_temp, phi_hc)
-        air[i] = theta_air
-        heating_wh += phi_hc
-    return air, heating_wh / 1000.0
+    if params.gains_profile_24h_w_m2 is None:
+        return [params.internal_gains_w_m2] * n_hours
+    weekday = params.gains_profile_24h_w_m2
+    weekend = params.gains_weekend_24h_w_m2 or weekday
+    if len(weekday) != 24 or len(weekend) != 24:
+        raise ValueError("Les profils d'apports doivent comporter 24 valeurs horaires.")
+    out = [0.0] * n_hours
+    for i in range(n_hours):
+        prof = weekday if (i // 24) % 7 < 5 else weekend
+        out[i] = prof[i % 24]
+    return out
 
 
 def _h_ve_constant(z: _ZoneModel, ach: float) -> float:
@@ -340,24 +331,22 @@ def _simulate_multizone(
         q_to_core = 0.0
         for j, z in enumerate(zones):
             phi_sol = z.phi_sol[i] if i < len(z.phi_sol) else 0.0
+            phi_int = z.phi_int[i] if i < len(z.phi_int) else 0.0
             h_ve = h_ve_per_zone[j][i]
             h_int = h_int_per_zone[j]
             tm = theta_m[j]
-            t_air0, _ = _step(z, tm, theta_e, phi_sol, h_ve, ground_temp, 0.0, h_int, theta_core)
+            args = (z, tm, theta_e, phi_sol, phi_int, h_ve, ground_temp)
+            t_air0, _ = _step(*args, 0.0, h_int, theta_core)
             if heating_setpoint is None or t_air0 >= heating_setpoint:
                 phi_hc = 0.0
             else:
-                t_air10, _ = _step(
-                    z, tm, theta_e, phi_sol, h_ve, ground_temp, 10.0 * z.a_f, h_int, theta_core
-                )
+                t_air10, _ = _step(*args, 10.0 * z.a_f, h_int, theta_core)
                 denom = t_air10 - t_air0
                 phi_hc = (
                     0.0 if denom == 0 else 10.0 * z.a_f * (heating_setpoint - t_air0) / denom
                 )
                 phi_hc = max(phi_hc, 0.0)
-            t_air, theta_m[j] = _step(
-                z, theta_m[j], theta_e, phi_sol, h_ve, ground_temp, phi_hc, h_int, theta_core
-            )
+            t_air, theta_m[j] = _step(*args, phi_hc, h_int, theta_core)
             air[j][i] = t_air
             heating_wh[j] += phi_hc
             q_to_core += h_int * (t_air - theta_core)
@@ -418,9 +407,10 @@ def simulate_free_float(
     irr = _irradiance_for(building, climate)
     ground = _ground_temp(params, climate)
     ach = ventilation_ach if ventilation_ach is not None else _infiltration_ach(params, env)
+    gains = _gains_series_w_m2(params, climate.n_hours)
 
     zones = [
-        _build_room_zone(r, building.inertia_class, env, params, irr, building.num_levels)
+        _build_room_zone(r, building.inertia_class, env, params, irr, building.num_levels, gains)
         for r in building.rooms
     ]
     c_core, h_core_ground, h_int = _core_params(building, params)
@@ -459,9 +449,10 @@ def simulate_5r1c(
     ground = _ground_temp(params, climate)
     inf_ach = _infiltration_ach(params, env)
     n = climate.n_hours
+    gains = _gains_series_w_m2(params, n)
 
     zone_models = [
-        _build_room_zone(r, building.inertia_class, env, params, irr, building.num_levels)
+        _build_room_zone(r, building.inertia_class, env, params, irr, building.num_levels, gains)
         for r in building.rooms
     ]
     c_core, h_core_ground, h_int = _core_params(building, params)
