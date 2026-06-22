@@ -76,6 +76,12 @@ class R5C1Params:
     shading_factor: float = 0.9  # ombrage moyen
     heating_energy_price_eur_kwh: float = 0.12  # prix énergie de chauffage (€/kWh)
     ground_temp_c: float | None = None  # T sol ; si None → moyenne annuelle du climat
+    # Nœud de cœur structurel partagé (dalles/cloisons béton couplant les zones).
+    # Couple chaque air de pièce au cœur (W/K par m² plancher de la pièce), le cœur
+    # à une capacité (kJ/K par m² plancher total) et au sol (W/K par m² total).
+    core_coupling_w_m2k: float = 6.0
+    core_capacity_kj_m2k: float = 120.0
+    core_ground_coupling_w_m2k: float = 0.5
     extra: dict[str, float] = field(default_factory=dict)
 
 
@@ -200,11 +206,15 @@ def _step(
     h_ve: float,
     ground_temp: float,
     phi_hc: float,
+    h_int: float = 0.0,
+    theta_core: float = 0.0,
 ) -> tuple[float, float]:
     """Un pas horaire ISO 13790 → (θ_air, θ_m_t) pour une puissance phi_hc donnée.
 
     Le plancher bas est couplé au nœud de masse vers ``ground_temp`` (sol),
     via la conductance ``z.h_gr`` — en plus des pertes hors-sol vers ``theta_e``.
+    Le nœud d'air est en outre couplé au **cœur structurel partagé**
+    ``theta_core`` via ``h_int`` (redistribution inter-zones par les dalles).
     """
     h_ve = max(h_ve, 1e-6)
     h_tr_1 = 1.0 / (1.0 / h_ve + 1.0 / z.h_tr_is)
@@ -236,7 +246,9 @@ def _step(
         + z.h_tr_w * theta_e
         + h_tr_1 * (theta_sup + (phi_ia + phi_hc) / h_ve)
     ) / (z.h_tr_ms + z.h_tr_w + h_tr_1)
-    theta_air = (z.h_tr_is * theta_s + h_ve * theta_sup + phi_ia + phi_hc) / (z.h_tr_is + h_ve)
+    theta_air = (z.h_tr_is * theta_s + h_ve * theta_sup + h_int * theta_core + phi_ia + phi_hc) / (
+        z.h_tr_is + h_ve + h_int
+    )
     return theta_air, theta_m_t
 
 
@@ -294,6 +306,76 @@ def _night_cooling_series(z: _ZoneModel, climate: ClimateData, params: R5C1Param
     return series
 
 
+def _simulate_multizone(
+    zones: list[_ZoneModel],
+    climate: ClimateData,
+    h_ve_per_zone: list[list[float]],
+    h_int_per_zone: list[float],
+    *,
+    heating_setpoint: float | None,
+    ground_temp: float,
+    c_core: float,
+    h_core_ground: float,
+) -> tuple[list[list[float]], list[float]]:
+    """Simulation multi-zone en lockstep avec **nœud de cœur structurel partagé**.
+
+    À chaque heure : chaque zone est résolue (5R1C) en voyant le cœur retardé
+    ``θ_core(t-1)`` via ``h_int`` ; puis le cœur est réactualisé (schéma
+    semi-explicite) par les échanges avec toutes les zones + le sol. Le cœur
+    représente les dalles/cloisons béton : il stocke et **redistribue** la
+    chaleur entre pièces (solaire d'une pièce ensoleillée → pièce aveugle).
+
+    Renvoie (séries θ_air par zone, énergie de chauffage kWh par zone).
+    """
+    n = climate.n_hours
+    nz = len(zones)
+    theta_m = [18.0] * nz
+    theta_core = ground_temp
+    air = [[0.0] * n for _ in range(nz)]
+    heating_wh = [0.0] * nz
+    dt_over_c = 3600.0 / c_core if c_core > 0 else 0.0
+
+    for i in range(n):
+        theta_e = climate.dry_bulb_c[i]
+        q_to_core = 0.0
+        for j, z in enumerate(zones):
+            phi_sol = z.phi_sol[i] if i < len(z.phi_sol) else 0.0
+            h_ve = h_ve_per_zone[j][i]
+            h_int = h_int_per_zone[j]
+            tm = theta_m[j]
+            t_air0, _ = _step(z, tm, theta_e, phi_sol, h_ve, ground_temp, 0.0, h_int, theta_core)
+            if heating_setpoint is None or t_air0 >= heating_setpoint:
+                phi_hc = 0.0
+            else:
+                t_air10, _ = _step(
+                    z, tm, theta_e, phi_sol, h_ve, ground_temp, 10.0 * z.a_f, h_int, theta_core
+                )
+                denom = t_air10 - t_air0
+                phi_hc = (
+                    0.0 if denom == 0 else 10.0 * z.a_f * (heating_setpoint - t_air0) / denom
+                )
+                phi_hc = max(phi_hc, 0.0)
+            t_air, theta_m[j] = _step(
+                z, theta_m[j], theta_e, phi_sol, h_ve, ground_temp, phi_hc, h_int, theta_core
+            )
+            air[j][i] = t_air
+            heating_wh[j] += phi_hc
+            q_to_core += h_int * (t_air - theta_core)
+        # Mise à jour du cœur (échanges zones + sol), semi-explicite.
+        theta_core += dt_over_c * (q_to_core + h_core_ground * (ground_temp - theta_core))
+
+    return air, [w / 1000.0 for w in heating_wh]
+
+
+def _core_params(building: Building, params: R5C1Params) -> tuple[float, float, list[float]]:
+    """Capacité du cœur, conductance cœur↔sol, et h_int par pièce."""
+    area = building.total_floor_area_m2
+    c_core = params.core_capacity_kj_m2k * 1000.0 * area
+    h_core_ground = params.core_ground_coupling_w_m2k * area
+    h_int = [params.core_coupling_w_m2k * r.area_m2 for r in building.rooms]
+    return c_core, h_core_ground, h_int
+
+
 def _infiltration_ach(params: R5C1Params, env: EnvelopeData) -> float:
     """Renouvellement d'air par infiltration (vol/h)."""
     if params.infiltration_ach is not None:
@@ -337,17 +419,23 @@ def simulate_free_float(
     ground = _ground_temp(params, climate)
     ach = ventilation_ach if ventilation_ach is not None else _infiltration_ach(params, env)
 
+    zones = [
+        _build_room_zone(r, building.inertia_class, env, params, irr, building.num_levels)
+        for r in building.rooms
+    ]
+    c_core, h_core_ground, h_int = _core_params(building, params)
+    h_ve_per_zone = [[_h_ve_constant(z, ach)] * climate.n_hours for z in zones]
+    air, _ = _simulate_multizone(
+        zones, climate, h_ve_per_zone, h_int,
+        heating_setpoint=None, ground_temp=ground, c_core=c_core, h_core_ground=h_core_ground,
+    )
+
     out: list[ZoneResult] = []
-    for room in building.rooms:
-        z = _build_room_zone(room, building.inertia_class, env, params, irr, building.num_levels)
-        h_ve = _h_ve_constant(z, ach)
-        air, _ = _simulate(
-            z, climate, [h_ve] * climate.n_hours, heating_setpoint=None, ground_temp=ground
-        )
-        oh = sum(1.0 for t in air if t > params.comfort_temp_c)
+    for room, series in zip(building.rooms, air, strict=True):
+        oh = sum(1.0 for t in series if t > params.comfort_temp_c)
         out.append(
             ZoneResult(
-                zone_id=room.id, top_min_c=min(air), top_max_c=max(air), overheating_hours=oh
+                zone_id=room.id, top_min_c=min(series), top_max_c=max(series), overheating_hours=oh
             )
         )
     return out
@@ -370,64 +458,69 @@ def simulate_5r1c(
     irr = _irradiance_for(building, climate)
     ground = _ground_temp(params, climate)
     inf_ach = _infiltration_ach(params, env)
+    n = climate.n_hours
+
+    zone_models = [
+        _build_room_zone(r, building.inertia_class, env, params, irr, building.num_levels)
+        for r in building.rooms
+    ]
+    c_core, h_core_ground, h_int = _core_params(building, params)
+
+    nz = len(zone_models)
+    h_inf = [_h_ve_constant(z, inf_ach) for z in zone_models]
+    h_hyg = [_h_ve_constant(z, params.hygienic_ach) for z in zone_models]
+
+    def run(
+        h_ve_per_zone: list[list[float]], setpoint: float | None
+    ) -> tuple[list[list[float]], list[float]]:
+        return _simulate_multizone(
+            zone_models, climate, h_ve_per_zone, h_int,
+            heating_setpoint=setpoint, ground_temp=ground,
+            c_core=c_core, h_core_ground=h_core_ground,
+        )
+
+    # Pénalité de chauffage : VNC (sans récup) vs VMC (récup η).
+    eff = params.recovery_efficiency
+    setpoint = params.heating_setpoint_c
+    _, heat_vnc = run([[h_inf[j] + h_hyg[j]] * n for j in range(nz)], setpoint)
+    _, heat_vmc = run([[h_inf[j] + h_hyg[j] * (1.0 - eff)] * n for j in range(nz)], setpoint)
+
+    # Surchauffe : free-running VNC avec night-cooling.
+    air_free, _ = run([_night_cooling_series(z, climate, params) for z in zone_models], None)
 
     penalty_kwh = 0.0
-    heat_vnc_total = 0.0
-    heat_vmc_total = 0.0
     overheating_max = 0.0
     dh_max = 0.0
     night_benefit_kwh = 0.0
     zones: list[ZoneResult] = []
-
-    for room in building.rooms:
-        z = _build_room_zone(room, building.inertia_class, env, params, irr, building.num_levels)
-        h_inf = _h_ve_constant(z, inf_ach)
-        h_hyg = _h_ve_constant(z, params.hygienic_ach)
-
-        # Pénalité de chauffage : VNC (sans récup) vs VMC (récup η).
-        h_ve_vnc = h_inf + h_hyg
-        h_ve_vmc = h_inf + h_hyg * (1.0 - params.recovery_efficiency)
-        _, heat_vnc = _simulate(
-            z, climate, [h_ve_vnc] * climate.n_hours,
-            heating_setpoint=params.heating_setpoint_c, ground_temp=ground,
-        )
-        _, heat_vmc = _simulate(
-            z, climate, [h_ve_vmc] * climate.n_hours,
-            heating_setpoint=params.heating_setpoint_c, ground_temp=ground,
-        )
-        zone_penalty = max(heat_vnc - heat_vmc, 0.0)
+    for j, room in enumerate(building.rooms):
+        series = air_free[j]
+        zone_penalty = max(heat_vnc[j] - heat_vmc[j], 0.0)
         penalty_kwh += zone_penalty
-        heat_vnc_total += heat_vnc
-        heat_vmc_total += heat_vmc
-
-        # Surchauffe : free-running VNC avec night-cooling.
-        air_free, _ = _simulate(
-            z, climate, _night_cooling_series(z, climate, params),
-            heating_setpoint=None, ground_temp=ground,
-        )
-        oh = sum(1.0 for t in air_free if t > params.comfort_temp_c)
-        dh = sum(max(t - params.comfort_temp_c, 0.0) for t in air_free)
+        oh = sum(1.0 for t in series if t > params.comfort_temp_c)
+        dh = sum(max(t - params.comfort_temp_c, 0.0) for t in series)
         overheating_max = max(overheating_max, oh)
         dh_max = max(dh_max, dh)
-
-        boost = _h_ve_constant(z, params.night_cooling_ach) - h_hyg
-        for i in range(climate.n_hours):
+        boost = _h_ve_constant(zone_models[j], params.night_cooling_ach) - h_hyg[j]
+        for i in range(n):
             hour = i % 24
             if (hour >= 22 or hour < 7) and climate.dry_bulb_c[i] < 23.0:
-                dt = air_free[i] - climate.dry_bulb_c[i]
+                dt = series[i] - climate.dry_bulb_c[i]
                 if dt > 0:
                     night_benefit_kwh += boost * dt / 1000.0
-
         zones.append(
             ZoneResult(
                 zone_id=room.id,
-                top_min_c=min(air_free),
-                top_max_c=max(air_free),
+                top_min_c=min(series),
+                top_max_c=max(series),
                 overheating_hours=oh,
-                heating_vnc_kwh=heat_vnc,
+                heating_vnc_kwh=heat_vnc[j],
                 heating_penalty_kwh=zone_penalty,
             )
         )
+
+    heat_vnc_total = sum(heat_vnc)
+    heat_vmc_total = sum(heat_vmc)
 
     return ThermalResult(
         overheating_hours=overheating_max,
