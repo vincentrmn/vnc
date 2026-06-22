@@ -34,8 +34,13 @@ class Range(BaseModel):
 class ZoneResult(BaseModel):
     """Résultat thermique d'une zone (pièce) en modèle multi-zone.
 
-    ``top_min_c`` / ``top_max_c`` sont les extrêmes de température opérative
-    (annuels). Les champs saisonniers et CO₂ détaillent le confort par pièce.
+    ``top_min_c`` / ``top_max_c`` sont les extrêmes de température **libre**
+    (free-running : VNC en marche, mais SANS chauffage ni climatisation actifs).
+    C'est ce qui révèle où le bâtiment dérive trop froid ou trop chaud — et donc
+    le besoin de chaud/froid. ``hours_below_comfort`` / ``overheating_hours``
+    comptent les heures sous le seuil bas / au-dessus du seuil haut. Les besoins
+    de chauffage et de froid (``heating_need_kwh`` / ``cooling_need_kwh``) sont
+    l'énergie à fournir pour tenir les consignes.
     """
 
     zone_id: str
@@ -47,11 +52,13 @@ class ZoneResult(BaseModel):
     winter_min_c: float | None = None
     summer_mean_c: float | None = None
     summer_max_c: float | None = None
-    overheating_hours: float = 0.0
+    hours_below_comfort: float = 0.0  # heures (libre) sous le seuil bas → besoin de chaud
+    overheating_hours: float = 0.0  # heures (libre) au-dessus du seuil haut → besoin de froid
+    heating_need_kwh: float | None = None  # besoin de chauffage VNC pour tenir la consigne
+    cooling_need_kwh: float | None = None  # besoin de froid actif résiduel (après night-cooling)
     co2_mean_ppm: float | None = None
     co2_max_ppm: float | None = None
     co2_hours_above_1000: float | None = None
-    heating_vnc_kwh: float | None = None
     heating_penalty_kwh: float | None = None
 
 
@@ -66,7 +73,10 @@ class ThermalResult(BaseModel):
     """
 
     overheating_hours: float = Field(
-        default=0.0, ge=0, description="Heures au-dessus du seuil de confort (h/an)."
+        default=0.0, ge=0, description="Heures (libre) au-dessus du seuil de confort haut (h/an)."
+    )
+    hours_below_comfort: float = Field(
+        default=0.0, ge=0, description="Heures (libre) sous le seuil de confort bas (h/an)."
     )
     degree_hours_overheating: float = Field(
         default=0.0, ge=0, description="Degrés-heures de surchauffe (°C·h/an)."
@@ -75,6 +85,16 @@ class ThermalResult(BaseModel):
         default=0.0,
         ge=0,
         description="Rafraîchissement passif récupéré par night-cooling (kWh/an).",
+    )
+    heating_need_kwh_per_year: float = Field(
+        default=0.0,
+        ge=0,
+        description="Besoin de chauffage VNC total pour tenir la consigne (kWh/an), calculé.",
+    )
+    cooling_need_kwh_per_year: float = Field(
+        default=0.0,
+        ge=0,
+        description="Besoin de froid actif résiduel après night-cooling (kWh/an), calculé.",
     )
     heating_penalty_kwh_per_year: float = Field(
         default=0.0,

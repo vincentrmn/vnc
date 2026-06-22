@@ -47,9 +47,9 @@ def _zones_table(result: StudyResult) -> str:
     if result.thermal is None or not result.thermal.zones:
         return ""
     head = (
-        "<tr><th>pièce</th><th>label</th><th>m²</th><th>hiver moy/min</th>"
-        "<th>été moy/max</th><th>surchauffe h</th><th>CO₂ moy/max ppm</th>"
-        "<th>h&gt;1000</th></tr>"
+        "<tr><th>pièce</th><th>label</th><th>m²</th><th>T° libre min/max</th>"
+        "<th>h&lt;18°C</th><th>h&gt;26°C</th><th>chauffage kWh/an</th>"
+        "<th>froid kWh/an</th><th>CO₂ moy/max ppm</th><th>h&gt;1000</th></tr>"
     )
     rows = []
     for z in result.thermal.zones:
@@ -59,18 +59,23 @@ def _zones_table(result: StudyResult) -> str:
             f"<td>{html.escape(z.zone_id)}</td>"
             f"<td>{html.escape(z.label or '')}</td>"
             f"<td>{z.area_m2 or 0:.0f}</td>"
-            f"<td>{z.winter_mean_c}/{z.winter_min_c}</td>"
-            f"<td>{z.summer_mean_c}/{z.summer_max_c}</td>"
+            f"<td>{z.top_min_c}/{z.top_max_c}</td>"
+            f"<td>{z.hours_below_comfort:.0f}</td>"
             f"<td>{z.overheating_hours:.0f}</td>"
+            f"<td>{z.heating_need_kwh or 0:.0f}</td>"
+            f"<td>{z.cooling_need_kwh or 0:.0f}</td>"
             f"<td>{z.co2_mean_ppm}/{z.co2_max_ppm}</td>"
             f"<td>{co2_h:.0f}</td>"
             "</tr>"
         )
     return (
-        "<h3>Détail par pièce (températures opératives, CO₂)</h3>"
+        "<h3>Détail par pièce (températures libres, besoins, CO₂)</h3>"
         "<table class='zones'>" + head + "".join(rows) + "</table>"
-        "<p style='font-size:.85rem;color:#777'>Hiver = DJF (chauffage actif), été = JJA "
-        "(free-running + night-cooling). CO₂ = modèle d'équilibre (occupation × débit).</p>"
+        "<p style='font-size:.85rem;color:#777'>T° <b>libre</b> = VNC en marche mais "
+        "sans chauffage ni froid actifs (révèle la dérive réelle). h&lt;18 °C → besoin de "
+        "chaud ; h&gt;26 °C → surchauffe/besoin de froid. Chauffage/froid = énergie pour "
+        "tenir les consignes (froid résiduel <i>après</i> night-cooling). CO₂ = modèle "
+        "d'équilibre (occupation × débit).</p>"
     )
 
 
@@ -109,9 +114,16 @@ def render_report_html(
         t = result.thermal
         thermal_html = _kv_table(
             {
-                "Pénalité de chauffage VNC": f"{t.heating_penalty_kwh_per_year:.0f} kWh/an "
-                f"(≈ {t.heating_penalty_eur_per_year:.0f} €/an)",
-                "Heures de surchauffe (pire pièce)": f"{t.overheating_hours:.0f} h/an",
+                "Besoin de chauffage VNC": f"{t.heating_need_kwh_per_year:.0f} kWh/an",
+                "Besoin de froid actif (après night-cooling)": (
+                    f"{t.cooling_need_kwh_per_year:.0f} kWh/an"
+                ),
+                "Pénalité de chauffage VNC vs VMC DF": (
+                    f"{t.heating_penalty_kwh_per_year:.0f} kWh/an "
+                    f"(≈ {t.heating_penalty_eur_per_year:.0f} €/an)"
+                ),
+                "Heures < 18 °C (pire pièce, libre)": f"{t.hours_below_comfort:.0f} h/an",
+                "Heures > 26 °C (pire pièce, libre)": f"{t.overheating_hours:.0f} h/an",
                 "Bénéfice night-cooling": f"{t.night_cooling_benefit_kwh:.0f} kWh/an",
             }
         ) + _zones_table(result)

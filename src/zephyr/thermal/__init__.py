@@ -66,7 +66,8 @@ class R5C1Params:
     """
 
     heating_setpoint_c: float = 20.0
-    comfort_temp_c: float = 26.0  # seuil de surchauffe
+    comfort_temp_c: float = 26.0  # seuil de surchauffe (inconfort chaud)
+    comfort_low_c: float = 18.0  # seuil d'inconfort froid (heures sous ce seuil, en libre)
     hygienic_ach: float = 0.5  # débit hygiénique (commande à la demande VNC)
     infiltration_ach: float | None = None  # déduit de n50/20 si None
     night_cooling_ach: float = 4.0  # boost ventilation nocturne VNC (été)
@@ -336,31 +337,20 @@ def _h_ve_constant(z: _ZoneModel, ach: float) -> float:
     return RHO_C_AIR * ach * z.volume
 
 
-def _night_cooling_series(z: _ZoneModel, climate: ClimateData, params: R5C1Params) -> list[float]:
-    """Série H_ve pour le free-running VNC : hygiénique + boost nocturne utile."""
-    base = _h_ve_constant(z, params.hygienic_ach)
-    boost = _h_ve_constant(z, params.night_cooling_ach)
-    series = [base] * climate.n_hours
-    for i in range(climate.n_hours):
-        hour = i % 24
-        is_night = hour >= 22 or hour < 7
-        # boost si nuit, extérieur plus frais et besoin (température douce → été).
-        if is_night and climate.dry_bulb_c[i] < 23.0:
-            series[i] = boost
-    return series
-
-
 def _simulate_multizone(
     zones: list[_ZoneModel],
     climate: ClimateData,
-    h_ve_per_zone: list[list[float]],
+    base_ve_per_zone: list[list[float]],
     h_int_per_zone: list[float],
     *,
     heating_setpoint: float | None,
+    cooling_setpoint: float | None = None,
+    boost_ve_per_zone: list[float] | None = None,
+    night_purge_above_c: float = 24.0,
     ground_temp: float,
     c_core: float,
     h_core_ground: float,
-) -> tuple[list[list[float]], list[float]]:
+) -> tuple[list[list[float]], list[float], list[float]]:
     """Simulation multi-zone en lockstep avec **nœud de cœur structurel partagé**.
 
     À chaque heure : chaque zone est résolue (5R1C) en voyant le cœur retardé
@@ -369,7 +359,16 @@ def _simulate_multizone(
     représente les dalles/cloisons béton : il stocke et **redistribue** la
     chaleur entre pièces (solaire d'une pièce ensoleillée → pièce aveugle).
 
-    Renvoie (séries θ_air par zone, énergie de chauffage kWh par zone).
+    Pilotage par pièce, dans l'ordre de priorité :
+      - **night-cooling demandé** : si ``boost_ve_per_zone`` est fourni, la nuit,
+        et que la pièce est trop chaude (``> night_purge_above_c``) avec un
+        extérieur plus frais, on ajoute le débit de sur-ventilation. Pilotage
+        **en boucle** (sur la T° de l'heure précédente) → pas de purge sur les
+        nuits froides d'hiver, contrairement à un planning posé d'avance ;
+      - **chauffage** vers ``heating_setpoint`` (φ ≥ 0) ;
+      - sinon **froid actif** vers ``cooling_setpoint`` (φ ≤ 0), si fourni.
+
+    Renvoie (séries θ_air, besoin de chauffage kWh/zone, besoin de froid kWh/zone).
     """
     n = climate.n_hours
     nz = len(zones)
@@ -377,34 +376,46 @@ def _simulate_multizone(
     theta_core = ground_temp
     air = [[0.0] * n for _ in range(nz)]
     heating_wh = [0.0] * nz
+    cooling_wh = [0.0] * nz
     dt_over_c = 3600.0 / c_core if c_core > 0 else 0.0
 
     for i in range(n):
         theta_e = climate.dry_bulb_c[i]
+        hour = i % 24
+        is_night = hour >= 22 or hour < 7
         q_to_core = 0.0
         for j, z in enumerate(zones):
             phi_sol = z.phi_sol[i] if i < len(z.phi_sol) else 0.0
             phi_int = z.phi_int[i] if i < len(z.phi_int) else 0.0
-            h_ve = h_ve_per_zone[j][i]
+            h_ve = base_ve_per_zone[j][i]
+            if boost_ve_per_zone is not None:
+                indoor_prev = air[j][i - 1] if i > 0 else theta_m[j]
+                if is_night and theta_e < indoor_prev - 1.0 and indoor_prev > night_purge_above_c:
+                    h_ve += boost_ve_per_zone[j]
             h_int = h_int_per_zone[j]
             tm = theta_m[j]
             args = (z, tm, theta_e, phi_sol, phi_int, h_ve, ground_temp)
             t_air0, _ = _step(*args, 0.0, h_int, theta_core)
-            if heating_setpoint is None or t_air0 >= heating_setpoint:
-                phi_hc = 0.0
-            else:
-                t_air10, _ = _step(*args, 10.0 * z.a_f, h_int, theta_core)
-                denom = t_air10 - t_air0
-                phi_hc = 0.0 if denom == 0 else 10.0 * z.a_f * (heating_setpoint - t_air0) / denom
-                phi_hc = max(phi_hc, 0.0)
+            phi_hc = 0.0
+            need_heat = heating_setpoint is not None and t_air0 < heating_setpoint
+            need_cool = cooling_setpoint is not None and t_air0 > cooling_setpoint
+            if need_heat or need_cool:
+                # Pente φ→θ_air via une puissance de référence (vaut pour chaud et froid).
+                t_ref, _ = _step(*args, 10.0 * z.a_f, h_int, theta_core)
+                denom = t_ref - t_air0
+                target = heating_setpoint if need_heat else cooling_setpoint
+                assert target is not None
+                phi_hc = 0.0 if denom == 0 else 10.0 * z.a_f * (target - t_air0) / denom
+                phi_hc = max(phi_hc, 0.0) if need_heat else min(phi_hc, 0.0)
             t_air, theta_m[j] = _step(*args, phi_hc, h_int, theta_core)
             air[j][i] = t_air
-            heating_wh[j] += phi_hc
+            heating_wh[j] += max(phi_hc, 0.0)
+            cooling_wh[j] += max(-phi_hc, 0.0)
             q_to_core += h_int * (t_air - theta_core)
         # Mise à jour du cœur (échanges zones + sol), semi-explicite.
         theta_core += dt_over_c * (q_to_core + h_core_ground * (ground_temp - theta_core))
 
-    return air, [w / 1000.0 for w in heating_wh]
+    return air, [w / 1000.0 for w in heating_wh], [w / 1000.0 for w in cooling_wh]
 
 
 def _core_params(building: Building, params: R5C1Params) -> tuple[float, float, list[float]]:
@@ -466,7 +477,7 @@ def simulate_free_float(
     ]
     c_core, h_core_ground, h_int = _core_params(building, params)
     h_ve_per_zone = [[_h_ve_constant(z, ach)] * climate.n_hours for z in zones]
-    air, _ = _simulate_multizone(
+    air, _, _ = _simulate_multizone(
         zones,
         climate,
         h_ve_per_zone,
@@ -517,62 +528,78 @@ def simulate_5r1c(
     nz = len(zone_models)
     h_inf = [_h_ve_constant(z, inf_ach) for z in zone_models]
     h_hyg = [_h_ve_constant(z, params.hygienic_ach) for z in zone_models]
+    boost_ve = [_h_ve_constant(z, params.night_cooling_ach) for z in zone_models]
+    purge_above = params.heating_setpoint_c + 2.0  # ne purge pas tant qu'on n'est pas "trop chaud"
 
-    def run(
-        h_ve_per_zone: list[list[float]], setpoint: float | None
-    ) -> tuple[list[list[float]], list[float]]:
-        return _simulate_multizone(
-            zone_models,
-            climate,
-            h_ve_per_zone,
-            h_int,
-            heating_setpoint=setpoint,
-            ground_temp=ground,
-            c_core=c_core,
-            h_core_ground=h_core_ground,
-        )
-
-    # Pénalité de chauffage : VNC (sans récup) vs VMC (récup η).
+    # Pénalité de chauffage : VNC (sans récup) vs VMC (récup η). Ventilation
+    # constante (hygiénique + infiltration), chauffage actif, pas de night-cooling
+    # (la pénalité est une différence robuste aux apports — §thermal en-tête).
     eff = params.recovery_efficiency
     setpoint = params.heating_setpoint_c
-    _, heat_vnc = run([[h_inf[j] + h_hyg[j]] * n for j in range(nz)], setpoint)
-    _, heat_vmc = run([[h_inf[j] + h_hyg[j] * (1.0 - eff)] * n for j in range(nz)], setpoint)
+    _, heat_vnc, _ = _simulate_multizone(
+        zone_models, climate, [[h_inf[j] + h_hyg[j]] * n for j in range(nz)], h_int,
+        heating_setpoint=setpoint, ground_temp=ground, c_core=c_core, h_core_ground=h_core_ground,
+    )
+    _, heat_vmc, _ = _simulate_multizone(
+        zone_models, climate, [[h_inf[j] + h_hyg[j] * (1.0 - eff)] * n for j in range(nz)], h_int,
+        heating_setpoint=setpoint, ground_temp=ground, c_core=c_core, h_core_ground=h_core_ground,
+    )
 
-    # Run OPÉRATIONNEL (chauffage actif + night-cooling) : la température réelle
-    # vue par chaque pièce sur l'année → saisons, surchauffe, base CO₂.
-    night_series = [_night_cooling_series(z, climate, params) for z in zone_models]
-    air_op, _ = run(night_series, params.heating_setpoint_c)
+    # Run LIBRE (free-running) : VNC en marche (hygiénique + night-cooling piloté),
+    # mais SANS chauffage ni froid actifs. C'est la température réellement subie →
+    # min/max honnêtes, heures sous le seuil bas (besoin de chaud) et au-dessus du
+    # seuil haut (surchauffe / besoin de froid). C'est l'esprit du test STD à vide.
+    base_ve = [[h_inf[j] + h_hyg[j]] * n for j in range(nz)]
+    air_free, _, _ = _simulate_multizone(
+        zone_models, climate, base_ve, h_int,
+        heating_setpoint=None, boost_ve_per_zone=boost_ve, night_purge_above_c=purge_above,
+        ground_temp=ground, c_core=c_core, h_core_ground=h_core_ground,
+    )
+    # Run FROID : même ventilation (avec night-cooling), froid actif vers le seuil
+    # haut → besoin de froid résiduel APRÈS avoir épuisé le rafraîchissement passif.
+    _, _, cool_need = _simulate_multizone(
+        zone_models, climate, base_ve, h_int,
+        heating_setpoint=None, cooling_setpoint=params.comfort_temp_c,
+        boost_ve_per_zone=boost_ve, night_purge_above_c=purge_above,
+        ground_temp=ground, c_core=c_core, h_core_ground=h_core_ground,
+    )
 
     seasons = [_season_of_hour(i) for i in range(n)]
     occ_fraction = _occupancy_fraction(params, n)
 
     penalty_kwh = 0.0
     overheating_max = 0.0
+    below_max = 0.0
     dh_max = 0.0
     night_benefit_kwh = 0.0
     zones: list[ZoneResult] = []
     for j, room in enumerate(building.rooms):
-        series = air_op[j]
+        series = air_free[j]
         zone_penalty = max(heat_vnc[j] - heat_vmc[j], 0.0)
         penalty_kwh += zone_penalty
         oh = sum(1.0 for t in series if t > params.comfort_temp_c)
+        below = sum(1.0 for t in series if t < params.comfort_low_c)
         dh = sum(max(t - params.comfort_temp_c, 0.0) for t in series)
         overheating_max = max(overheating_max, oh)
+        below_max = max(below_max, below)
         dh_max = max(dh_max, dh)
 
         winter = [series[i] for i in range(n) if seasons[i] == "hiver"]
         summer = [series[i] for i in range(n) if seasons[i] == "ete"]
         co2_mean, co2_max, co2_h1000 = _zone_co2_stats(
-            room.area_m2, night_series[j], h_inf[j], occ_fraction, params
+            room.area_m2, [h_hyg[j]] * n, h_inf[j], occ_fraction, params
         )
 
-        boost = _h_ve_constant(zone_models[j], params.night_cooling_ach) - h_hyg[j]
+        # Bénéfice night-cooling : énergie évacuée par la purge nocturne (re-évaluée
+        # avec la même règle de pilotage que la simulation).
         for i in range(n):
             hour = i % 24
-            if (hour >= 22 or hour < 7) and climate.dry_bulb_c[i] < 23.0:
-                dt = series[i] - climate.dry_bulb_c[i]
-                if dt > 0:
-                    night_benefit_kwh += boost * dt / 1000.0
+            if hour >= 22 or hour < 7:
+                indoor_prev = series[i - 1] if i > 0 else series[0]
+                if climate.dry_bulb_c[i] < indoor_prev - 1.0 and indoor_prev > purge_above:
+                    dt = series[i] - climate.dry_bulb_c[i]
+                    if dt > 0:
+                        night_benefit_kwh += boost_ve[j] * dt / 1000.0
 
         zones.append(
             ZoneResult(
@@ -585,22 +612,28 @@ def simulate_5r1c(
                 winter_min_c=round(min(winter), 1) if winter else None,
                 summer_mean_c=round(sum(summer) / len(summer), 1) if summer else None,
                 summer_max_c=round(max(summer), 1) if summer else None,
+                hours_below_comfort=below,
                 overheating_hours=oh,
+                heating_need_kwh=round(heat_vnc[j], 1),
+                cooling_need_kwh=round(cool_need[j], 1),
                 co2_mean_ppm=round(co2_mean),
                 co2_max_ppm=round(co2_max),
                 co2_hours_above_1000=co2_h1000,
-                heating_vnc_kwh=heat_vnc[j],
-                heating_penalty_kwh=zone_penalty,
+                heating_penalty_kwh=round(zone_penalty, 1),
             )
         )
 
     heat_vnc_total = sum(heat_vnc)
     heat_vmc_total = sum(heat_vmc)
+    cool_need_total = sum(cool_need)
 
     return ThermalResult(
         overheating_hours=overheating_max,
+        hours_below_comfort=below_max,
         degree_hours_overheating=dh_max,
         night_cooling_benefit_kwh=max(night_benefit_kwh, 0.0),
+        heating_need_kwh_per_year=heat_vnc_total,
+        cooling_need_kwh_per_year=cool_need_total,
         heating_penalty_kwh_per_year=penalty_kwh,
         heating_penalty_eur_per_year=penalty_kwh * params.heating_energy_price_eur_kwh,
         equivalent_recovery_pct=None,  # dérivé/validé seulement (§7) — non posé
@@ -609,15 +642,18 @@ def simulate_5r1c(
             "modele": "5R1C ISO 13790 MULTI-ZONE (pré-étude, NON validé IDA ICE)",
             "n_zones": str(len(zones)),
             "inertie": building.inertia_class.value,
+            "temperatures_affichees": "LIBRES (VNC en marche, sans chauffage ni froid actifs)",
             "murs_interieurs": "adiabatiques (free-float : pièces voisines ≈ même T)",
             "recovery_efficiency_vmc": f"{params.recovery_efficiency:.0%}",
             "hygienic_ach": f"{params.hygienic_ach}",
             "infiltration_ach": f"{inf_ach:.2f}",
             "ground_temp_c": f"{ground:.1f}",
             "heating_setpoint_c": f"{params.heating_setpoint_c}",
+            "comfort_low_c": f"{params.comfort_low_c}",
             "comfort_temp_c": f"{params.comfort_temp_c}",
             "heat_vnc_kwh": f"{heat_vnc_total:.0f}",
             "heat_vmc_kwh": f"{heat_vmc_total:.0f}",
+            "cooling_need_kwh": f"{cool_need_total:.0f}",
             "heating_energy_price_eur_kwh": f"{params.heating_energy_price_eur_kwh}",
             "penalite_note": "différence de deux runs (récup vs non) → robuste aux apports",
         },

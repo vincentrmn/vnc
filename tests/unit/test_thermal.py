@@ -77,7 +77,7 @@ def test_occupancy_profile_reduces_heating() -> None:
 
     def heat(params: R5C1Params) -> float:
         r = simulate_5r1c(_building(), CLIMATE, params)
-        return sum(z.heating_vnc_kwh or 0.0 for z in r.zones)
+        return sum(z.heating_need_kwh or 0.0 for z in r.zones)
 
     none = heat(R5C1Params(internal_gains_w_m2=0.0))
     profile = [3.0] * 8 + [10.0] * 8 + [5.0] * 8  # occupation type logement

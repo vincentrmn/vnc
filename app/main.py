@@ -156,10 +156,15 @@ def main() -> None:
     st.line_chart({"VAN cumulée économie VNC (€)": result.roi.npv_delta_cumulative_eur})
 
     st.subheader("Thermique")
-    tc1, tc2, tc3 = st.columns(3)
-    tc1.metric("Pénalité chauffage", f"{result.thermal.heating_penalty_eur_per_year:,.0f} €/an")
-    tc2.metric("Surchauffe", f"{result.thermal.overheating_hours:.0f} h/an")
-    tc3.metric("Night-cooling", f"{result.thermal.night_cooling_benefit_kwh:,.0f} kWh/an")
+    tc1, tc2, tc3, tc4 = st.columns(4)
+    tc1.metric("Besoin chauffage VNC", f"{result.thermal.heating_need_kwh_per_year:,.0f} kWh/an")
+    tc2.metric("Besoin froid actif", f"{result.thermal.cooling_need_kwh_per_year:,.0f} kWh/an")
+    tc3.metric("Pénalité chauffage", f"{result.thermal.heating_penalty_eur_per_year:,.0f} €/an")
+    tc4.metric("Night-cooling", f"{result.thermal.night_cooling_benefit_kwh:,.0f} kWh/an")
+    st.caption(
+        "Températures **libres** (VNC en marche, sans chauffage ni froid actifs) : "
+        "elles montrent où le bâtiment dérive trop froid (h<18 °C) ou trop chaud (h>26 °C)."
+    )
 
     if result.thermal.zones:
         st.subheader("Détail thermique par pièce")
@@ -169,13 +174,13 @@ def main() -> None:
                     "pièce": z.zone_id,
                     "label": z.label,
                     "m²": z.area_m2,
-                    "hiver moy °C": z.winter_mean_c,
-                    "hiver min °C": z.winter_min_c,
-                    "été moy °C": z.summer_mean_c,
-                    "été max °C": z.summer_max_c,
-                    "surchauffe h": round(z.overheating_hours),
+                    "T° libre min °C": z.top_min_c,
+                    "T° libre max °C": z.top_max_c,
+                    "h<18 °C": round(z.hours_below_comfort),
+                    "h>26 °C": round(z.overheating_hours),
+                    "chauffage kWh/an": round(z.heating_need_kwh or 0),
+                    "froid kWh/an": round(z.cooling_need_kwh or 0),
                     "CO₂ moy ppm": z.co2_mean_ppm,
-                    "CO₂ max ppm": z.co2_max_ppm,
                     "h CO₂>1000": round(z.co2_hours_above_1000 or 0),
                 }
                 for z in result.thermal.zones
