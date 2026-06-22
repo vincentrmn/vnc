@@ -1,0 +1,61 @@
+{
+  "name": "ref_logement_inertie_lourde",
+  "description": "Cas de référence SYNTHÉTIQUE (anonymisé) — logement traversant, inertie lourde (dalle + murs béton), climat LU. Sert de squelette au harnais de calibration tant qu'un vrai export IDA ICE anonymisé n'est pas déposé. Les valeurs 'expected' sont plausibles mais NON validées : à remplacer par un export IDA ICE réel anonymisé.",
+  "synthetic": true,
+  "tolerance": {
+    "mean_temp_c": 1.5,
+    "overheating_hours_rel": 0.2,
+    "heating_demand_rel": 0.15
+  },
+  "inputs": {
+    "building": {
+      "id": "ref01",
+      "inertia_class": "lourde",
+      "num_levels": 1,
+      "location": "Luxembourg (synthétique)",
+      "rooms": [
+        {
+          "id": "sejour",
+          "label": "sejour",
+          "area_m2": 28.0,
+          "height_m": 2.6,
+          "exterior_wall_orientations": ["S", "N"],
+          "openings": [
+            {"id": "f_s", "area_m2": 4.2, "orientation": "S", "openable": true, "free_area_ratio": 0.5},
+            {"id": "f_n", "area_m2": 1.8, "orientation": "N", "openable": true, "free_area_ratio": 0.5}
+          ]
+        },
+        {
+          "id": "chambre",
+          "label": "chambre",
+          "area_m2": 14.0,
+          "height_m": 2.6,
+          "exterior_wall_orientations": ["E"],
+          "openings": [
+            {"id": "f_e", "area_m2": 1.8, "orientation": "E", "openable": true, "free_area_ratio": 0.5}
+          ]
+        }
+      ]
+    },
+    "envelope": {
+      "u_wall_w_m2k": 0.22,
+      "u_roof_w_m2k": 0.18,
+      "u_floor_w_m2k": 0.28,
+      "u_window_w_m2k": 1.1,
+      "g_window": 0.5,
+      "air_permeability_ach50": 1.5
+    },
+    "internal_gains_w_m2": 4.0,
+    "ventilation_ach": 0.5,
+    "climate_epw": "data/climate/LUX_synthetique.epw"
+  },
+  "expected": {
+    "rooms": [
+      {"id": "sejour", "season": "ete", "mean_temp_c": 25.6, "overheating_hours": 300},
+      {"id": "sejour", "season": "hiver", "mean_temp_c": 20.5, "overheating_hours": 0},
+      {"id": "chambre", "season": "ete", "mean_temp_c": 25.1, "overheating_hours": 220},
+      {"id": "chambre", "season": "hiver", "mean_temp_c": 20.3, "overheating_hours": 0}
+    ],
+    "heating_demand_kwh_m2_year": 42.0
+  }
+}

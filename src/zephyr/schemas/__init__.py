@@ -1,0 +1,47 @@
+"""Schémas transverses Zéphyr (pydantic v2) — le contrat entre modules.
+
+Cf. CLAUDE.md §13.2. Tout passe par ces objets : géométrie (`Building`),
+entrée d'étude (`StudyInput`), sorties (`ThermalResult`, `ROIResult`,
+`StudyResult`).
+"""
+
+from zephyr.schemas.building import (
+    Building,
+    InertiaClass,
+    Opening,
+    OpeningKind,
+    Orientation,
+    Room,
+    RoomLabel,
+)
+from zephyr.schemas.results import (
+    Range,
+    ROIResult,
+    SensitivityEntry,
+    StudyResult,
+    ThermalResult,
+    Verdict,
+)
+from zephyr.schemas.study import EnvelopeData, ProjectType, StudyInput
+
+__all__ = [
+    # building
+    "Building",
+    "InertiaClass",
+    "Opening",
+    "OpeningKind",
+    "Orientation",
+    "Room",
+    "RoomLabel",
+    # study
+    "EnvelopeData",
+    "ProjectType",
+    "StudyInput",
+    # results
+    "Range",
+    "ROIResult",
+    "SensitivityEntry",
+    "StudyResult",
+    "ThermalResult",
+    "Verdict",
+]

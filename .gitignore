@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Outils
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# Secrets & env
+.env
+
+# Front (futur)
+node_modules/
+
+# === DONNÉES SENSIBLES CLIENTS — NE JAMAIS COMMITTER (CLAUDE.md §11) ===
+# Plans, CPE, exports STD réels. data/validation/ : anonymisé uniquement.
+data/validation/*
+!data/validation/.gitkeep
+!data/validation/README.md
+!data/validation/*.example.json
+# Exports STD bruts (IDA ICE)
+*.idm
+# DXF/DWG clients : DWG refusé en v1 (§11) ; DXF de test ré-autorisé explicitement.
+*.dwg
+# Note : les .epw (météo, non sensibles) vont dans data/climate/ et SONT committés.
