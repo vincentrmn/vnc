@@ -67,6 +67,7 @@ class R5C1Params:
     glazing_fraction: float = 0.7  # part vitrée d'un ouvrant (cadre)
     shading_factor: float = 0.9  # ombrage moyen
     heating_energy_price_eur_kwh: float = 0.12  # prix énergie de chauffage (€/kWh)
+    ground_temp_c: float | None = None  # T sol ; si None → moyenne annuelle du climat
     extra: dict[str, float] = field(default_factory=dict)
 
 
@@ -79,10 +80,11 @@ class _ZoneModel:
     a_m: float
     c_m: float  # J/K
     h_tr_w: float
-    h_tr_op: float
+    h_tr_op: float  # opaque hors-sol (murs + toiture) → air extérieur
     h_tr_is: float
     h_tr_ms: float
     h_tr_em: float
+    h_gr: float  # plancher bas → sol (ISO 13370 simplifié)
     volume: float
     phi_int: float  # W (apports internes constants)
     phi_sol: list[float]  # W (apports solaires horaires)
@@ -133,8 +135,11 @@ def _build_zone(
     g_win = env.g_window or _DEFAULT_ENVELOPE.g_window
     assert u_wall and u_roof and u_floor and u_win and g_win  # défauts garantis non-None
 
-    b_ground = 0.5  # facteur de réduction plancher sur terre-plein
-    h_tr_op = u_wall * a_wall_opaque + u_roof * a_roof + b_ground * u_floor * a_floor
+    # Opaque hors-sol (murs + toiture) → air extérieur.
+    h_tr_op = u_wall * a_wall_opaque + u_roof * a_roof
+    # Plancher bas → SOL (température stable ~moyenne annuelle), pas l'air extérieur.
+    # ISO 13370 simplifié : couplage direct à T_sol via U plancher.
+    h_gr = u_floor * a_floor
     h_tr_w = u_win * a_w
 
     c_m_per_m2, a_m_factor = _INERTIA[building.inertia_class]
@@ -173,6 +178,7 @@ def _build_zone(
         h_tr_is=h_tr_is,
         h_tr_ms=h_tr_ms,
         h_tr_em=h_tr_em,
+        h_gr=h_gr,
         volume=volume,
         phi_int=phi_int,
         phi_sol=phi_sol_total,
@@ -185,9 +191,14 @@ def _step(
     theta_e: float,
     phi_sol: float,
     h_ve: float,
+    ground_temp: float,
     phi_hc: float,
 ) -> tuple[float, float]:
-    """Un pas horaire ISO 13790 → (θ_air, θ_m_t) pour une puissance phi_hc donnée."""
+    """Un pas horaire ISO 13790 → (θ_air, θ_m_t) pour une puissance phi_hc donnée.
+
+    Le plancher bas est couplé au nœud de masse vers ``ground_temp`` (sol),
+    via la conductance ``z.h_gr`` — en plus des pertes hors-sol vers ``theta_e``.
+    """
     h_ve = max(h_ve, 1e-6)
     h_tr_1 = 1.0 / (1.0 / h_ve + 1.0 / z.h_tr_is)
     h_tr_2 = h_tr_1 + z.h_tr_w
@@ -202,13 +213,14 @@ def _step(
     phi_mtot = (
         phi_m
         + z.h_tr_em * theta_e
+        + z.h_gr * ground_temp
         + h_tr_3
         * (phi_st + z.h_tr_w * theta_e + h_tr_1 * ((phi_ia + phi_hc) / h_ve + theta_sup))
         / h_tr_2
     )
     cm_h = z.c_m / 3600.0
-    theta_m_t = (theta_m_prev * (cm_h - 0.5 * (h_tr_3 + z.h_tr_em)) + phi_mtot) / (
-        cm_h + 0.5 * (h_tr_3 + z.h_tr_em)
+    theta_m_t = (theta_m_prev * (cm_h - 0.5 * (h_tr_3 + z.h_tr_em + z.h_gr)) + phi_mtot) / (
+        cm_h + 0.5 * (h_tr_3 + z.h_tr_em + z.h_gr)
     )
     theta_m_avg = (theta_m_t + theta_m_prev) / 2.0
     theta_s = (
@@ -227,6 +239,7 @@ def _simulate(
     h_ve_series: list[float],
     *,
     heating_setpoint: float | None,
+    ground_temp: float,
 ) -> tuple[list[float], float]:
     """Simule l'année. Si `heating_setpoint` est None → free-running (Φ_HC=0).
 
@@ -241,15 +254,15 @@ def _simulate(
         theta_e = climate.dry_bulb_c[i]
         phi_sol = z.phi_sol[i] if i < len(z.phi_sol) else 0.0
         h_ve = h_ve_series[i]
-        theta_air0, _ = _step(z, theta_m, theta_e, phi_sol, h_ve, 0.0)
+        theta_air0, _ = _step(z, theta_m, theta_e, phi_sol, h_ve, ground_temp, 0.0)
         if heating_setpoint is None or theta_air0 >= heating_setpoint:
             phi_hc = 0.0
         else:
-            theta_air10, _ = _step(z, theta_m, theta_e, phi_sol, h_ve, 10.0 * z.a_f)
+            theta_air10, _ = _step(z, theta_m, theta_e, phi_sol, h_ve, ground_temp, 10.0 * z.a_f)
             denom = theta_air10 - theta_air0
             phi_hc = 0.0 if denom == 0 else 10.0 * z.a_f * (heating_setpoint - theta_air0) / denom
             phi_hc = max(phi_hc, 0.0)
-        theta_air, theta_m = _step(z, theta_m, theta_e, phi_sol, h_ve, phi_hc)
+        theta_air, theta_m = _step(z, theta_m, theta_e, phi_sol, h_ve, ground_temp, phi_hc)
         air[i] = theta_air
         heating_wh += phi_hc
     return air, heating_wh / 1000.0
@@ -308,21 +321,38 @@ def simulate_5r1c(
     h_inf = _h_ve_constant(z, inf_ach)
     h_hyg = _h_ve_constant(z, params.hygienic_ach)
 
+    # Température de sol : override explicite, sinon moyenne annuelle du climat
+    # (ISO 13370 simplifié : le sol profond ≈ T air moyenne annuelle).
+    if params.ground_temp_c is not None:
+        ground_temp = params.ground_temp_c
+    else:
+        ground_temp = sum(climate.dry_bulb_c) / climate.n_hours
+
     # --- Pénalité de chauffage : VNC (sans récup) vs VMC (récup η) ---
     h_ve_vnc = h_inf + h_hyg
     h_ve_vmc = h_inf + h_hyg * (1.0 - params.recovery_efficiency)
     _, heat_vnc = _simulate(
-        z, climate, [h_ve_vnc] * climate.n_hours, heating_setpoint=params.heating_setpoint_c
+        z,
+        climate,
+        [h_ve_vnc] * climate.n_hours,
+        heating_setpoint=params.heating_setpoint_c,
+        ground_temp=ground_temp,
     )
     _, heat_vmc = _simulate(
-        z, climate, [h_ve_vmc] * climate.n_hours, heating_setpoint=params.heating_setpoint_c
+        z,
+        climate,
+        [h_ve_vmc] * climate.n_hours,
+        heating_setpoint=params.heating_setpoint_c,
+        ground_temp=ground_temp,
     )
     penalty_kwh = max(heat_vnc - heat_vmc, 0.0)
     penalty_eur = penalty_kwh * params.heating_energy_price_eur_kwh
 
     # --- Surchauffe : free-running VNC avec night-cooling ---
     h_ve_summer = _night_cooling_series(z, climate, params)
-    air_free, _ = _simulate(z, climate, h_ve_summer, heating_setpoint=None)
+    air_free, _ = _simulate(
+        z, climate, h_ve_summer, heating_setpoint=None, ground_temp=ground_temp
+    )
     overheating_hours = sum(1.0 for t in air_free if t > params.comfort_temp_c)
     dh_overheat = sum(max(t - params.comfort_temp_c, 0.0) for t in air_free)
 
@@ -350,6 +380,7 @@ def simulate_5r1c(
             "recovery_efficiency_vmc": f"{params.recovery_efficiency:.0%}",
             "hygienic_ach": f"{params.hygienic_ach}",
             "infiltration_ach": f"{inf_ach:.2f}",
+            "ground_temp_c": f"{ground_temp:.1f}",
             "heating_setpoint_c": f"{params.heating_setpoint_c}",
             "comfort_temp_c": f"{params.comfort_temp_c}",
             "heat_vnc_kwh": f"{heat_vnc:.0f}",
