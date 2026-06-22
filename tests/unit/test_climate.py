@@ -15,6 +15,12 @@ from zephyr.climate import (
 )
 from zephyr.schemas import Orientation
 
+# EPW réel (TMYx Luxembourg-Findel) déposé dans data/climate/ — validation du
+# parseur sur données réelles, pas seulement sur un EPW de test forgé.
+_REAL_EPW = (
+    Path(__file__).resolve().parents[2] / "data" / "climate" / "Luxembourg_Findel_TMYx.epw"
+)
+
 _EPW_HEADER = [
     "LOCATION,Luxembourg,-,-,TMY,-,49.62,6.20,1.0,376.0",
     "DESIGN CONDITIONS,0",
@@ -84,3 +90,18 @@ def test_vertical_irradiance_south_beats_north() -> None:
     south = sum(vertical_irradiance(c, Orientation.S))
     north = sum(vertical_irradiance(c, Orientation.N))
     assert south > north
+
+
+@pytest.mark.skipif(not _REAL_EPW.exists(), reason="EPW réel non présent")
+def test_read_real_luxembourg_epw() -> None:
+    """Le parseur lit le vrai TMYx Luxembourg-Findel avec des stats plausibles."""
+    c = read_epw(_REAL_EPW)
+    assert c.n_hours == HOURS_PER_YEAR
+    assert c.latitude_deg == pytest.approx(49.627, abs=0.01)
+    mean = sum(c.dry_bulb_c) / c.n_hours
+    assert 8.0 < mean < 13.0  # climat luxembourgeois
+    assert -20 < min(c.dry_bulb_c) < 0
+    assert 25 < max(c.dry_bulb_c) < 40
+    assert 1000 < sum(c.ghi_w_m2) / 1000 < 1300  # kWh/m²/an
+    # La façade Sud reçoit plus que la Nord, aussi sur climat réel.
+    assert sum(vertical_irradiance(c, Orientation.S)) > sum(vertical_irradiance(c, Orientation.N))
