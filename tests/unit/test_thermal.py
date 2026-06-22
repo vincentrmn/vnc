@@ -74,6 +74,7 @@ def test_heavy_inertia_reduces_overheating() -> None:
 
 def test_occupancy_profile_reduces_heating() -> None:
     """Un profil d'apports internes réduit le besoin de chauffage (apports gratuits)."""
+
     def heat(params: R5C1Params) -> float:
         r = simulate_5r1c(_building(), CLIMATE, params)
         return sum(z.heating_vnc_kwh or 0.0 for z in r.zones)

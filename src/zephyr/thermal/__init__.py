@@ -342,9 +342,7 @@ def _simulate_multizone(
             else:
                 t_air10, _ = _step(*args, 10.0 * z.a_f, h_int, theta_core)
                 denom = t_air10 - t_air0
-                phi_hc = (
-                    0.0 if denom == 0 else 10.0 * z.a_f * (heating_setpoint - t_air0) / denom
-                )
+                phi_hc = 0.0 if denom == 0 else 10.0 * z.a_f * (heating_setpoint - t_air0) / denom
                 phi_hc = max(phi_hc, 0.0)
             t_air, theta_m[j] = _step(*args, phi_hc, h_int, theta_core)
             air[j][i] = t_air
@@ -416,8 +414,14 @@ def simulate_free_float(
     c_core, h_core_ground, h_int = _core_params(building, params)
     h_ve_per_zone = [[_h_ve_constant(z, ach)] * climate.n_hours for z in zones]
     air, _ = _simulate_multizone(
-        zones, climate, h_ve_per_zone, h_int,
-        heating_setpoint=None, ground_temp=ground, c_core=c_core, h_core_ground=h_core_ground,
+        zones,
+        climate,
+        h_ve_per_zone,
+        h_int,
+        heating_setpoint=None,
+        ground_temp=ground,
+        c_core=c_core,
+        h_core_ground=h_core_ground,
     )
 
     out: list[ZoneResult] = []
@@ -465,9 +469,14 @@ def simulate_5r1c(
         h_ve_per_zone: list[list[float]], setpoint: float | None
     ) -> tuple[list[list[float]], list[float]]:
         return _simulate_multizone(
-            zone_models, climate, h_ve_per_zone, h_int,
-            heating_setpoint=setpoint, ground_temp=ground,
-            c_core=c_core, h_core_ground=h_core_ground,
+            zone_models,
+            climate,
+            h_ve_per_zone,
+            h_int,
+            heating_setpoint=setpoint,
+            ground_temp=ground,
+            c_core=c_core,
+            h_core_ground=h_core_ground,
         )
 
     # Pénalité de chauffage : VNC (sans récup) vs VMC (récup η).

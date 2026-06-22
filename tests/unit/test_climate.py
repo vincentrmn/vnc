@@ -17,9 +17,7 @@ from zephyr.schemas import Orientation
 
 # EPW réel (TMYx Luxembourg-Findel) déposé dans data/climate/ — validation du
 # parseur sur données réelles, pas seulement sur un EPW de test forgé.
-_REAL_EPW = (
-    Path(__file__).resolve().parents[2] / "data" / "climate" / "Luxembourg_Findel_TMYx.epw"
-)
+_REAL_EPW = Path(__file__).resolve().parents[2] / "data" / "climate" / "Luxembourg_Findel_TMYx.epw"
 
 _EPW_HEADER = [
     "LOCATION,Luxembourg,-,-,TMY,-,49.62,6.20,1.0,376.0",

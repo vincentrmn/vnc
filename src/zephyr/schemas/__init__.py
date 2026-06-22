@@ -23,7 +23,7 @@ from zephyr.schemas.results import (
     Verdict,
     ZoneResult,
 )
-from zephyr.schemas.study import EnvelopeData, ProjectType, StudyInput
+from zephyr.schemas.study import EnvelopeData, ProjectType, SiteContext, StudyInput
 
 __all__ = [
     # building
@@ -37,6 +37,7 @@ __all__ = [
     # study
     "EnvelopeData",
     "ProjectType",
+    "SiteContext",
     "StudyInput",
     # results
     "Range",

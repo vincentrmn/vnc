@@ -40,6 +40,28 @@ class EnvelopeData(BaseModel):
     )
 
 
+class SiteContext(BaseModel):
+    """Contexte qualitatif du site (saisi par l'ingénieur).
+
+    Ces facteurs ne se calculent pas depuis la géométrie : ils alimentent les
+    disqualifiants du moteur `rules` (CLAUDE.md §4). Valeurs par défaut =
+    favorables/neutres.
+    """
+
+    exterior_noise_high: bool = Field(
+        default=False, description="Bruit extérieur excessif (ouverture des fenêtres gênante)."
+    )
+    pollution_high: bool = Field(
+        default=False, description="Pollution / pollen élevés (air extérieur peu admissible)."
+    )
+    ground_floor_security_risk: bool = Field(
+        default=False, description="Risque d'intrusion au RdC si ouvrants ouverts."
+    )
+    occupancy_compatible: bool = Field(
+        default=True, description="Occupation compatible avec une ventilation naturelle pilotée."
+    )
+
+
 class StudyInput(BaseModel):
     """Entrée complète d'une pré-étude Zéphyr.
 
@@ -51,4 +73,5 @@ class StudyInput(BaseModel):
     location: str | None = Field(default=None, description="Localisation (ex. 'Pommerloch, LU').")
     epw_path: str | None = Field(default=None, description="Fichier météo .epw.")
     envelope: EnvelopeData = Field(default_factory=EnvelopeData)
+    site: SiteContext = Field(default_factory=SiteContext)
     notes: str | None = None

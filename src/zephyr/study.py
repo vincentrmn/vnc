@@ -11,8 +11,26 @@ from __future__ import annotations
 from zephyr.climate import ClimateData
 from zephyr.roi import ROIParameters, compute_roi
 from zephyr.roi.sensitivity import tornado
-from zephyr.schemas import Building, EnvelopeData, ROIResult, ThermalResult
+from zephyr.rules import evaluate_feasibility
+from zephyr.schemas import (
+    Building,
+    EnvelopeData,
+    ROIResult,
+    SiteContext,
+    StudyResult,
+    ThermalResult,
+)
 from zephyr.thermal import R5C1Params, simulate_5r1c
+from zephyr.ventilation import VentilationParams, natural_airflow
+
+
+def _penalty_for_roi(
+    thermal: ThermalResult, building: Building, roi_params: ROIParameters
+) -> float:
+    """Pénalité de chauffage (€/an) à l'échelle du modèle ROI (intensité physique)."""
+    area = max(building.total_floor_area_m2, 1.0)
+    penalty_per_m2 = thermal.heating_penalty_eur_per_year / area
+    return penalty_per_m2 * roi_params.total_floor_area_m2
 
 
 def compute_roi_from_building(
@@ -36,16 +54,41 @@ def compute_roi_from_building(
     """
     roi_params = roi_params or ROIParameters()
     thermal = simulate_5r1c(building, climate, thermal_params, envelope)
-
-    area = max(building.total_floor_area_m2, 1.0)
-    penalty_per_m2 = thermal.heating_penalty_eur_per_year / area
-    penalty_roi = penalty_per_m2 * roi_params.total_floor_area_m2
+    penalty_roi = _penalty_for_roi(thermal, building, roi_params)
 
     roi = compute_roi(roi_params, heating_penalty_eur_per_year=penalty_roi)
     roi.assumptions["heating_penalty_source"] = (
-        f"calculée par thermal : {penalty_per_m2:.2f} €/m²/an "
+        f"calculée par thermal : {penalty_roi / roi_params.total_floor_area_m2:.2f} €/m²/an "
         f"× {roi_params.total_floor_area_m2:.0f} m² (directionnelle)"
     )
     if with_sensitivity:
         roi.sensitivity = tornado(roi_params, heating_penalty_eur_per_year=penalty_roi)
     return thermal, roi
+
+
+def compute_study(
+    building: Building,
+    climate: ClimateData,
+    roi_params: ROIParameters | None = None,
+    thermal_params: R5C1Params | None = None,
+    vent_params: VentilationParams | None = None,
+    envelope: EnvelopeData | None = None,
+    site: SiteContext | None = None,
+) -> StudyResult:
+    """Pipeline complet → `StudyResult` : thermal + ventilation + rules + roi.
+
+    Thermique exécuté une seule fois et réutilisé (pénalité ROI + verdict). Le
+    narratif LLM (`llm`) et le rapport (`report`) viendront se greffer ensuite.
+    """
+    roi_params = roi_params or ROIParameters()
+    thermal = simulate_5r1c(building, climate, thermal_params, envelope)
+    ventilation = natural_airflow(building, climate, vent_params)
+
+    result = evaluate_feasibility(building, thermal, ventilation, site)
+
+    penalty_roi = _penalty_for_roi(thermal, building, roi_params)
+    roi = compute_roi(roi_params, heating_penalty_eur_per_year=penalty_roi)
+    roi.sensitivity = tornado(roi_params, heating_penalty_eur_per_year=penalty_roi)
+    result.roi = roi
+    result.assumptions["surface_ventilee_m2"] = f"{roi_params.total_floor_area_m2:.0f}"
+    return result
