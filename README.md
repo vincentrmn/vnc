@@ -27,16 +27,24 @@ une étude opposable. Toute sortie expose ses hypothèses et son incertitude.
 `report`. Le `llm` est un service transverse (labelling + narratif), pas une
 étape du pipeline.
 
-## État (Phase 1)
+## État (pipeline complet bout-en-bout)
 
 | Module | État |
 |---|---|
-| `schemas` | ✅ contrat pydantic v2 (Building, StudyInput, résultats) |
-| `roi` | ✅ TCO/VAN paramétrique + pénalité de chauffage + tornado |
-| `thermal` | 🚧 stub + harnais de calibration (`tests/validation/`) |
-| `climate`, `ventilation`, `rules` | 🚧 stubs (Phase 2) |
-| `ingestion`, `geometry` | 🚧 stubs (Phase 3) |
-| `llm`, `report` | 🚧 stubs (Phase 4) |
+| `schemas` | ✅ contrat pydantic v2 (Building, StudyInput, résultats, ZoneResult, SiteContext) |
+| `roi` | ✅ TCO/VAN paramétrique + pénalité **calculée** + tornado |
+| `climate` | ✅ EPW réel (TMYx Findel) validé + degrés-heures + solaire |
+| `thermal` | ✅ 5R1C **multi-zone** (sol + cœur structurel) — free-float **validé STD** ; pénalité directionnelle |
+| `ventilation` | ✅ débits naturels (tirage + vent) + vérifs hygiénique/free-cooling |
+| `rules` | ✅ verdict go/no-go/conditionnel + disqualifiants §4 |
+| `study` | ✅ pipeline `compute_study` → `StudyResult` complet |
+| `ingestion` / `geometry` | ✅ DXF → pièces (surfaces, labels, orientations estimées, ouvrants) — à valider humainement |
+| `report` | ✅ rapport HTML (PDF optionnel WeasyPrint) |
+| `presets` | ✅ profils logement / **bureau** |
+| `llm` | 🚧 narratif (Phase 4 — à venir) |
+
+Presets bureau + logement (`zephyr.presets`). Pénalité de chauffage **calculée**
+mais encore *directionnelle* (calage fin en attente d'un besoin de chauffage STD).
 
 ## Démarrage
 

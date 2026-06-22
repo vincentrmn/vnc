@@ -13,11 +13,18 @@ import streamlit as st
 
 from zephyr.builders import parametric_building
 from zephyr.climate import read_epw, synthetic_climate
+from zephyr.presets import thermal_params_for, ventilation_params_for
 from zephyr.report import render_report_html
 from zephyr.roi import ROIParameters
-from zephyr.schemas import EnvelopeData, InertiaClass, Orientation, SiteContext, Verdict
+from zephyr.schemas import (
+    EnvelopeData,
+    InertiaClass,
+    Orientation,
+    ProjectType,
+    SiteContext,
+    Verdict,
+)
 from zephyr.study import compute_study
-from zephyr.thermal import R5C1Params
 
 _VERDICT_COLOR = {Verdict.GO: "🟢", Verdict.CONDITIONNEL: "🟠", Verdict.NO_GO: "🔴"}
 
@@ -36,6 +43,9 @@ def main() -> None:
         st.info("Ingestion DXF + validation géométrie : Phase 3. Ici, saisie paramétrique.")
 
         st.header("2. Bâtiment")
+        project_type = st.selectbox(
+            "Type de projet", list(ProjectType), index=2, format_func=lambda x: x.value
+        )
         total_area = st.number_input("Surface ventilée totale (m²)", 50.0, 50000.0, 1200.0, 50.0)
         n_levels = st.slider("Niveaux", 1, 8, 2)
         window_ratio = st.slider("Ratio vitrage / surface", 0.05, 0.40, 0.15, 0.01)
@@ -84,7 +94,8 @@ def main() -> None:
         building,
         climate,
         roi_params=roi_params,
-        thermal_params=R5C1Params(),
+        thermal_params=thermal_params_for(project_type),
+        vent_params=ventilation_params_for(project_type),
         envelope=envelope,
         site=site,
     )
