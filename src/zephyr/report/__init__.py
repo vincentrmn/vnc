@@ -88,7 +88,9 @@ def render_report_html(
     label, color = _VERDICT_LABEL[result.verdict]
 
     plan_html = ""
-    if building is not None:
+    rooms = getattr(building, "rooms", []) if building is not None else []
+    has_polygons = any(getattr(r, "polygon", None) for r in rooms)
+    if building is not None and has_polygons:
         try:
             from zephyr.viz import render_plan_data_uri
 

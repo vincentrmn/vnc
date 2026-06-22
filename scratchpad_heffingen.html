@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>Pré-étude VNC — Zéphyr</title>
+<style>
+ body { font-family: system-ui, sans-serif; max-width: 820px; margin: 2rem auto; color:#1c1c1c; }
+ h1 { margin-bottom: .2rem; }
+ .verdict { display:inline-block; padding:.3rem .8rem; border-radius:.4rem; color:#fff;
+            font-weight:700; background:#b42318; }
+ .disclaimer { background:#fff8e6; border:1px solid #f0d999; padding:.6rem .8rem;
+               border-radius:.4rem; font-size:.9rem; }
+ table { border-collapse: collapse; width:100%; margin:.5rem 0; }
+ td { border-bottom:1px solid #eee; padding:.35rem .5rem; }
+ td:last-child { text-align:right; font-variant-numeric: tabular-nums; }
+ h2 { margin-top:1.6rem; border-bottom:2px solid #eee; padding-bottom:.2rem; }
+ footer { margin-top:2rem; color:#777; font-size:.8rem; }
+</style></head><body>
+<h1>Pré-étude VNC — Zéphyr</h1>
+<p class="verdict">VERDICT&nbsp;: NO-GO</p>
+<p class="disclaimer">⚠️ Pré-étude / aide à la décision interne. Ce document n&#x27;est PAS une étude thermique opposable. Les résultats sont des ordres de grandeur, exposant leurs hypothèses et leur incertitude.</p>
+
+
+<h2>Faisabilité</h2>
+<h3>Disqualifiants</h3><ul><li>Surface d&#x27;ouvrants insuffisante : 0.0 vol/h atteignables &lt; 0.5 vol/h hygiénique requis.</li></ul>
+<h3>Conditions</h3><ul><li><em>aucun</em></li></ul>
+<h2>Screen thermique</h2><table><tr><td>Pénalité de chauffage VNC</td><td>3768 kWh/an (≈ 452 €/an)</td></tr><tr><td>Heures de surchauffe (pire pièce)</td><td>0 h/an</td></tr><tr><td>Bénéfice night-cooling</td><td>17846 kWh/an</td></tr></table><h3>Détail par pièce (températures opératives, CO₂)</h3><table class='zones'><tr><th>pièce</th><th>label</th><th>m²</th><th>hiver moy/min</th><th>été moy/max</th><th>surchauffe h</th><th>CO₂ moy/max ppm</th><th>h&gt;1000</th></tr><tr><td>sejour</td><td>sejour</td><td>58</td><td>20.0/20.0</td><td>20.4/23.1</td><td>0</td><td>561.0/781.0</td><td>0</td></tr><tr><td>chambreP</td><td>chambre</td><td>14</td><td>20.0/20.0</td><td>21.0/24.8</td><td>0</td><td>561.0/781.0</td><td>0</td></tr><tr><td>SDD</td><td>autre</td><td>7</td><td>20.0/20.0</td><td>21.0/24.7</td><td>0</td><td>561.0/781.0</td><td>0</td></tr><tr><td>chambre2</td><td>chambre</td><td>15</td><td>20.0/20.0</td><td>21.0/24.7</td><td>0</td><td>561.0/781.0</td><td>0</td></tr><tr><td>chambre3</td><td>chambre</td><td>14</td><td>20.0/20.0</td><td>21.0/24.7</td><td>0</td><td>561.0/781.0</td><td>0</td></tr><tr><td>SDB</td><td>sdb</td><td>6</td><td>20.0/20.0</td><td>21.0/24.7</td><td>0</td><td>561.0/781.0</td><td>0</td></tr><tr><td>palier</td><td>circulation</td><td>6</td><td>20.0/20.0</td><td>21.0/24.7</td><td>0</td><td>561.0/781.0</td><td>0</td></tr><tr><td>grenier</td><td>technique</td><td>30</td><td>20.0/20.0</td><td>20.9/24.9</td><td>0</td><td>561.0/781.0</td><td>0</td></tr></table><p style='font-size:.85rem;color:#777'>Hiver = DJF (chauffage actif), été = JJA (free-running + night-cooling). CO₂ = modèle d'équilibre (occupation × débit).</p>
+<h2>ROI — VNC vs VMC double-flux</h2><table><tr><td>CAPEX VNC</td><td>106,154 €</td></tr><tr><td>CAPEX VMC DF</td><td>22,321 €</td></tr><tr><td>VAN économie VNC (actualisée)</td><td>-98,620 €</td></tr><tr><td>Break-even</td><td>au-delà de l&#x27;horizon</td></tr><tr><td>Horizon</td><td>20 ans</td></tr></table><h3>Sensibilité (tornado)</h3><table><tr><td>heating_penalty_eur_per_year</td><td style='text-align:right'>8,387 €</td></tr><tr><td>wacc</td><td style='text-align:right'>4,529 €</td></tr><tr><td>bos_subscription_eur_per_point_year</td><td style='text-align:right'>4,451 €</td></tr><tr><td>vnc_m2_per_ouvrant</td><td style='text-align:right'>4,146 €</td></tr><tr><td>price_elec_eur_kwh</td><td style='text-align:right'>1,510 €</td></tr></table><h3>Avertissements méthodologiques</h3><ul><li>Ratios €/m² VMC : ordres de grandeur marché LU/BE — à confronter à ≥ 2 devis réels.</li><li>Aucune valeur résiduelle en fin d&#x27;horizon n&#x27;est comptée.</li><li>Résultats sensibles : prix élec, WACC, nb d&#x27;ouvrants, abonnement BOS, pénalité de chauffage. Ne jamais présenter un point unique sans analyse de sensibilité (tornado).</li></ul>
+<h2>Hypothèses</h2><table><tr><td>regles</td><td>moteur déterministe VNC (CLAUDE.md §4)</td></tr><tr><td>seuil_profondeur_simple_face</td><td>2.5× HSP</td></tr><tr><td>seuil_profondeur_traversant</td><td>5.0× HSP</td></tr><tr><td>n_disqualifiants</td><td>1</td></tr><tr><td>n_conditions</td><td>0</td></tr><tr><td>surface_ventilee_m2</td><td>150</td></tr></table>
+<footer>Généré par Zéphyr — moteur de pré-étude VNC. Pré-étude non opposable.</footer>
+</body></html>
