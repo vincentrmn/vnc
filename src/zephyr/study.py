@@ -74,11 +74,12 @@ def compute_study(
     vent_params: VentilationParams | None = None,
     envelope: EnvelopeData | None = None,
     site: SiteContext | None = None,
+    with_narrative: bool = False,
 ) -> StudyResult:
     """Pipeline complet → `StudyResult` : thermal + ventilation + rules + roi.
 
-    Thermique exécuté une seule fois et réutilisé (pénalité ROI + verdict). Le
-    narratif LLM (`llm`) et le rapport (`report`) viendront se greffer ensuite.
+    Thermique exécuté une seule fois et réutilisé (pénalité ROI + verdict). Si
+    ``with_narrative`` et qu'une clé API est disponible, ajoute le narratif Opus.
     """
     roi_params = roi_params or ROIParameters()
     thermal = simulate_5r1c(building, climate, thermal_params, envelope)
@@ -91,4 +92,10 @@ def compute_study(
     roi.sensitivity = tornado(roi_params, heating_penalty_eur_per_year=penalty_roi)
     result.roi = roi
     result.assumptions["surface_ventilee_m2"] = f"{roi_params.total_floor_area_m2:.0f}"
+
+    if with_narrative:
+        from zephyr.llm import narrative_available, write_narrative
+
+        if narrative_available():
+            result.narrative = write_narrative(result)
     return result
