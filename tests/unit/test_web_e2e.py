@@ -7,8 +7,6 @@ chemin paramétrique. Nécessite les extras `app` (fastapi, python-multipart) et
 
 from __future__ import annotations
 
-import html
-import re
 from pathlib import Path
 
 import pytest
@@ -46,16 +44,28 @@ def test_dxf_flow_validation_then_results() -> None:
         )
     assert r.status_code == 200
     assert "Validation de la géométrie" in r.text
-    assert "sejour" in r.text and "Confirmer la géométrie" in r.text
+    assert "sejour" in r.text and "Confirmer" in r.text
+    assert 'name="n_rooms"' in r.text  # formulaire éditable
 
-    # Récupère la géométrie validée (champ caché) et confirme → résultats.
-    m = re.search(r'name="building_json" value="([^"]*)"', r.text)
-    assert m is not None
-    building_json = html.unescape(m.group(1))
-    r2 = client.post(
-        "/etude/resultat",
-        data={"project_type": "logement", "inertia": "lourde", "building_json": building_json},
-    )
+    # Soumet une géométrie validée/corrigée (formulaire édité) → résultats.
+    data = {
+        "n_rooms": "1",
+        "project_type": "logement",
+        "inertia": "lourde",
+        "r0_id": "room_0",
+        "r0_area": "30",
+        "r0_height": "2.6",
+        "r0_level": "0",
+        "r0_label": "sejour",
+        "r0_orient": "S, W",
+        "r0_polygon": "[[0,0],[6,0],[6,5],[0,5]]",
+        "r0_nslots": "1",
+        "r0_o0_facade": "S",
+        "r0_o0_area": "4",
+        "r0_o0_sash": "1.6",
+        "r0_o0_openable": "on",
+    }
+    r2 = client.post("/etude/resultat", data=data)
     assert r2.status_code == 200
     assert "Aptitude à la VNC" in r2.text
     assert "Détail par critère" in r2.text

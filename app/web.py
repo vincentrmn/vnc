@@ -17,7 +17,7 @@ import html
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
 from zephyr.builders import parametric_building
@@ -33,7 +33,13 @@ from zephyr.schemas import (
     SiteContext,
 )
 from zephyr.study import compute_study
-from zephyr.web import render_landing, render_results, render_study_form, render_validation
+from zephyr.web import (
+    building_from_form,
+    render_landing,
+    render_results,
+    render_study_form,
+    render_validation,
+)
 
 app = FastAPI(title="Zéphyr — pré-étude VNC")
 
@@ -156,9 +162,9 @@ async def submit_config(
         geo = build_building(
             parse_dxf(tmp_path), inertia=InertiaClass(inertia), north_angle_deg=north
         )
-        # Conserve les drapeaux dans la config cachée (re-cochés à l'étape résultats).
+        # Config + drapeaux en champs cachés (la géométrie éditable est rendue à part).
         cfg_with_flags = {**cfg, **{k: ("on" if v else "") for k, v in flags.items()}}
-        hidden = _hidden_fields(cfg_with_flags, geo.building.model_dump_json())
+        hidden = _hidden_fields(cfg_with_flags, None)
         return render_validation(geo.building, hidden, geo.warnings)
 
     # Pas de DXF : pas de géométrie à valider → résultats directs (paramétrique).
@@ -166,35 +172,19 @@ async def submit_config(
 
 
 @app.post("/etude/resultat", response_class=HTMLResponse)
-async def submit_geometry(
-    building_json: str | None = Form(None),
-    nature: str = Form("neuf"),
-    project_type: str = Form("mixte"),
-    location: str = Form("Luxembourg"),
-    inertia: str = Form("lourde"),
-    area: float = Form(1200.0),
-    levels: int = Form(2),
-    u_wall: float = Form(0.20),
-    u_window: float = Form(0.9),
-    glazing: float = Form(0.18),
-    sash: float = Form(1.6),
-    n50: float = Form(1.5),
-    noise: str | None = Form(None),
-    pollution: str | None = Form(None),
-    security: str | None = Form(None),
-    occ_incompatible: str | None = Form(None),
-) -> str:
+async def submit_geometry(request: Request) -> str:
+    """Géométrie validée/corrigée (formulaire dynamique) → résultats."""
+    form = await request.form()
+    d = {k: str(v) for k, v in form.items()}
     cfg = {
-        "nature": nature, "project_type": project_type, "location": location,
-        "inertia": inertia, "area": str(area), "levels": str(levels),
-        "u_wall": str(u_wall), "u_window": str(u_window), "glazing": str(glazing),
-        "sash": str(sash), "n50": str(n50),
+        k: d.get(k, default)
+        for k, default in {
+            "nature": "neuf", "project_type": "mixte", "location": "Luxembourg",
+            "inertia": "lourde", "area": "1200", "levels": "2",
+            "u_wall": "0.20", "u_window": "0.9", "glazing": "0.18",
+            "sash": "1.6", "n50": "1.5",
+        }.items()
     }
-    flags = {
-        "noise": bool(noise), "pollution": bool(pollution),
-        "security": bool(security), "occ_incompatible": bool(occ_incompatible),
-    }
-    building = (
-        Building.model_validate_json(building_json) if building_json else _parametric(cfg)
-    )
+    flags = {k: bool(d.get(k)) for k in ("noise", "pollution", "security", "occ_incompatible")}
+    building = building_from_form(d) if d.get("n_rooms") else _parametric(cfg)
     return _compute_page(building, cfg, flags)

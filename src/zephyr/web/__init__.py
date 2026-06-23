@@ -11,8 +11,88 @@ orienté décision. Toujours le disclaimer « pré-étude, non opposable ».
 from __future__ import annotations
 
 import html
+import json
+from collections.abc import Mapping
 
-from zephyr.schemas import StudyResult, Verdict
+from zephyr.schemas import (
+    Building,
+    InertiaClass,
+    Opening,
+    Orientation,
+    Room,
+    RoomLabel,
+    StudyResult,
+    Verdict,
+)
+
+_SILL_M = 0.9  # allège par défaut (m) ; hauteur de châssis = head − sill
+
+
+def _parse_orientations(text: str) -> list[Orientation]:
+    """Parse une liste d'orientations « S, W » → [S, W] (valeurs inconnues ignorées)."""
+    out: list[Orientation] = []
+    valid = {o.value for o in Orientation}
+    for tok in text.replace(";", ",").split(","):
+        t = tok.strip().upper()
+        if t in valid and Orientation(t) not in out:
+            out.append(Orientation(t))
+    return out
+
+
+def building_from_form(form: Mapping[str, str]) -> Building:
+    """Reconstruit un `Building` depuis le formulaire de **validation édité**.
+
+    La géométrie immuable (id, surface, polygone) transite en champs cachés ; les
+    champs éditables (label, niveau, orientations, châssis) sont relus tels que
+    corrigés par l'ingénieur. Fonction pure → testable sans serveur.
+    """
+    n = int(form.get("n_rooms", "0") or "0")
+    rooms: list[Room] = []
+    for i in range(n):
+        rid = form.get(f"r{i}_id", f"room_{i}")
+        area = float(form.get(f"r{i}_area", "0") or "0")
+        height = float(form.get(f"r{i}_height", "2.6") or "2.6")
+        level = int(float(form.get(f"r{i}_level", "0") or "0"))
+        label = RoomLabel(form.get(f"r{i}_label", "autre") or "autre")
+        try:
+            poly = [(float(x), float(y)) for x, y in json.loads(form.get(f"r{i}_polygon", "[]"))]
+        except (ValueError, TypeError):
+            poly = []
+        orients = _parse_orientations(form.get(f"r{i}_orient", ""))
+
+        openings: list[Opening] = []
+        for j in range(int(form.get(f"r{i}_nslots", "0") or "0")):
+            facade = (form.get(f"r{i}_o{j}_facade", "") or "").strip().upper()
+            if facade not in {o.value for o in Orientation}:
+                continue  # slot vide / supprimé
+            oarea = float(form.get(f"r{i}_o{j}_area", "1.5") or "1.5")
+            sash_raw = form.get(f"r{i}_o{j}_sash", "") or ""
+            head = _SILL_M + float(sash_raw) if sash_raw.strip() else None
+            openings.append(
+                Opening(
+                    id=f"{rid}_w{j}",
+                    area_m2=max(oarea, 0.1),
+                    orientation=Orientation(facade),
+                    sill_height_m=_SILL_M,
+                    head_height_m=head,
+                    openable=bool(form.get(f"r{i}_o{j}_openable")),
+                )
+            )
+
+        rooms.append(
+            Room(
+                id=rid,
+                label=label,
+                area_m2=max(area, 0.01),
+                height_m=height,
+                level=level,
+                polygon=poly,
+                exterior_wall_orientations=orients,
+                openings=openings,
+            )
+        )
+    inertia = InertiaClass(form.get("inertia", "lourde") or "lourde")
+    return Building(id="dxf", rooms=rooms, inertia_class=inertia)
 
 # --------------------------------------------------------------------------- #
 # Design system (CSS auto-porté, lignes courtes pour le linter)
@@ -97,6 +177,8 @@ form input, form select { width: 100%; padding: .5rem .6rem; border: 1px solid v
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 1rem; }
 .check { display: flex; align-items: center; gap: .5rem; margin: .5rem 0; }
 .check input { width: auto; }
+.winrow { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; flex-wrap: wrap; }
+.winrow select, .winrow input { padding: .35rem .4rem; }
 h2.sec { margin: 2rem 0 .4rem; padding-bottom: .3rem; border-bottom: 2px solid var(--line); }
 table.kv { border-collapse: collapse; width: 100%; }
 table.kv td { border-bottom: 1px solid var(--line); padding: .35rem .2rem; }
@@ -245,6 +327,76 @@ géométrie du DXF ; vous la validez à l'étape suivante.</p>
     return _layout("Zéphyr — nouvelle étude", body, cta=False)
 
 
+def _orient_select(name: str, selected: str, *, empty: bool = False) -> str:
+    opts = ['<option value="">—</option>'] if empty else []
+    for o in Orientation:
+        sel = " selected" if o.value == selected else ""
+        opts.append(f'<option value="{o.value}"{sel}>{o.value}</option>')
+    return f'<select name="{name}" style="width:auto">{"".join(opts)}</select>'
+
+
+def _room_edit_block(idx: int, room: object) -> str:
+    """Bloc éditable d'une pièce : label, niveau, orientations, châssis."""
+    rid = getattr(room, "id", f"room_{idx}")
+    area = getattr(room, "area_m2", 0.0)
+    height = getattr(room, "height_m", 2.6)
+    level = getattr(room, "level", 0)
+    label = getattr(getattr(room, "label", None), "value", "autre")
+    polygon = list(getattr(room, "polygon", []) or [])
+    orients = ", ".join(o.value for o in getattr(room, "exterior_wall_orientations", []))
+    openings = list(getattr(room, "openings", []) or [])
+
+    label_opts = "".join(
+        f'<option value="{rl.value}"{" selected" if rl.value == label else ""}>{rl.value}</option>'
+        for rl in RoomLabel
+    )
+    # Châssis existants + 2 emplacements vides (ajout sans JS).
+    n_slots = len(openings) + 2
+    win_rows = []
+    for j in range(n_slots):
+        op = openings[j] if j < len(openings) else None
+        facade = getattr(getattr(op, "orientation", None), "value", "") if op else ""
+        oarea = f"{op.area_m2:.1f}" if op else ""
+        sash = ""
+        if op is not None and op.head_height_m is not None:
+            sash = f"{max(op.head_height_m - op.sill_height_m, 0.0):.1f}"
+        openable = "checked" if (op is None or op.openable) else ""
+        win_rows.append(
+            '<div class="winrow">'
+            f"{_orient_select(f'r{idx}_o{j}_facade', facade, empty=True)}"
+            f'<input type="number" step="0.1" placeholder="m²" name="r{idx}_o{j}_area" '
+            f'value="{oarea}" style="width:80px">'
+            f'<input type="number" step="0.1" placeholder="H châssis" name="r{idx}_o{j}_sash" '
+            f'value="{sash}" style="width:90px">'
+            f'<label class="check" style="margin:0"><input type="checkbox" '
+            f'name="r{idx}_o{j}_openable" {openable}> ouvrable</label>'
+            "</div>"
+        )
+
+    poly_json = html.escape(json.dumps([[round(x, 3), round(y, 3)] for x, y in polygon]))
+    return f"""
+<div class="card" style="margin:.6rem 0">
+  <input type="hidden" name="r{idx}_id" value="{html.escape(str(rid))}">
+  <input type="hidden" name="r{idx}_area" value="{area:.2f}">
+  <input type="hidden" name="r{idx}_height" value="{height:.2f}">
+  <input type="hidden" name="r{idx}_polygon" value="{poly_json}">
+  <input type="hidden" name="r{idx}_nslots" value="{n_slots}">
+  <div class="form-grid">
+    <div><label>Pièce <code>{html.escape(str(rid))}</code> — label</label>
+      <select name="r{idx}_label">{label_opts}</select></div>
+    <div><label>Surface / niveau</label>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <span style="color:var(--muted)">{area:.1f} m²</span>
+        <input type="number" name="r{idx}_level" value="{level}" style="width:70px"></div></div>
+    <div style="grid-column:1/3"><label>Façades extérieures (orientations, ex. « S, W »)</label>
+      <input type="text" name="r{idx}_orient" value="{html.escape(orients)}"
+        placeholder="ex. S, W"></div>
+  </div>
+  <label style="margin-top:.6rem">Châssis (façade · m² · hauteur châssis m · ouvrable)</label>
+  {"".join(win_rows)}
+</div>"""
+
+
 def _rooms_table(building: object) -> str:
     rooms = getattr(building, "rooms", [])
     rows = []
@@ -305,21 +457,26 @@ def render_validation(building: object, hidden_fields: str, warnings: list[str])
         f'<div class="v">{n_through}/{len(rooms)}</div></div>'
         "</div>"
     )
+    edit_blocks = "".join(_room_edit_block(i, r) for i, r in enumerate(rooms))
     body = f"""
 <h1>Validation de la géométrie</h1>
-<p class="lead" style="color:var(--muted)">Voici ce qu'on a reconstruit depuis vos
-plans ({len(rooms)} pièce(s), {total:.0f} m²). Vérifiez <b>pièces</b>, <b>châssis</b>
-et <b>traversant</b> avant de calculer — la reconstruction est faillible (§2.8).</p>
+<p class="lead" style="color:var(--muted)">Reconstruit depuis vos plans
+({len(rooms)} pièce(s), {total:.0f} m²). <b>Corrigez</b> labels, façades et
+châssis si besoin — la reconstruction est faillible (§2.8). Le traversant se
+recalcule depuis les façades que vous validez.</p>
 {chips}
 {warn_html}
 {plan}
-<h2 class="sec">Pièces reconstruites</h2>
+<h2 class="sec">Récapitulatif</h2>
 {_rooms_table(building)}
+<h2 class="sec">Corriger pièce par pièce</h2>
 <form method="post" action="/etude/resultat">
   {hidden_fields}
+  <input type="hidden" name="n_rooms" value="{len(rooms)}">
+  {edit_blocks}
   <p style="margin-top:1.4rem">
     <a class="btn ghost" href="/etude">← Corriger la config</a>
-    <button class="btn" type="submit">Confirmer la géométrie & calculer →</button>
+    <button class="btn" type="submit">Confirmer & calculer →</button>
   </p>
 </form>
 """
