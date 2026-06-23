@@ -152,6 +152,11 @@ def _ventilation_criterion(
         score=round(score, 1),
         weight=weight,
         detail=detail,
+        scale=(
+            f"Par surface : traversant = 100, mono-façade châssis ≥ {TALL_SASH_M} m = 60, "
+            "mono-façade bas = 30, pièce aveugle = 0 ; × 0,5 si plan trop profond "
+            f"(> {DEPTH_RATIO_SINGLE_SIDED}× HSP simple-face, > {DEPTH_RATIO_CROSS}× traversant)."
+        ),
         recommendation=reco,
     )
 
@@ -191,6 +196,10 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
         score=round(score, 1),
         weight=weight,
         detail=f"ratio vitrage/plancher = {ratio:.0%} (source : {src})",
+        scale=(
+            f"Bande optimale {GLAZING_LOW:.0%}–{GLAZING_HIGH:.0%} = 100 ; "
+            "décroît sous la bande (peu d'apports) et au-dessus (surchauffe/déperditions)."
+        ),
         recommendation=reco,
     )
 
@@ -211,6 +220,7 @@ def _inertia_criterion(building: Building, weight: float) -> ScoreCriterion:
         score=round(score, 1),
         weight=weight,
         detail=f"classe d'inertie : {cls.value} (lue du CPE / composition des parois)",
+        scale="Lourde = 100, moyenne = 60, légère = 25 (stockage de fraîcheur nocturne).",
         recommendation=reco,
     )
 
@@ -226,6 +236,7 @@ def _insulation_criterion(envelope: EnvelopeData, weight: float) -> ScoreCriteri
             score=60.0,
             weight=weight,
             detail="U non renseignés (CPE manquant) — note neutre par défaut",
+            scale="U mur 0,15 → 100 jusqu'à 1,0 → 0 (poids 70 %) ; Uw 0,8 → 100 jusqu'à 2,5 → 0.",
             recommendation="Renseigner le CPE (U murs/vitrages) pour fiabiliser le bilan.",
         )
 
@@ -259,6 +270,7 @@ def _insulation_criterion(envelope: EnvelopeData, weight: float) -> ScoreCriteri
         score=round(score, 1),
         weight=weight,
         detail=" ; ".join(bits) + " W/m²K",
+        scale="U mur 0,15→100 jusqu'à 1,0→0 (poids 70 %) ; Uw 0,8→100 jusqu'à 2,5→0 (30 %).",
         recommendation=reco,
     )
 

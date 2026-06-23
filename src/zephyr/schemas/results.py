@@ -44,6 +44,7 @@ class ScoreCriterion(BaseModel):
     score: float = Field(ge=0, le=100)
     weight: float = Field(ge=0)
     detail: str = Field(description="Mesure déterministe qui justifie la note.")
+    scale: str | None = Field(default=None, description="Échelle de notation (barème) du critère.")
     recommendation: str | None = None
 
 

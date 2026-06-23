@@ -8,7 +8,12 @@ from zephyr.builders import parametric_building
 from zephyr.climate import synthetic_climate
 from zephyr.schemas import EnvelopeData
 from zephyr.study import compute_study
-from zephyr.web import render_landing, render_results, render_study_form
+from zephyr.web import (
+    render_landing,
+    render_results,
+    render_study_form,
+    render_validation,
+)
 
 
 def test_landing_has_value_prop_and_cta() -> None:
@@ -20,9 +25,33 @@ def test_landing_has_value_prop_and_cta() -> None:
 
 def test_study_form_has_inputs() -> None:
     h = render_study_form()
-    for field in ("project_type", "u_wall", "glazing", "sash", "pollution"):
+    # Champs CPE + infos non lisibles des plans (nature, n50, occupation).
+    for field in ("project_type", "nature", "u_wall", "glazing", "sash", "n50", "pollution"):
         assert f'name="{field}"' in h
     assert 'action="/etude"' in h
+
+
+def test_results_have_scale_and_detailed_financials() -> None:
+    env = EnvelopeData(u_wall_w_m2k=0.18, u_window_w_m2k=0.9, glazing_to_floor_ratio=0.18)
+    res = compute_study(parametric_building(800.0), synthetic_climate(), envelope=env)
+    h = render_results(res)
+    assert "Comment le score est calculé" in h  # barème/échelle
+    # Détail financier façon Excel : CAPEX/OPEX postes + sensibilité.
+    assert "Centrales + récupérateurs" in h and "Plateforme BOS" in h
+    assert "Pénalité de chauffage" in h
+    assert "tornado" in h.lower()
+    assert "TCO non actualisé" in h
+
+
+def test_validation_page_lists_rooms() -> None:
+    from zephyr.builders import parametric_building as pb
+
+    b = pb(120.0, num_levels=1)
+    h = render_validation(b, '<input type="hidden" name="x" value="1">', ["attention test"])
+    assert "Validation de la géométrie" in h
+    assert "Confirmer la géométrie" in h
+    assert "attention test" in h  # warning affiché
+    assert 'action="/etude/resultat"' in h
 
 
 def test_results_render_contains_score_and_kpis() -> None:
