@@ -186,5 +186,10 @@ async def submit_geometry(request: Request) -> str:
         }.items()
     }
     flags = {k: bool(d.get(k)) for k in ("noise", "pollution", "security", "occ_incompatible")}
-    building = building_from_form(d) if d.get("n_rooms") else _parametric(cfg)
+    if d.get("building_json"):
+        building = Building.model_validate_json(d["building_json"])  # éditeur visuel
+    elif d.get("n_rooms"):
+        building = building_from_form(d)  # repli formulaire indexé
+    else:
+        building = _parametric(cfg)
     return _compute_page(building, cfg, flags)

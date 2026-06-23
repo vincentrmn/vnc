@@ -8,7 +8,7 @@ import pytest
 
 from zephyr.builders import parametric_building
 from zephyr.climate import synthetic_climate
-from zephyr.schemas import EnvelopeData
+from zephyr.schemas import Building, EnvelopeData
 from zephyr.study import compute_study
 from zephyr.web import (
     building_from_form,
@@ -46,19 +46,48 @@ def test_results_have_scale_and_detailed_financials() -> None:
     assert "TCO non actualisé" in h
 
 
-def test_validation_page_is_editable() -> None:
-    from zephyr.builders import parametric_building as pb
+def _poly_building() -> Building:
+    from zephyr.schemas import Building, Opening, Orientation, Room, RoomLabel
 
-    b = pb(120.0, num_levels=1)
-    h = render_validation(b, '<input type="hidden" name="x" value="1">', ["attention test"])
-    assert "Validation de la géométrie" in h
-    assert "Confirmer" in h
-    assert "attention test" in h  # warning affiché
+    rooms = [
+        Room(
+            id="r0", label=RoomLabel.SEJOUR, area_m2=25.0, height_m=2.6,
+            polygon=[(0, 0), (5, 0), (5, 5), (0, 5)],
+            exterior_wall_orientations=[Orientation.S, Orientation.W],
+            openings=[Opening(id="w", area_m2=4.0, orientation=Orientation.S, head_height_m=2.3)],
+        ),
+        Room(
+            id="r1", label=RoomLabel.CHAMBRE, area_m2=16.0, height_m=2.6,
+            polygon=[(5, 0), (9, 0), (9, 4), (5, 4)],
+            exterior_wall_orientations=[Orientation.E],
+        ),
+    ]
+    return Building(id="x", rooms=rooms)
+
+
+def _label_only_building() -> Building:
+    from zephyr.schemas import Building, Room, RoomLabel
+
+    return Building(
+        id="x",
+        rooms=[Room(id="l0", label=RoomLabel.SEJOUR, area_m2=20.0, height_m=2.6)],
+    )
+
+
+def test_validation_visual_editor_when_polygons() -> None:
+    h = render_validation(_poly_building(), '<input type="hidden" name="x" value="1">', ["warn!"])
+    assert "Validation de la géométrie" in h and "warn!" in h
     assert 'action="/etude/resultat"' in h
-    # Champs éditables présents (label, orientations, châssis).
+    # Éditeur interactif : SVG + données + script.
+    assert 'id="plan"' in h and 'name="building_json"' in h
+    assert "window.BUILDING" in h and "syncHidden" in h
+    assert '"sejour"' in h  # données embarquées
+
+
+def test_validation_fallback_form_when_no_polygons() -> None:
+    h = render_validation(_label_only_building(), "", [])
     assert 'name="n_rooms"' in h
     assert 'name="r0_label"' in h and 'name="r0_orient"' in h
-    assert 'name="r0_o0_facade"' in h
 
 
 def test_building_from_form_roundtrip() -> None:

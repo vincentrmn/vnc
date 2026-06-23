@@ -44,28 +44,29 @@ def test_dxf_flow_validation_then_results() -> None:
         )
     assert r.status_code == 200
     assert "Validation de la géométrie" in r.text
-    assert "sejour" in r.text and "Confirmer" in r.text
-    assert 'name="n_rooms"' in r.text  # formulaire éditable
+    assert 'id="plan"' in r.text and "window.BUILDING" in r.text  # éditeur visuel
 
-    # Soumet une géométrie validée/corrigée (formulaire édité) → résultats.
-    data = {
-        "n_rooms": "1",
-        "project_type": "logement",
-        "inertia": "lourde",
-        "r0_id": "room_0",
-        "r0_area": "30",
-        "r0_height": "2.6",
-        "r0_level": "0",
-        "r0_label": "sejour",
-        "r0_orient": "S, W",
-        "r0_polygon": "[[0,0],[6,0],[6,5],[0,5]]",
-        "r0_nslots": "1",
-        "r0_o0_facade": "S",
-        "r0_o0_area": "4",
-        "r0_o0_sash": "1.6",
-        "r0_o0_openable": "on",
-    }
-    r2 = client.post("/etude/resultat", data=data)
+    # Soumet la géométrie validée/corrigée (building_json de l'éditeur) → résultats.
+    from zephyr.schemas import Building, Opening, Orientation, Room, RoomLabel
+
+    b = Building(
+        id="dxf",
+        rooms=[
+            Room(
+                id="room_0", label=RoomLabel.SEJOUR, area_m2=30.0, height_m=2.6,
+                polygon=[(0, 0), (6, 0), (6, 5), (0, 5)],
+                exterior_wall_orientations=[Orientation.S, Orientation.W],
+                openings=[
+                    Opening(id="w", area_m2=4.0, orientation=Orientation.S, head_height_m=2.5)
+                ],
+            )
+        ],
+    )
+    r2 = client.post(
+        "/etude/resultat",
+        data={"project_type": "logement", "inertia": "lourde",
+              "building_json": b.model_dump_json()},
+    )
     assert r2.status_code == 200
     assert "Aptitude à la VNC" in r2.text
     assert "Détail par critère" in r2.text

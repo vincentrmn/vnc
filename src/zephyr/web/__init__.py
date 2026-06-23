@@ -179,6 +179,25 @@ form input, form select { width: 100%; padding: .5rem .6rem; border: 1px solid v
 .check input { width: auto; }
 .winrow { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; flex-wrap: wrap; }
 .winrow select, .winrow input { padding: .35rem .4rem; }
+.editor { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1rem; align-items: start; }
+.editor svg { width: 100%; height: auto; background: #fff; border: 1px solid var(--line);
+  border-radius: .6rem; }
+#panel { background: var(--card); border: 1px solid var(--line); border-radius: .6rem;
+  padding: 1rem; position: sticky; top: 1rem; }
+#panel label { display: block; font-weight: 600; font-size: .85rem; margin: .6rem 0 .2rem; }
+#panel select, #panel input[type=number] { width: 100%; padding: .4rem; border: 1px solid var(--line);
+  border-radius: .4rem; font: inherit; }
+.chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.chip { display: inline-flex; align-items: center; gap: .2rem; font-size: .82rem; font-weight: 500;
+  border: 1px solid var(--line); border-radius: 1rem; padding: .15rem .5rem; cursor: pointer; }
+.chip input { width: auto; }
+.badge-ok { background: #1a9d5a; color: #fff; font-size: .72rem; padding: .1rem .4rem;
+  border-radius: .3rem; }
+.levelbar { display: flex; gap: .4rem; margin: .4rem 0; }
+.levelbar button { border: 1px solid var(--teal); background: #fff; color: var(--teal-d);
+  border-radius: .4rem; padding: .3rem .7rem; cursor: pointer; }
+.levelbar button.active { background: var(--teal); color: #fff; }
+@media (max-width: 760px) { .editor { grid-template-columns: 1fr; } }
 h2.sec { margin: 2rem 0 .4rem; padding-bottom: .3rem; border-bottom: 2px solid var(--line); }
 table.kv { border-collapse: collapse; width: 100%; }
 table.kv td { border-bottom: 1px solid var(--line); padding: .35rem .2rem; }
@@ -423,63 +442,172 @@ def _rooms_table(building: object) -> str:
     return f"<table class='kv'>{head}{''.join(rows)}</table>"
 
 
-def render_validation(building: object, hidden_fields: str, warnings: list[str]) -> str:
-    """Page 2 — validation humaine de la géométrie lue sur les plans (§2.8)."""
-    plan = ""
-    rooms = getattr(building, "rooms", [])
-    if any(getattr(r, "polygon", None) for r in rooms):
-        try:
-            from zephyr.viz import render_plan_data_uri
+_LABEL_COLORS: dict[str, str] = {
+    "sejour": "#cfe8cf", "chambre": "#cfe0f5", "cuisine": "#f5e6cf", "sdb": "#cfeef0",
+    "wc": "#e6cff5", "circulation": "#eeeeee", "bureau": "#f5cfd6", "technique": "#dddddd",
+    "autre": "#f0f0f0",
+}
 
-            uri = render_plan_data_uri(building)  # type: ignore[arg-type]
-            plan = (
-                f"<img src='{uri}' alt='plan' style='max-width:100%;border:1px solid #e6ebf1;"
-                "border-radius:.5rem;margin:.5rem 0'>"
-            )
-        except Exception:  # pragma: no cover
-            plan = ""
-    warn_html = ""
-    if warnings:
-        warn_html = "".join(f'<div class="flag">{html.escape(w)}</div>' for w in warnings)
+# Éditeur de plan interactif (vanilla JS). Pas d'f-string : accolades JS littérales.
+_VALIDATION_JS = """
+var B = window.BUILDING, COLORS = window.LABEL_COLORS || {};
+var ORS = ["N","NE","E","SE","S","SW","W","NW"];
+var LABELS = ["sejour","chambre","cuisine","sdb","wc","circulation","bureau","technique","autre"];
+var sel = -1;
+var lvl = Math.min.apply(null, B.rooms.map(function(r){return r.level;}));
+function through(r){ return new Set(r.exterior_wall_orientations).size >= 2; }
+function fmt(n){ return Math.round(n*10)/10; }
+function levels(){
+  var ls = Array.from(new Set(B.rooms.map(function(r){return r.level;}))).sort(function(a,b){return a-b;});
+  var bar = document.getElementById('levelbar');
+  if(ls.length<=1){ bar.innerHTML=''; return; }
+  bar.innerHTML = ls.map(function(l){return '<button type="button" class="'+(l===lvl?'active':'')+'" data-l="'+l+'">Niveau '+l+'</button>';}).join('');
+  Array.prototype.forEach.call(bar.querySelectorAll('button'), function(b){ b.onclick=function(){ lvl=parseInt(b.dataset.l); sel=-1; render(); panel(); }; });
+}
+function render(){
+  var svg = document.getElementById('plan');
+  var rooms = B.rooms.filter(function(r){return r.level===lvl && r.polygon && r.polygon.length>=3;});
+  var xs=[], ys=[];
+  rooms.forEach(function(r){ r.polygon.forEach(function(p){xs.push(p[0]); ys.push(p[1]);}); });
+  if(!xs.length){ svg.innerHTML=''; syncHidden(); levels(); return; }
+  var minx=Math.min.apply(null,xs), maxx=Math.max.apply(null,xs);
+  var miny=Math.min.apply(null,ys), maxy=Math.max.apply(null,ys), pad=0.6;
+  svg.setAttribute('viewBox',(minx-pad)+' '+(miny-pad)+' '+((maxx-minx)+2*pad)+' '+((maxy-miny)+2*pad));
+  function fy(y){ return (miny+maxy)-y; }
+  var parts=[];
+  B.rooms.forEach(function(r,i){
+    if(r.level!==lvl || !r.polygon || r.polygon.length<3) return;
+    var pts = r.polygon.map(function(p){return p[0]+','+fy(p[1]);}).join(' ');
+    var stroke = (i===sel)?'#0e9aa7':'#444', sw=(i===sel)?0.12:0.05;
+    parts.push('<polygon points="'+pts+'" fill="'+(COLORS[r.label]||'#eee')+'" stroke="'+stroke+'" stroke-width="'+sw+'" data-i="'+i+'" style="cursor:pointer"/>');
+    var cx=0, cy=0; r.polygon.forEach(function(p){cx+=p[0]; cy+=fy(p[1]);}); cx/=r.polygon.length; cy/=r.polygon.length;
+    parts.push('<text x="'+cx+'" y="'+cy+'" text-anchor="middle" font-size="0.45" fill="#222">'+r.label+'</text>');
+    parts.push('<text x="'+cx+'" y="'+(cy+0.5)+'" text-anchor="middle" font-size="0.32" fill="#666">'+fmt(r.area_m2)+' m\\u00b2</text>');
+  });
+  svg.innerHTML = parts.join('');
+  Array.prototype.forEach.call(svg.querySelectorAll('polygon'), function(pg){ pg.onclick=function(){ sel=parseInt(pg.dataset.i); render(); panel(); }; });
+  syncHidden(); levels();
+}
+function panel(){
+  var p = document.getElementById('panel'), r = B.rooms[sel];
+  if(!r){ p.innerHTML='<p style="color:#888">Cliquez une pièce sur le plan pour la corriger.</p>'; return; }
+  var labOpts = LABELS.map(function(l){return '<option value="'+l+'"'+(l===r.label?' selected':'')+'>'+l+'</option>';}).join('');
+  var orChips = ORS.map(function(o){return '<label class="chip"><input type="checkbox" data-or="'+o+'"'+(r.exterior_wall_orientations.indexOf(o)>=0?' checked':'')+'>'+o+'</label>';}).join('');
+  var wins = (r.openings||[]).map(function(op,j){
+    var sash = (op.head_height_m!=null)?fmt(op.head_height_m-(op.sill_height_m!=null?op.sill_height_m:0.9)):'';
+    var fOpts = [''].concat(ORS).map(function(o){return '<option value="'+o+'"'+(o===op.orientation?' selected':'')+'>'+(o||'\\u2014')+'</option>';}).join('');
+    return '<div class="winrow"><select data-w="'+j+'" data-f="facade">'+fOpts+'</select>'+
+      '<input data-w="'+j+'" data-f="area" type="number" step="0.1" value="'+(op.area_m2!=null?op.area_m2:'')+'" style="width:70px" placeholder="m\\u00b2">'+
+      '<input data-w="'+j+'" data-f="sash" type="number" step="0.1" value="'+sash+'" style="width:80px" placeholder="H">'+
+      '<label class="chip"><input data-w="'+j+'" data-f="openable" type="checkbox"'+(op.openable?' checked':'')+'>ouvr.</label>'+
+      '<button type="button" data-del="'+j+'">\\u2715</button></div>';
+  }).join('');
+  p.innerHTML = '<h3 style="margin-top:0">'+r.id+'</h3>'+
+    '<label>Label</label><select id="p-label">'+labOpts+'</select>'+
+    '<label>Niveau</label><input id="p-level" type="number" value="'+r.level+'">'+
+    '<label>Façades extérieures</label><div class="chips">'+orChips+'</div>'+
+    '<label>Châssis '+(through(r)?'<span class="badge-ok">traversant</span>':'<span style="color:#888;font-size:.8rem">mono-façade</span>')+'</label>'+
+    '<div id="p-wins">'+wins+'</div>'+
+    '<button type="button" id="p-add" class="btn ghost" style="margin-top:.5rem">+ châssis</button>';
+  wire();
+}
+function wire(){
+  var r = B.rooms[sel];
+  document.getElementById('p-label').onchange=function(e){ r.label=e.target.value; render(); panel(); };
+  document.getElementById('p-level').onchange=function(e){ r.level=parseInt(e.target.value||'0'); render(); };
+  Array.prototype.forEach.call(document.querySelectorAll('#panel [data-or]'), function(c){ c.onchange=function(e){
+    var o=e.target.dataset.or, s=new Set(r.exterior_wall_orientations);
+    if(e.target.checked){ s.add(o); } else { s.delete(o); }
+    r.exterior_wall_orientations=Array.from(s); render(); panel();
+  };});
+  Array.prototype.forEach.call(document.querySelectorAll('#panel [data-w]'), function(el){ el.onchange=function(){
+    var j=parseInt(el.dataset.w), f=el.dataset.f, op=r.openings[j];
+    if(f==='facade'){ op.orientation=el.value; }
+    else if(f==='area'){ op.area_m2=parseFloat(el.value||'1.5'); }
+    else if(f==='sash'){ var v=parseFloat(el.value); op.sill_height_m=(op.sill_height_m!=null?op.sill_height_m:0.9); op.head_height_m=isNaN(v)?null:(op.sill_height_m+v); }
+    else if(f==='openable'){ op.openable=el.checked; }
+    syncHidden();
+  };});
+  Array.prototype.forEach.call(document.querySelectorAll('#panel [data-del]'), function(b){ b.onclick=function(){ r.openings.splice(parseInt(b.dataset.del),1); panel(); syncHidden(); };});
+  document.getElementById('p-add').onclick=function(){
+    if(!r.openings){ r.openings=[]; }
+    r.openings.push({id:r.id+'_w'+r.openings.length, kind:'window', orientation:(r.exterior_wall_orientations[0]||'S'), area_m2:1.5, sill_height_m:0.9, head_height_m:2.2, openable:true, free_area_ratio:0.5});
+    panel(); syncHidden();
+  };
+}
+function syncHidden(){
+  var clean = JSON.parse(JSON.stringify(B));
+  clean.rooms.forEach(function(r){ r.openings = (r.openings||[]).filter(function(o){ return ORS.indexOf(o.orientation)>=0 && o.area_m2>0; }); });
+  document.getElementById('building_json').value = JSON.stringify(clean);
+}
+document.addEventListener('DOMContentLoaded', function(){ render(); panel(); });
+"""
+
+
+def render_validation(building: Building, hidden_fields: str, warnings: list[str]) -> str:
+    """Page 2 — validation humaine de la géométrie (§2.8).
+
+    Éditeur de plan **interactif** (clic sur une pièce → label, façades, châssis,
+    traversant live) quand les pièces ont des polygones ; sinon repli sur un
+    formulaire de saisie pièce par pièce.
+    """
+    rooms = building.rooms
+    has_poly = any(r.polygon for r in rooms)
+    warn_html = "".join(f'<div class="flag">{html.escape(w)}</div>' for w in warnings)
     total = sum(r.area_m2 for r in rooms)
-    n_labelled = sum(1 for r in rooms if getattr(r.label, "value", "") not in ("", "autre"))
+    n_labelled = sum(1 for r in rooms if r.label.value not in ("", "autre"))
     n_windows = sum(len(r.openings) for r in rooms)
     n_through = sum(1 for r in rooms if r.is_through)
     chips = (
         '<div class="kpis">'
-        f'<div class="kpi"><div class="k">Pièces reconnues</div>'
-        f'<div class="v">{len(rooms)}</div></div>'
-        f'<div class="kpi"><div class="k">Pièces labellisées</div>'
+        f'<div class="kpi"><div class="k">Pièces</div><div class="v">{len(rooms)}</div></div>'
+        f'<div class="kpi"><div class="k">Labellisées</div>'
         f'<div class="v">{n_labelled}/{len(rooms)}</div></div>'
-        f'<div class="kpi"><div class="k">Châssis détectés</div>'
-        f'<div class="v">{n_windows}</div></div>'
-        f'<div class="kpi"><div class="k">Pièces traversantes</div>'
+        f'<div class="kpi"><div class="k">Châssis</div><div class="v">{n_windows}</div></div>'
+        f'<div class="kpi"><div class="k">Traversantes</div>'
         f'<div class="v">{n_through}/{len(rooms)}</div></div>'
         "</div>"
     )
-    edit_blocks = "".join(_room_edit_block(i, r) for i, r in enumerate(rooms))
-    body = f"""
-<h1>Validation de la géométrie</h1>
-<p class="lead" style="color:var(--muted)">Reconstruit depuis vos plans
-({len(rooms)} pièce(s), {total:.0f} m²). <b>Corrigez</b> labels, façades et
-châssis si besoin — la reconstruction est faillible (§2.8). Le traversant se
-recalcule depuis les façades que vous validez.</p>
-{chips}
-{warn_html}
-{plan}
-<h2 class="sec">Récapitulatif</h2>
-{_rooms_table(building)}
-<h2 class="sec">Corriger pièce par pièce</h2>
+
+    if has_poly:
+        data = building.model_dump_json()
+        colors = json.dumps(_LABEL_COLORS)
+        core = f"""
+<p class="lead" style="color:var(--muted)">Cliquez une pièce sur le plan pour
+corriger son <b>label</b>, ses <b>façades</b> et ses <b>châssis</b>. Le
+<b>traversant</b> se recalcule en direct. ({len(rooms)} pièce(s), {total:.0f} m²)</p>
+{chips}{warn_html}
+<form id="valform" method="post" action="/etude/resultat" onsubmit="syncHidden()">
+  {hidden_fields}
+  <input type="hidden" name="building_json" id="building_json">
+  <div class="editor">
+    <div><div class="levelbar" id="levelbar"></div><svg id="plan"></svg></div>
+    <div id="panel"></div>
+  </div>
+  <p style="margin-top:1.2rem">
+    <a class="btn ghost" href="/etude">← Config</a>
+    <button class="btn" type="submit">Confirmer &amp; calculer →</button>
+  </p>
+</form>
+<script>window.BUILDING={data};window.LABEL_COLORS={colors};</script>
+<script>{_VALIDATION_JS}</script>"""
+    else:
+        edit_blocks = "".join(_room_edit_block(i, r) for i, r in enumerate(rooms))
+        core = f"""
+<p class="lead" style="color:var(--muted)">Pièces lues ({len(rooms)}, {total:.0f} m²)
+sans polygones — saisissez/validez façades et châssis pièce par pièce (§2.8).</p>
+{chips}{warn_html}
 <form method="post" action="/etude/resultat">
   {hidden_fields}
   <input type="hidden" name="n_rooms" value="{len(rooms)}">
   {edit_blocks}
   <p style="margin-top:1.4rem">
-    <a class="btn ghost" href="/etude">← Corriger la config</a>
-    <button class="btn" type="submit">Confirmer & calculer →</button>
+    <a class="btn ghost" href="/etude">← Config</a>
+    <button class="btn" type="submit">Confirmer &amp; calculer →</button>
   </p>
-</form>
-"""
+</form>"""
+
+    body = f"<h1>Validation de la géométrie</h1>{core}"
     return _layout("Zéphyr — validation géométrie", body, cta=False)
 
 

@@ -69,6 +69,10 @@ src = ["src", "tests", "app"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
 
+[tool.ruff.lint.per-file-ignores]
+# JS/CSS embarqués (éditeur de plan) : lignes longues inévitables.
+"src/zephyr/web/__init__.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.11"
 plugins = ["pydantic.mypy"]
