@@ -69,6 +69,77 @@ def test_parse_and_build(tmp_path: Path) -> None:
     assert any("VALIDER" in w for w in res.warnings)
 
 
+def test_shared_wall_is_interior_and_windows_face_outward(tmp_path: Path) -> None:
+    """Mur mitoyen non compté ; ouvrants orientés par leur façade réelle."""
+    from zephyr.schemas import Orientation
+
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
+    msp = doc.modelspace()
+    for name in ("PIECES", "TEXTE", "FENETRE"):
+        doc.layers.add(name)
+    # Deux pièces accolées, mur commun en x=5.
+    msp.add_lwpolyline([(0, 0), (5, 0), (5, 4), (0, 4)], close=True, dxfattribs={"layer": "PIECES"})
+    msp.add_text("Sejour", dxfattribs={"layer": "TEXTE"}).set_placement((2.5, 2.0))
+    msp.add_lwpolyline(
+        [(5, 0), (10, 0), (10, 4), (5, 4)], close=True, dxfattribs={"layer": "PIECES"}
+    )
+    msp.add_text("Chambre", dxfattribs={"layer": "TEXTE"}).set_placement((7.5, 2.0))
+    msp.add_line((1, 0), (3, 0), dxfattribs={"layer": "FENETRE"})  # séjour, façade sud
+    msp.add_line((10, 1), (10, 3), dxfattribs={"layer": "FENETRE"})  # chambre, façade est
+    p = tmp_path / "adj.dxf"
+    doc.saveas(str(p))
+
+    b = build_building(parse_dxf(p)).building
+    sejour = next(r for r in b.rooms if r.label is RoomLabel.SEJOUR)
+    chambre = next(r for r in b.rooms if r.label is RoomLabel.CHAMBRE)
+
+    # Le mur commun (x=5) est mitoyen : pas d'Est pour le séjour, pas d'Ouest pour la chambre.
+    assert Orientation.E not in sejour.exterior_wall_orientations
+    assert Orientation.W not in chambre.exterior_wall_orientations
+    # Ouvrants orientés par la façade qui les porte.
+    assert sejour.openings[0].orientation is Orientation.S
+    assert chambre.openings[0].orientation is Orientation.E
+
+
+def test_north_angle_rotates_orientations(tmp_path: Path) -> None:
+    """L'angle du Nord fait pivoter les orientations déduites."""
+    from zephyr.schemas import Orientation
+
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
+    msp = doc.modelspace()
+    doc.layers.add("FENETRE")
+    msp.add_lwpolyline([(0, 0), (4, 0), (4, 4), (0, 4)], close=True)
+    msp.add_line((1, 0), (3, 0), dxfattribs={"layer": "FENETRE"})  # mur −y du plan
+    p = tmp_path / "rot.dxf"
+    doc.saveas(str(p))
+    raw = parse_dxf(p)
+
+    south = build_building(raw).building.rooms[0].openings[0].orientation
+    rotated = build_building(raw, north_angle_deg=90.0).building.rooms[0].openings[0].orientation
+    assert south is Orientation.S
+    assert rotated is Orientation.W  # +90° sur le Nord → la façade sud devient ouest
+
+
+def test_window_block_detected(tmp_path: Path) -> None:
+    """Une fenêtre dessinée en bloc (INSERT) est reconnue comme ouvrant."""
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
+    blk = doc.blocks.new(name="FENETRE_F1")
+    blk.add_line((0, 0), (1, 0))
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 0), (4, 0), (4, 4), (0, 4)], close=True, dxfattribs={"layer": "PIECES"})
+    msp.add_blockref("FENETRE_F1", (2, 0))  # sur la façade sud
+    p = tmp_path / "blk.dxf"
+    doc.saveas(str(p))
+
+    raw = parse_dxf(p)
+    assert raw.blocks  # le bloc est lu
+    b = build_building(raw).building
+    assert b.rooms[0].openings  # converti en ouvrant
+
+
 def test_unit_scale_mm(tmp_path: Path) -> None:
     """Un plan en mm est ramené en mètres."""
     doc = ezdxf.new()

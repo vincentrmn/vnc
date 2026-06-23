@@ -11,10 +11,16 @@ avant calcul. Les avertissements (`warnings`) signalent ce qui doit être vérif
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from zephyr.ingestion import RawDXF
 from zephyr.schemas import Building, InertiaClass, Opening, Orientation, Room, RoomLabel
+
+if TYPE_CHECKING:
+    from shapely.geometry import Point as _Point
+    from shapely.geometry.base import BaseGeometry as _Geom
 
 # Mots-clés (texte/calque) → label de pièce.
 _LABEL_KEYWORDS: list[tuple[tuple[str, ...], RoomLabel]] = [
@@ -50,22 +56,53 @@ def _label_from_text(text: str) -> RoomLabel | None:
     return None
 
 
-def _orientations_from_vector(dx: float, dy: float) -> list[Orientation]:
-    """Cardinal(s) d'exposition d'une pièce selon sa position vs centre bâtiment.
+# Secteurs de boussole (convention plan : +x = Est, +y = Nord ; angle math).
+_SECTORS: list[tuple[float, Orientation]] = [
+    (0.0, Orientation.E),
+    (45.0, Orientation.NE),
+    (90.0, Orientation.N),
+    (135.0, Orientation.NW),
+    (180.0, Orientation.W),
+    (225.0, Orientation.SW),
+    (270.0, Orientation.S),
+    (315.0, Orientation.SE),
+]
 
-    Convention plan : +y = Nord, +x = Est. Pièce en périphérie → 1 façade ; près
-    d'un coin (dx ~ dy) → 2 façades.
+
+def _orientation_from_angle(angle_deg: float, north_offset_deg: float = 0.0) -> Orientation:
+    """Mappe un angle (normale sortante, degrés math) vers une orientation cardinale.
+
+    ``north_offset_deg`` corrige l'orientation du plan (angle du Nord vrai vs +y).
     """
-    if dx == 0 and dy == 0:
-        return []
-    ns = Orientation.N if dy >= 0 else Orientation.S
-    ew = Orientation.E if dx >= 0 else Orientation.W
-    adx, ady = abs(dx), abs(dy)
-    if adx > 2 * ady:
-        return [ew]
-    if ady > 2 * adx:
-        return [ns]
-    return [ns, ew]
+    a = (angle_deg - north_offset_deg) % 360.0
+    return min(_SECTORS, key=lambda s: min(abs(a - s[0]), 360.0 - abs(a - s[0])))[1]
+
+
+def _segment_exterior_orientation(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    union: _Geom,
+    point_cls: type[_Point],
+    north: float,
+    eps: float = 0.25,
+) -> Orientation | None:
+    """Orientation de la **façade extérieure** d'un segment, ou None s'il est intérieur.
+
+    On échantillonne de part et d'autre du segment (le long de sa normale) : le
+    côté qui sort de l'emprise du bâtiment donne la normale sortante → l'orientation.
+    Un segment dont les deux côtés sont à l'intérieur est un mur **mitoyen**.
+    """
+    mx, my = (p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0
+    dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+    length = math.hypot(dx, dy)
+    if length < 1e-6:
+        return None
+    nx, ny = -dy / length, dx / length  # normale unitaire
+    for sign in (1.0, -1.0):
+        px, py = mx + sign * nx * eps, my + sign * ny * eps
+        if not union.contains(point_cls(px, py)):
+            return _orientation_from_angle(math.degrees(math.atan2(sign * ny, sign * nx)), north)
+    return None
 
 
 def build_building(
@@ -77,16 +114,22 @@ def build_building(
     min_area_m2: float = 2.0,
     max_area_m2: float = 2000.0,
     window_height_m: float = 1.3,
+    north_angle_deg: float = 0.0,
+    default_window_area_m2: float = 1.5,
     building_id: str = "dxf",
 ) -> GeometryResult:
     """Reconstruit un `Building` depuis les entités DXF brutes.
 
     Pièces = polylignes fermées (surface shapely, filtrée par taille). Labels =
-    texte contenu dans la pièce, sinon nom de calque. Orientations = estimées
-    depuis la position vs centre du bâtiment. Ouvrants = segments sur un calque
-    « fenêtre », rattachés à la pièce la plus proche.
+    texte contenu, sinon nom de calque. **Façades extérieures et orientations =
+    déduites géométriquement** : on calcule l'emprise du bâtiment (union des
+    pièces) et on teste, mur par mur, lequel donne sur l'extérieur (≠ mitoyen).
+    ``north_angle_deg`` corrige l'orientation du plan (Nord vrai vs +y). Ouvrants
+    = segments sur calque « fenêtre » + blocs (INSERT) « fenêtre », orientés par
+    la façade qui les porte. Le **traversant** découle des façades (≥ 2).
     """
     from shapely.geometry import LineString, Point, Polygon
+    from shapely.ops import unary_union
 
     warnings = list(raw.warnings)
 
@@ -107,18 +150,20 @@ def build_building(
         warnings.append("Aucune pièce reconstructible (polylignes fermées de taille plausible).")
         return GeometryResult(Building(id=building_id, inertia_class=inertia), warnings)
 
-    # Centre du bâtiment (moyenne des centroïdes).
-    cx = sum(p.centroid.x for p, _ in room_polys) / len(room_polys)
-    cy = sum(p.centroid.y for p, _ in room_polys) / len(room_polys)
+    # Emprise du bâtiment (union des pièces) → distingue murs extérieurs/mitoyens.
+    union = unary_union([p for p, _ in room_polys])
 
-    # 2) Fenêtres : segments sur un calque « fenêtre ».
+    # 2) Fenêtres candidates : segments sur calque « fenêtre » + blocs « fenêtre ».
     window_lines = [ln for ln in raw.lines if any(k in ln.layer.lower() for k in _WINDOW_KEYWORDS)]
+    window_blocks = [
+        b
+        for b in raw.blocks
+        if any(k in b.layer.lower() or k in b.name.lower() for k in _WINDOW_KEYWORDS)
+    ]
 
     rooms: list[Room] = []
     labelled = 0
     for idx, (poly, layer) in enumerate(room_polys):
-        c = poly.centroid
-
         # Label : texte contenu, sinon calque.
         label = RoomLabel.AUTRE
         for txt in raw.texts:
@@ -134,20 +179,45 @@ def build_building(
         if label is not RoomLabel.AUTRE:
             labelled += 1
 
-        orients = _orientations_from_vector(c.x - cx, c.y - cy)
+        # Façades extérieures : longueur cumulée par orientation (murs non mitoyens).
+        coords = list(poly.exterior.coords)
+        orient_len: dict[Orientation, float] = {}
+        for a, b in zip(coords, coords[1:], strict=False):
+            o = _segment_exterior_orientation(a, b, union, Point, north_angle_deg)
+            if o is not None:
+                orient_len[o] = orient_len.get(o, 0.0) + math.dist(a, b)
+        orients = [
+            o for o, length in sorted(orient_len.items(), key=lambda kv: -kv[1]) if length >= 0.5
+        ]
+        dominant = orients[0] if orients else Orientation.S
 
-        # Ouvrants : segments fenêtre dont le milieu est proche de la pièce.
+        # Ouvrants : lignes fenêtre proches (orientées par leur façade) + blocs.
         openings: list[Opening] = []
         for wl in window_lines:
             mid = Point((wl.start[0] + wl.end[0]) / 2, (wl.start[1] + wl.end[1]) / 2)
             if poly.distance(mid) <= 0.5:  # ~0,5 m de tolérance
                 length = LineString([wl.start, wl.end]).length
-                facing = orients[0] if orients else Orientation.S
+                facing = (
+                    _segment_exterior_orientation(
+                        wl.start, wl.end, union, Point, north_angle_deg, eps=0.5
+                    )
+                    or dominant
+                )
                 openings.append(
                     Opening(
                         id=f"r{idx}_win{len(openings)}",
                         area_m2=max(length * window_height_m, 0.1),
                         orientation=facing,
+                        head_height_m=min(hsp_m - 0.2, window_height_m + 0.9),
+                    )
+                )
+        for blk in window_blocks:
+            if poly.distance(Point(blk.position)) <= 0.5:
+                openings.append(
+                    Opening(
+                        id=f"r{idx}_blk{len(openings)}",
+                        area_m2=default_window_area_m2,
+                        orientation=dominant,
                         head_height_m=min(hsp_m - 0.2, window_height_m + 0.9),
                     )
                 )
@@ -166,9 +236,17 @@ def build_building(
         )
 
     # 3) Avertissements de validation humaine.
-    warnings.append("Orientations estimées depuis le plan — À VALIDER par l'ingénieur (§2.8).")
-    if not window_lines:
-        warnings.append("Aucun ouvrant détecté (pas de calque 'fenêtre') — à saisir manuellement.")
+    warnings.append("Façades/orientations déduites de la géométrie — À VALIDER (§2.8).")
+    if north_angle_deg == 0.0:
+        warnings.append("Nord supposé = +y du plan : régler l'angle du Nord si le plan est tourné.")
+    if not window_lines and not window_blocks:
+        warnings.append("Aucun ouvrant détecté (ni calque ni bloc 'fenêtre') — à saisir.")
+    if window_blocks:
+        warnings.append(
+            f"{len(window_blocks)} ouvrant(s) issus de blocs : largeur supposée — à confirmer."
+        )
+    n_through = sum(1 for r in rooms if r.is_through)
+    warnings.append(f"Traversant : {n_through}/{len(rooms)} pièce(s) exposée(s) sur ≥ 2 façades.")
     if labelled < len(rooms):
         warnings.append(
             f"{len(rooms) - labelled}/{len(rooms)} pièce(s) non labellisées — à étiqueter."

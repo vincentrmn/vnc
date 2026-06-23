@@ -204,6 +204,8 @@ géométrie du DXF ; vous la validez à l'étape suivante.</p>
       </select></div>
     <div><label>Localisation (climat)</label>
       <input type="text" name="location" value="Luxembourg" placeholder="ville, pays"></div>
+    <div><label>Angle du Nord (° ; 0 = +y du plan)</label>
+      <input type="number" name="north" value="0" step="5"></div>
     <div><label>Inertie (composition des parois — CPE)</label>
       <select name="inertia">
         <option value="lourde" selected>Lourde (béton / maçonnerie)</option>
@@ -248,18 +250,23 @@ def _rooms_table(building: object) -> str:
     rows = []
     for r in rooms:
         orients = ", ".join(o.value for o in r.exterior_wall_orientations) or "—"
+        wins = ", ".join(o.orientation.value for o in r.openings) or "—"
         label = getattr(r.label, "value", str(r.label))
+        through = "✅ oui" if r.is_through else "— non"
         rows.append(
             "<tr>"
             f"<td style='text-align:left'>{html.escape(r.id)}</td>"
             f"<td style='text-align:left'>{html.escape(label)}</td>"
             f"<td>{r.area_m2:.1f}</td><td>{r.level}</td>"
             f"<td style='text-align:left'>{html.escape(orients)}</td>"
-            f"<td>{len(r.openings)}</td></tr>"
+            f"<td style='text-align:left'>{html.escape(wins)}</td>"
+            f"<td style='text-align:left'>{through}</td></tr>"
         )
     head = (
         "<tr><th style='text-align:left'>pièce</th><th style='text-align:left'>label</th>"
-        "<th>m²</th><th>niveau</th><th style='text-align:left'>façades</th><th>ouvrants</th></tr>"
+        "<th>m²</th><th>niv.</th><th style='text-align:left'>façades</th>"
+        "<th style='text-align:left'>châssis (façade)</th>"
+        "<th style='text-align:left'>traversant</th></tr>"
     )
     return f"<table class='kv'>{head}{''.join(rows)}</table>"
 
@@ -283,11 +290,27 @@ def render_validation(building: object, hidden_fields: str, warnings: list[str])
     if warnings:
         warn_html = "".join(f'<div class="flag">{html.escape(w)}</div>' for w in warnings)
     total = sum(r.area_m2 for r in rooms)
+    n_labelled = sum(1 for r in rooms if getattr(r.label, "value", "") not in ("", "autre"))
+    n_windows = sum(len(r.openings) for r in rooms)
+    n_through = sum(1 for r in rooms if r.is_through)
+    chips = (
+        '<div class="kpis">'
+        f'<div class="kpi"><div class="k">Pièces reconnues</div>'
+        f'<div class="v">{len(rooms)}</div></div>'
+        f'<div class="kpi"><div class="k">Pièces labellisées</div>'
+        f'<div class="v">{n_labelled}/{len(rooms)}</div></div>'
+        f'<div class="kpi"><div class="k">Châssis détectés</div>'
+        f'<div class="v">{n_windows}</div></div>'
+        f'<div class="kpi"><div class="k">Pièces traversantes</div>'
+        f'<div class="v">{n_through}/{len(rooms)}</div></div>'
+        "</div>"
+    )
     body = f"""
 <h1>Validation de la géométrie</h1>
 <p class="lead" style="color:var(--muted)">Voici ce qu'on a reconstruit depuis vos
-plans ({len(rooms)} pièce(s), {total:.0f} m²). Vérifiez orientations, labels et
-ouvrants avant de calculer — la reconstruction est faillible (§2.8).</p>
+plans ({len(rooms)} pièce(s), {total:.0f} m²). Vérifiez <b>pièces</b>, <b>châssis</b>
+et <b>traversant</b> avant de calculer — la reconstruction est faillible (§2.8).</p>
+{chips}
 {warn_html}
 {plan}
 <h2 class="sec">Pièces reconstruites</h2>

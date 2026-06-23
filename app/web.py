@@ -120,6 +120,7 @@ async def submit_config(
     nature: str = Form("neuf"),
     project_type: str = Form("mixte"),
     location: str = Form("Luxembourg"),
+    north: float = Form(0.0),
     inertia: str = Form("lourde"),
     area: float = Form(1200.0),
     levels: int = Form(2),
@@ -135,7 +136,7 @@ async def submit_config(
 ) -> str:
     cfg = {
         "nature": nature, "project_type": project_type, "location": location,
-        "inertia": inertia, "area": str(area), "levels": str(levels),
+        "north": str(north), "inertia": inertia, "area": str(area), "levels": str(levels),
         "u_wall": str(u_wall), "u_window": str(u_window), "glazing": str(glazing),
         "sash": str(sash), "n50": str(n50),
     }
@@ -152,7 +153,9 @@ async def submit_config(
         with tempfile.NamedTemporaryFile(suffix=".dxf", delete=False) as tmp:
             tmp.write(raw)
             tmp_path = Path(tmp.name)
-        geo = build_building(parse_dxf(tmp_path), inertia=InertiaClass(inertia))
+        geo = build_building(
+            parse_dxf(tmp_path), inertia=InertiaClass(inertia), north_angle_deg=north
+        )
         # Conserve les drapeaux dans la config cachée (re-cochés à l'étape résultats).
         cfg_with_flags = {**cfg, **{k: ("on" if v else "") for k, v in flags.items()}}
         hidden = _hidden_fields(cfg_with_flags, geo.building.model_dump_json())

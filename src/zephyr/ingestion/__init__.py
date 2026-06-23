@@ -45,6 +45,15 @@ class RawLine:
 
 
 @dataclass
+class RawBlock:
+    """Référence de bloc (INSERT) — souvent une fenêtre/porte/symbole."""
+
+    layer: str
+    name: str
+    position: tuple[float, float]
+
+
+@dataclass
 class RawDXF:
     """Entités CAO brutes extraites du DXF (coordonnées en mètres)."""
 
@@ -53,6 +62,7 @@ class RawDXF:
     texts: list[RawText]
     lines: list[RawLine]
     unit_scale_m: float
+    blocks: list[RawBlock] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -85,6 +95,7 @@ def parse_dxf(path: str | Path, *, unit_scale_m: float | None = None) -> RawDXF:
     polylines: list[RawPolyline] = []
     texts: list[RawText] = []
     lines: list[RawLine] = []
+    blocks: list[RawBlock] = []
 
     for entity in msp:
         # ezdxf type les entités par sous-classe ; on accède dynamiquement aux
@@ -107,6 +118,9 @@ def parse_dxf(path: str | Path, *, unit_scale_m: float | None = None) -> RawDXF:
         elif kind == "LINE":
             a, b = e.dxf.start, e.dxf.end
             lines.append(RawLine(layer, (a.x * s, a.y * s), (b.x * s, b.y * s)))
+        elif kind == "INSERT":
+            ins = e.dxf.insert
+            blocks.append(RawBlock(layer, str(e.dxf.name), (ins.x * s, ins.y * s)))
 
     if not polylines:
         warnings.append("Aucune polyligne trouvée — pièces non reconstructibles.")
@@ -117,5 +131,6 @@ def parse_dxf(path: str | Path, *, unit_scale_m: float | None = None) -> RawDXF:
         texts=texts,
         lines=lines,
         unit_scale_m=s,
+        blocks=blocks,
         warnings=warnings,
     )
