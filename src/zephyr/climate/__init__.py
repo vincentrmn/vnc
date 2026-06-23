@@ -133,6 +133,15 @@ def degree_hours(temperatures_c: list[float], base_c: float, *, mode: str = "abo
     raise ValueError("mode doit être 'above' ou 'below'")
 
 
+def heating_degree_days(climate: ClimateData, base_c: float = 18.0) -> float:
+    """Degrés-jours de chauffe (DJU) base ``base_c`` — déterministe, depuis l'EPW.
+
+    DJU = Σ_heures max(base − T, 0) / 24. Indicateur standard du besoin de chauffe
+    saisonnier ; base 18 °C par convention (LU/FR).
+    """
+    return degree_hours(climate.dry_bulb_c, base_c, mode="below") / 24.0
+
+
 # --------------------------------------------------------------------------- #
 # Géométrie solaire (auto-portée) — irradiance sur surfaces verticales
 # --------------------------------------------------------------------------- #

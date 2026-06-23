@@ -35,3 +35,7 @@ data/validation/*
 # DXF/DWG clients : DWG refusé en v1 (§11) ; DXF de test ré-autorisé explicitement.
 *.dwg
 # Note : les .epw (météo, non sensibles) vont dans data/climate/ et SONT committés.
+
+# Scratch / fichiers de travail temporaires
+scratchpad_*
+scratch_*

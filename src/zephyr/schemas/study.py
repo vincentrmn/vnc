@@ -38,6 +38,18 @@ class EnvelopeData(BaseModel):
     air_permeability_ach50: float | None = Field(
         default=None, ge=0, description="Perméabilité à l'air n50 (vol/h sous 50 Pa)."
     )
+    glazing_to_floor_ratio: float | None = Field(
+        default=None,
+        ge=0,
+        description="Ratio surface vitrée / surface au sol (CPE/saisie ; un plan 2D "
+        "ne porte pas la hauteur des baies).",
+    )
+    sash_height_m: float | None = Field(
+        default=None,
+        gt=0,
+        description="Hauteur libre des châssis ouvrants (m). ≥ ~1,5 m → tirage "
+        "mono-façade exploitable même sans traversant.",
+    )
 
 
 class SiteContext(BaseModel):

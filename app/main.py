@@ -19,7 +19,7 @@ from zephyr.climate import read_epw, synthetic_climate
 from zephyr.geometry import build_building
 from zephyr.ingestion import parse_dxf
 from zephyr.llm import narrative_available, write_narrative
-from zephyr.presets import thermal_params_for, ventilation_params_for
+from zephyr.presets import penalty_params_for
 from zephyr.report import render_report_html
 from zephyr.roi import ROIParameters
 from zephyr.schemas import (
@@ -133,63 +133,53 @@ def main() -> None:
         building,
         climate,
         roi_params=roi_params,
-        thermal_params=thermal_params_for(project_type),
-        vent_params=ventilation_params_for(project_type),
         envelope=envelope,
         site=site,
+        project_type=project_type,
+        penalty_params=penalty_params_for(project_type),
     )
 
     icon = _VERDICT_COLOR[result.verdict]
-    st.subheader(f"{icon} Verdict : {result.verdict.value.upper()}")
+    st.subheader(f"{icon} Éligibilité : {result.verdict.value.upper()}")
     if result.disqualifiers:
-        st.error("Disqualifiants : " + " ; ".join(result.disqualifiers))
-    if result.conditions:
-        st.warning("Conditions : " + " ; ".join(result.conditions))
+        st.error("Drapeaux durs : " + " ; ".join(result.disqualifiers))
 
-    c1, c2, c3 = st.columns(3)
-    assert result.roi and result.thermal
-    c1.metric("CAPEX VNC", f"{result.roi.capex_vnc_eur:,.0f} €")
-    c2.metric("VAN économie VNC", f"{result.roi.npv_delta_eur:,.0f} €")
-    be = result.roi.break_even_year
-    c3.metric("Break-even", f"an {be}" if be is not None else "hors horizon")
+    assert result.roi and result.score and result.heating_penalty
 
-    st.line_chart({"VAN cumulée économie VNC (€)": result.roi.npv_delta_cumulative_eur})
-
-    st.subheader("Thermique")
-    tc1, tc2, tc3, tc4 = st.columns(4)
-    tc1.metric("Besoin chauffage VNC", f"{result.thermal.heating_need_kwh_per_year:,.0f} kWh/an")
-    tc2.metric("Besoin froid actif", f"{result.thermal.cooling_need_kwh_per_year:,.0f} kWh/an")
-    tc3.metric("Pénalité chauffage", f"{result.thermal.heating_penalty_eur_per_year:,.0f} €/an")
-    tc4.metric("Night-cooling", f"{result.thermal.night_cooling_benefit_kwh:,.0f} kWh/an")
-    st.caption(
-        "Températures **libres** (VNC en marche, sans chauffage ni froid actifs) : "
-        "elles montrent où le bâtiment dérive trop froid (h<18 °C) ou trop chaud (h>26 °C)."
+    st.subheader("Aptitude à la VNC (score)")
+    s = result.score
+    sc1, sc2 = st.columns([1, 3])
+    sc1.metric("Score global", f"{s.global_score:.0f}/100", s.grade)
+    sc2.bar_chart({c.label: c.score for c in s.criteria})
+    st.dataframe(
+        [
+            {"critère": c.label, "note /100": round(c.score), "poids": c.weight, "détail": c.detail}
+            for c in s.criteria
+        ]
     )
-
-    if result.thermal.zones:
-        st.subheader("Détail thermique par pièce")
-        st.dataframe(
-            [
-                {
-                    "pièce": z.zone_id,
-                    "label": z.label,
-                    "m²": z.area_m2,
-                    "T° libre min °C": z.top_min_c,
-                    "T° libre max °C": z.top_max_c,
-                    "h<18 °C": round(z.hours_below_comfort),
-                    "h>26 °C": round(z.overheating_hours),
-                    "chauffage kWh/an": round(z.heating_need_kwh or 0),
-                    "froid kWh/an": round(z.cooling_need_kwh or 0),
-                    "CO₂ moy ppm": z.co2_mean_ppm,
-                    "h CO₂>1000": round(z.co2_hours_above_1000 or 0),
-                }
-                for z in result.thermal.zones
-            ]
-        )
+    if s.recommendations:
+        st.info("**Pistes d'amélioration :**\n\n- " + "\n- ".join(s.recommendations))
+    if s.flags:
+        st.warning("Vigilance (site) : " + " ; ".join(s.flags))
 
     if dxf_file is not None and any(r.polygon for r in building.rooms):
         st.subheader("Plan reconstruit")
         st.image(render_plan_png(building))
+
+    st.subheader("Bilan financier")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("CAPEX VNC", f"{result.roi.capex_vnc_eur:,.0f} €")
+    c2.metric("VAN économie VNC", f"{result.roi.npv_delta_eur:,.0f} €")
+    be = result.roi.break_even_year
+    c3.metric("Break-even", f"an {be}" if be is not None else "hors horizon")
+    c4.metric("Pénalité chauffage", f"{result.heating_penalty.eur_per_year:,.0f} €/an")
+    st.line_chart({"VAN cumulée économie VNC (€)": result.roi.npv_delta_cumulative_eur})
+    dju = result.heating_penalty.heating_degree_days
+    st.caption(
+        f"Surcoût de chauffage VNC (degrés-jours, DJU≈{dju:.0f} °C·j) : "
+        f"{result.heating_penalty.kwh_per_year:.0f} kWh/an — pertes de ventilation non "
+        "récupérées par la VNC, atténuées par la commande à la demande."
+    )
 
     st.subheader("Sensibilité (tornado)")
     st.bar_chart({e.parameter: e.swing for e in result.roi.sensitivity})

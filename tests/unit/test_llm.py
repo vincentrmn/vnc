@@ -34,17 +34,15 @@ def test_narrative_payload_only_contains_provided_numbers() -> None:
     assert system[0]["cache_control"] == {"type": "ephemeral"}
     assert "inventer" not in system[0]["text"].lower() or "n'invente" in system[0]["text"].lower()
 
-    # Le user contient un JSON des chiffres réels (verdict, roi, thermique).
+    # Le user contient un JSON des chiffres réels (verdict, score, roi, surcoût).
     text = messages[0]["text"]
     payload = json.loads(text.split("\n", 1)[1])
     assert payload["verdict"] == res.verdict.value
-    assert "roi" in payload and "thermique" in payload
+    assert "roi" in payload and "score" in payload and "surcout_chauffage" in payload
     # Les chiffres correspondent au résultat (pas d'invention).
-    assert res.roi is not None and res.thermal is not None
+    assert res.roi is not None and res.heating_penalty is not None
     assert payload["roi"]["capex_vnc_eur"] == round(res.roi.capex_vnc_eur)
-    assert payload["thermique"]["penalite_chauffage_eur_an"] == round(
-        res.thermal.heating_penalty_eur_per_year
-    )
+    assert payload["surcout_chauffage"]["eur_an"] == round(res.heating_penalty.eur_per_year)
 
 
 def test_narrative_available_false_without_key(monkeypatch: Any) -> None:

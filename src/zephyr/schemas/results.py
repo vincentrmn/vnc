@@ -13,11 +13,12 @@ from pydantic import BaseModel, Field
 
 
 class Verdict(StrEnum):
-    """Verdict de faisabilité VNC rendu par `rules`."""
+    """Éligibilité VNC. Le principe VNC est quasi universel (≈ 95 % des bâtiments) ;
+    le verdict nuance surtout des *drapeaux* contextuels, le **score** porte le détail."""
 
-    GO = "go"
-    CONDITIONNEL = "conditionnel"
-    NO_GO = "no_go"
+    GO = "go"  # bon candidat VNC
+    CONDITIONNEL = "conditionnel"  # éligible, avec réserves / améliorations
+    NO_GO = "no_go"  # drapeau dur (air non admissible, occupation incompatible)
 
 
 class Range(BaseModel):
@@ -31,91 +32,52 @@ class Range(BaseModel):
         return f"{self.central:.0f} [{self.low:.0f} – {self.high:.0f}]"
 
 
-class ZoneResult(BaseModel):
-    """Résultat thermique d'une zone (pièce) en modèle multi-zone.
+class ScoreCriterion(BaseModel):
+    """Une composante du score d'aptitude VNC (déterministe).
 
-    ``top_min_c`` / ``top_max_c`` sont les extrêmes de température **libre**
-    (free-running : VNC en marche, mais SANS chauffage ni climatisation actifs).
-    C'est ce qui révèle où le bâtiment dérive trop froid ou trop chaud — et donc
-    le besoin de chaud/froid. ``hours_below_comfort`` / ``overheating_hours``
-    comptent les heures sous le seuil bas / au-dessus du seuil haut. Les besoins
-    de chauffage et de froid (``heating_need_kwh`` / ``cooling_need_kwh``) sont
-    l'énergie à fournir pour tenir les consignes.
+    ``score`` est sur 0–100, ``weight`` la pondération dans le score global, et
+    ``recommendation`` (optionnelle) dit comment améliorer le projet.
     """
 
-    zone_id: str
-    label: str | None = None
-    area_m2: float | None = None
-    top_min_c: float
-    top_max_c: float
-    winter_mean_c: float | None = None
-    winter_min_c: float | None = None
-    summer_mean_c: float | None = None
-    summer_max_c: float | None = None
-    hours_below_comfort: float = 0.0  # heures (libre) sous le seuil bas → besoin de chaud
-    overheating_hours: float = 0.0  # heures (libre) au-dessus du seuil haut → besoin de froid
-    heating_need_kwh: float | None = None  # besoin de chauffage VNC pour tenir la consigne
-    cooling_need_kwh: float | None = None  # besoin de froid actif résiduel (après night-cooling)
-    co2_mean_ppm: float | None = None
-    co2_max_ppm: float | None = None
-    co2_hours_above_1000: float | None = None
-    heating_penalty_kwh: float | None = None
+    key: str
+    label: str
+    score: float = Field(ge=0, le=100)
+    weight: float = Field(ge=0)
+    detail: str = Field(description="Mesure déterministe qui justifie la note.")
+    recommendation: str | None = None
 
 
-class ThermalResult(BaseModel):
-    """Sortie du module `thermal` (5R1C).
+class VNCScore(BaseModel):
+    """Score d'aptitude à la VNC : note globale + détail par critère + recos.
 
-    La ``heating_penalty_*`` est le terme clé injecté dans l'OPEX VNC du ROI
-    (CLAUDE.md §6). Il est **calculé** (besoin de chauffage différentiel dû à
-    l'absence d'échangeur, atténué par commande/inertie/scheduling), jamais
-    postulé. ``equivalent_recovery_pct`` est une sortie *dérivée* pour la
-    lecture, jamais une entrée.
+    Remplace l'ancien verdict binaire : 95 % des bâtiments sont éligibles, donc
+    l'utile n'est pas « oui/non » mais « à quel point, et comment améliorer ».
     """
 
-    overheating_hours: float = Field(
-        default=0.0, ge=0, description="Heures (libre) au-dessus du seuil de confort haut (h/an)."
+    global_score: float = Field(ge=0, le=100)
+    grade: str = Field(description="Lettre (A–E) dérivée du score global.")
+    criteria: list[ScoreCriterion] = Field(default_factory=list)
+    recommendations: list[str] = Field(
+        default_factory=list, description="Pistes d'amélioration priorisées."
     )
-    hours_below_comfort: float = Field(
-        default=0.0, ge=0, description="Heures (libre) sous le seuil de confort bas (h/an)."
+    flags: list[str] = Field(
+        default_factory=list, description="Drapeaux contextuels (bruit, pollution, sécurité)."
     )
-    degree_hours_overheating: float = Field(
-        default=0.0, ge=0, description="Degrés-heures de surchauffe (°C·h/an)."
-    )
-    night_cooling_benefit_kwh: float = Field(
-        default=0.0,
-        ge=0,
-        description="Rafraîchissement passif récupéré par night-cooling (kWh/an).",
-    )
-    heating_need_kwh_per_year: float = Field(
-        default=0.0,
-        ge=0,
-        description="Besoin de chauffage VNC total pour tenir la consigne (kWh/an), calculé.",
-    )
-    cooling_need_kwh_per_year: float = Field(
-        default=0.0,
-        ge=0,
-        description="Besoin de froid actif résiduel après night-cooling (kWh/an), calculé.",
-    )
-    heating_penalty_kwh_per_year: float = Field(
-        default=0.0,
-        ge=0,
-        description="Surplus de besoin de chauffage VNC vs VMC DF récup (kWh/an), calculé.",
-    )
-    heating_penalty_eur_per_year: float = Field(
-        default=0.0,
-        ge=0,
-        description="Coût annuel du surplus de chauffage VNC (€/an, an 1 avant inflation).",
-    )
-    equivalent_recovery_pct: float | None = Field(
-        default=None,
-        description="Récup équivalente dérivée (%), pour la com'. Sortie validée, jamais entrée.",
-    )
-    zones: list[ZoneResult] = Field(
-        default_factory=list, description="Détail par zone (modèle multi-zone)."
-    )
-    assumptions: dict[str, str] = Field(
-        default_factory=dict, description="Hypothèses explicites du calcul thermique."
-    )
+
+
+class HeatingPenalty(BaseModel):
+    """Surcoût de chauffage VNC vs VMC double-flux — calculé en **degrés-jours**.
+
+    La VMC DF récupère η de la chaleur de l'air extrait, la VNC non (CLAUDE.md §6).
+    Terme **déterministe** (pas de STD) = pertes de ventilation non récupérées sur
+    la saison de chauffe, atténuées par la commande à la demande (débit réduit
+    hors occupation). Alimente l'OPEX VNC du ROI. Jamais 0, jamais un % posé.
+    """
+
+    kwh_per_year: float = Field(ge=0)
+    eur_per_year: float = Field(ge=0)
+    heating_degree_days: float = Field(ge=0, description="DJU base 18 °C (°C·jour).")
+    assumptions: dict[str, str] = Field(default_factory=dict)
 
 
 class SensitivityEntry(BaseModel):
@@ -179,12 +141,13 @@ class ROIResult(BaseModel):
 
 
 class StudyResult(BaseModel):
-    """Agrégat final : verdict + thermique + ROI + traçabilité."""
+    """Agrégat final : éligibilité + score d'aptitude + pénalité chauffage + ROI."""
 
     verdict: Verdict
+    score: VNCScore | None = None
+    heating_penalty: HeatingPenalty | None = None
+    roi: ROIResult | None = None
     disqualifiers: list[str] = Field(default_factory=list)
     conditions: list[str] = Field(default_factory=list)
-    thermal: ThermalResult | None = None
-    roi: ROIResult | None = None
     narrative: str | None = Field(default=None, description="Narratif LLM (Opus), optionnel.")
     assumptions: dict[str, str] = Field(default_factory=dict)

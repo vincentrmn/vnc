@@ -41,10 +41,10 @@ RÈGLES ABSOLUES :
 - Ne survends pas la VNC : sois équilibré (on la vend, donc on doit rester crédible).
 
 STRUCTURE (concise, ~200-300 mots, titres courts) :
-1. Verdict et pourquoi (disqualifiants / conditions s'il y en a).
-2. Thermique : pénalité de chauffage VNC vs VMC, surchauffe.
-3. ROI : ordre de grandeur (CAPEX, économie actualisée, break-even), driver principal.
-4. Réserves : ce qui reste à valider / vérifier.
+1. Aptitude VNC : score global + note, et les critères forts/faibles.
+2. Recommandations d'amélioration (les plus utiles).
+3. Surcoût de chauffage VNC vs VMC (déterministe, degrés-jours).
+4. ROI : ordre de grandeur (CAPEX, économie actualisée, break-even), driver principal.
 
 Pas de jargon non expliqué. Pas de markdown lourd. Ton sobre et factuel.
 """
@@ -57,13 +57,25 @@ def _study_to_payload(result: StudyResult) -> dict[str, Any]:
         "disqualifiants": result.disqualifiers,
         "conditions": result.conditions,
     }
-    if result.thermal is not None:
-        t = result.thermal
-        payload["thermique"] = {
-            "penalite_chauffage_kwh_an": round(t.heating_penalty_kwh_per_year),
-            "penalite_chauffage_eur_an": round(t.heating_penalty_eur_per_year),
-            "heures_surchauffe": round(t.overheating_hours),
-            "note": "pénalité calculée mais directionnelle (non calée finement sur STD)",
+    if result.score is not None:
+        s = result.score
+        payload["score"] = {
+            "global_sur_100": round(s.global_score),
+            "note": s.grade,
+            "criteres": [
+                {"critere": c.label, "note": round(c.score), "detail": c.detail}
+                for c in s.criteria
+            ],
+            "recommandations": s.recommendations,
+            "drapeaux": s.flags,
+        }
+    if result.heating_penalty is not None:
+        p = result.heating_penalty
+        payload["surcout_chauffage"] = {
+            "kwh_an": round(p.kwh_per_year),
+            "eur_an": round(p.eur_per_year),
+            "dju_base18": round(p.heating_degree_days),
+            "methode": "degrés-jours (déterministe, sans STD)",
         }
     if result.roi is not None:
         r = result.roi

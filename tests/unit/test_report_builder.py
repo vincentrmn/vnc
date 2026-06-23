@@ -33,7 +33,7 @@ def test_report_html_contains_verdict_and_disclaimer() -> None:
     assert "VERDICT" in html_text
     assert res.verdict.value.upper() in {Verdict.GO.value.upper(), "GO", "CONDITIONNEL", "NO-GO"}
     assert "opposable" in html_text  # disclaimer présent
-    assert "ROI" in html_text and "thermique" in html_text.lower()
+    assert "ROI" in html_text and "aptitude" in html_text.lower()  # score VNC présent
 
 
 def test_render_report_writes_file(tmp_path: Path) -> None:

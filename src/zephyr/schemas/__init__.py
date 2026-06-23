@@ -15,13 +15,14 @@ from zephyr.schemas.building import (
     RoomLabel,
 )
 from zephyr.schemas.results import (
+    HeatingPenalty,
     Range,
     ROIResult,
+    ScoreCriterion,
     SensitivityEntry,
     StudyResult,
-    ThermalResult,
     Verdict,
-    ZoneResult,
+    VNCScore,
 )
 from zephyr.schemas.study import EnvelopeData, ProjectType, SiteContext, StudyInput
 
@@ -40,11 +41,12 @@ __all__ = [
     "SiteContext",
     "StudyInput",
     # results
+    "HeatingPenalty",
     "Range",
     "ROIResult",
+    "ScoreCriterion",
     "SensitivityEntry",
     "StudyResult",
-    "ThermalResult",
     "Verdict",
-    "ZoneResult",
+    "VNCScore",
 ]

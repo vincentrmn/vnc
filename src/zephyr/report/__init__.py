@@ -42,40 +42,32 @@ def _kv_table(d: dict[str, str]) -> str:
     return f"<table>{rows}</table>"
 
 
-def _zones_table(result: StudyResult) -> str:
-    """Tableau thermique par pièce : températures saisonnières + CO₂."""
-    if result.thermal is None or not result.thermal.zones:
+def _score_table(result: StudyResult) -> str:
+    """Tableau du score d'aptitude VNC : note globale + détail par critère + recos."""
+    if result.score is None:
         return ""
-    head = (
-        "<tr><th>pièce</th><th>label</th><th>m²</th><th>T° libre min/max</th>"
-        "<th>h&lt;18°C</th><th>h&gt;26°C</th><th>chauffage kWh/an</th>"
-        "<th>froid kWh/an</th><th>CO₂ moy/max ppm</th><th>h&gt;1000</th></tr>"
-    )
+    s = result.score
+    head = "<tr><th>critère</th><th>note /100</th><th>poids</th><th>détail</th></tr>"
     rows = []
-    for z in result.thermal.zones:
-        co2_h = z.co2_hours_above_1000 or 0.0
+    for c in s.criteria:
         rows.append(
             "<tr>"
-            f"<td>{html.escape(z.zone_id)}</td>"
-            f"<td>{html.escape(z.label or '')}</td>"
-            f"<td>{z.area_m2 or 0:.0f}</td>"
-            f"<td>{z.top_min_c}/{z.top_max_c}</td>"
-            f"<td>{z.hours_below_comfort:.0f}</td>"
-            f"<td>{z.overheating_hours:.0f}</td>"
-            f"<td>{z.heating_need_kwh or 0:.0f}</td>"
-            f"<td>{z.cooling_need_kwh or 0:.0f}</td>"
-            f"<td>{z.co2_mean_ppm}/{z.co2_max_ppm}</td>"
-            f"<td>{co2_h:.0f}</td>"
+            f"<td>{html.escape(c.label)}</td>"
+            f"<td>{c.score:.0f}</td>"
+            f"<td>{c.weight:.0f}</td>"
+            f"<td style='text-align:left'>{html.escape(c.detail)}</td>"
             "</tr>"
         )
+    recos = ""
+    if s.recommendations:
+        recos = "<h3>Recommandations d'amélioration</h3><ul>" + _li(s.recommendations) + "</ul>"
+    flags = ""
+    if s.flags:
+        flags = "<h3>Points de vigilance (site)</h3><ul>" + _li(s.flags) + "</ul>"
     return (
-        "<h3>Détail par pièce (températures libres, besoins, CO₂)</h3>"
-        "<table class='zones'>" + head + "".join(rows) + "</table>"
-        "<p style='font-size:.85rem;color:#777'>T° <b>libre</b> = VNC en marche mais "
-        "sans chauffage ni froid actifs (révèle la dérive réelle). h&lt;18 °C → besoin de "
-        "chaud ; h&gt;26 °C → surchauffe/besoin de froid. Chauffage/froid = énergie pour "
-        "tenir les consignes (froid résiduel <i>après</i> night-cooling). CO₂ = modèle "
-        "d'équilibre (occupation × débit).</p>"
+        f"<p><b>Score d'aptitude VNC : {s.global_score:.0f}/100 "
+        f"(note {html.escape(s.grade)})</b></p>"
+        "<table class='zones'>" + head + "".join(rows) + "</table>" + recos + flags
     )
 
 
@@ -109,24 +101,23 @@ def render_report_html(
         except Exception:  # pragma: no cover - matplotlib absent
             plan_html = ""
 
-    thermal_html = "<p><em>Non calculé.</em></p>"
-    if result.thermal is not None:
-        t = result.thermal
-        thermal_html = _kv_table(
+    score_html = _score_table(result)
+
+    penalty_html = ""
+    if result.heating_penalty is not None:
+        p = result.heating_penalty
+        penalty_html = "<h2>Surcoût de chauffage VNC (déterministe, degrés-jours)</h2>" + _kv_table(
             {
-                "Besoin de chauffage VNC": f"{t.heating_need_kwh_per_year:.0f} kWh/an",
-                "Besoin de froid actif (après night-cooling)": (
-                    f"{t.cooling_need_kwh_per_year:.0f} kWh/an"
-                ),
                 "Pénalité de chauffage VNC vs VMC DF": (
-                    f"{t.heating_penalty_kwh_per_year:.0f} kWh/an "
-                    f"(≈ {t.heating_penalty_eur_per_year:.0f} €/an)"
+                    f"{p.kwh_per_year:.0f} kWh/an (≈ {p.eur_per_year:.0f} €/an)"
                 ),
-                "Heures < 18 °C (pire pièce, libre)": f"{t.hours_below_comfort:.0f} h/an",
-                "Heures > 26 °C (pire pièce, libre)": f"{t.overheating_hours:.0f} h/an",
-                "Bénéfice night-cooling": f"{t.night_cooling_benefit_kwh:.0f} kWh/an",
+                "Degrés-jours de chauffe (base 18 °C)": f"{p.heating_degree_days:.0f} °C·j",
             }
-        ) + _zones_table(result)
+        ) + (
+            "<p style='font-size:.85rem;color:#777'>Surcoût = pertes de ventilation non "
+            "récupérées par la VNC (la VMC DF récupère ~80 %), atténuées par la commande "
+            "à la demande. Calcul déterministe en degrés-jours, sans STD.</p>"
+        )
 
     roi_html = "<p><em>Non calculé.</em></p>"
     if result.roi is not None:
@@ -176,10 +167,8 @@ def render_report_html(
 <p class="disclaimer">⚠️ {html.escape(_DISCLAIMER)}</p>
 {narrative}
 {plan_html}
-<h2>Faisabilité</h2>
-<h3>Disqualifiants</h3><ul>{_li(result.disqualifiers)}</ul>
-<h3>Conditions</h3><ul>{_li(result.conditions)}</ul>
-<h2>Screen thermique</h2>{thermal_html}
+<h2>Aptitude à la VNC (score)</h2>{score_html}
+{penalty_html}
 <h2>ROI — VNC vs VMC double-flux</h2>{roi_html}
 <h2>Hypothèses</h2>{_kv_table(result.assumptions)}
 <footer>Généré par Zéphyr — moteur de pré-étude VNC. Pré-étude non opposable.</footer>
