@@ -15,6 +15,7 @@ from zephyr.web import (
     render_landing,
     render_results,
     render_study_form,
+    render_tracing,
     render_validation,
 )
 
@@ -88,6 +89,14 @@ def test_validation_fallback_form_when_no_polygons() -> None:
     h = render_validation(_label_only_building(), "", [])
     assert 'name="n_rooms"' in h
     assert 'name="r0_label"' in h and 'name="r0_orient"' in h
+
+
+def test_tracing_editor_renders() -> None:
+    h = render_tracing("data:image/png;base64,ABC", 800, 600, 0.0353, "")
+    assert "Tracer les pièces" in h
+    assert "data:image/png;base64,ABC" in h  # plan en fond
+    assert "window.TRACE" in h and "finishRoom" in h
+    assert 'action="/etude/resultat"' in h and 'name="building_json"' in h
 
 
 def test_building_from_form_roundtrip() -> None:

@@ -197,6 +197,9 @@ form input, form select { width: 100%; padding: .5rem .6rem; border: 1px solid v
 .levelbar button { border: 1px solid var(--teal); background: #fff; color: var(--teal-d);
   border-radius: .4rem; padding: .3rem .7rem; cursor: pointer; }
 .levelbar button.active { background: var(--teal); color: #fff; }
+.tracebar { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .6rem 0; }
+.tracebar .btn { padding: .4rem .8rem; }
+#plan image { image-rendering: auto; }
 @media (max-width: 760px) { .editor { grid-template-columns: 1fr; } }
 h2.sec { margin: 2rem 0 .4rem; padding-bottom: .3rem; border-bottom: 2px solid var(--line); }
 table.kv { border-collapse: collapse; width: 100%; }
@@ -596,6 +599,140 @@ function syncHidden(){
 }
 document.addEventListener('DOMContentLoaded', function(){ render(); panel(); });
 """
+
+
+# Éditeur de TRACÉ : plan en fond + tracé des pièces au clic (vanilla JS).
+_TRACING_JS = """
+var T=window.TRACE, mpp=T.mpp, H=T.h, SVGNS='http://www.w3.org/2000/svg';
+var inertiaEl=document.querySelector('input[name=inertia]');
+var B={id:'pdf', name:null, rooms:[], inertia_class:(inertiaEl?inertiaEl.value:'lourde'), num_levels:1, total_height_m:null, location:null, epw_path:null};
+var ORS=["N","NE","E","SE","S","SW","W","NW"];
+var ORDIR={N:[0,1],NE:[0.7,0.7],E:[1,0],SE:[0.7,-0.7],S:[0,-1],SW:[-0.7,-0.7],W:[-1,0],NW:[-0.7,0.7]};
+var LABELS=["sejour","chambre","cuisine","sdb","wc","circulation","bureau","technique","autre"];
+var COLORS={sejour:"#cfe8cf",chambre:"#cfe0f5",cuisine:"#f5e6cf",sdb:"#cfeef0",wc:"#e6cff5",circulation:"#eeeeee",bureau:"#f5cfd6",technique:"#dddddd",autre:"#f0f0f0"};
+var sel=-1, mode='idle', draft=[], calib=[];
+function el(t,a){var e=document.createElementNS(SVGNS,t);for(var k in a)e.setAttribute(k,a[k]);return e;}
+function toM(x,y){return [x*mpp,(H-y)*mpp];}
+function toPx(mx,my){return [mx/mpp, H-my/mpp];}
+function area(poly){var s=0;for(var i=0;i<poly.length;i++){var a=poly[i],b=poly[(i+1)%poly.length];s+=a[0]*b[1]-b[0]*a[1];}return Math.abs(s)/2;}
+function through(r){return new Set(r.exterior_wall_orientations).size>=2;}
+function fmt(n){return Math.round(n*10)/10;}
+function svg(){return document.getElementById('plan');}
+function setMode(m){mode=m;draft=[];calib=[];document.getElementById('hint').textContent=(m==='draw'?'Cliquez les coins de la pièce, puis « Terminer ».':m==='calibrate'?'Cliquez deux points d\\'une cote connue.':'');render();}
+function render(){
+  var s=svg();
+  while(s.lastChild && s.lastChild.tagName!=='image'){ s.removeChild(s.lastChild); }
+  B.rooms.forEach(function(r,i){
+    var xs=[],ys=[];
+    var pts=r.polygon.map(function(m){var p=toPx(m[0],m[1]);xs.push(p[0]);ys.push(p[1]);return p[0]+','+p[1];}).join(' ');
+    var pg=el('polygon',{points:pts, fill:(COLORS[r.label]||'#eee'), 'fill-opacity':0.45,
+      stroke:(i===sel?'#08313a':(through(r)?'#0e9aa7':'#555')), 'stroke-width':(i===sel?3:(through(r)?2.4:1.4))});
+    pg.style.cursor='pointer';
+    pg.addEventListener('click',(function(idx){return function(){ if(mode==='idle'){ sel=idx; render(); } };})(i));
+    s.appendChild(pg);
+    var cx=xs.reduce(function(a,b){return a+b;},0)/xs.length, cy=ys.reduce(function(a,b){return a+b;},0)/ys.length;
+    var t1=el('text',{x:cx,y:cy,'text-anchor':'middle','font-size':14,fill:'#111','font-weight':'600'});t1.textContent=r.label;s.appendChild(t1);
+    var t2=el('text',{x:cx,y:cy+15,'text-anchor':'middle','font-size':11,fill:'#333'});t2.textContent=fmt(r.area_m2)+' m\\u00b2';s.appendChild(t2);
+    var minx=Math.min.apply(null,xs),maxx=Math.max.apply(null,xs),miny=Math.min.apply(null,ys),maxy=Math.max.apply(null,ys);
+    var dcx=(minx+maxx)/2,dcy=(miny+maxy)/2,rw=maxx-minx,rh=maxy-miny;
+    (r.exterior_wall_orientations||[]).forEach(function(o){var d=ORDIR[o];if(!d)return;
+      var mx=dcx+d[0]*0.4*rw, my=dcy-d[1]*0.4*rh;
+      var tm=el('text',{x:mx,y:my,'text-anchor':'middle','font-size':13,fill:'#0e9aa7','font-weight':'700'});tm.textContent=o;s.appendChild(tm);});
+  });
+  if(draft.length){
+    s.appendChild(el('polyline',{points:draft.map(function(p){return p[0]+','+p[1];}).join(' '), fill:'none', stroke:'#e8590c','stroke-width':2,'stroke-dasharray':'6 4'}));
+    draft.forEach(function(p){s.appendChild(el('circle',{cx:p[0],cy:p[1],r:3.5,fill:'#e8590c'}));});
+  }
+  if(calib.length===1){ s.appendChild(el('circle',{cx:calib[0][0],cy:calib[0][1],r:4,fill:'#c0392b'})); }
+  document.getElementById('scaleinfo').textContent='Échelle ≈ '+(mpp*1000).toFixed(1)+' mm/px';
+  roomlist(); syncHidden();
+}
+function evtPoint(ev){var s=svg(),pt=s.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;var p=pt.matrixTransform(s.getScreenCTM().inverse());return [p.x,p.y];}
+function onClick(ev){
+  if(mode==='draw'){ draft.push(evtPoint(ev)); render(); }
+  else if(mode==='calibrate'){
+    calib.push(evtPoint(ev));
+    if(calib.length===2){
+      var dpx=Math.hypot(calib[0][0]-calib[1][0],calib[0][1]-calib[1][1]);
+      var real=parseFloat(prompt('Longueur réelle de ce segment, en mètres ?','5'));
+      if(real>0 && dpx>0){ mpp=real/dpx; }
+      setMode('idle');
+    } else render();
+  }
+}
+function finishRoom(){
+  if(mode!=='draw' || draft.length<3){ setMode('idle'); return; }
+  var poly=draft.map(function(p){return toM(p[0],p[1]);});
+  B.rooms.push({id:'r'+B.rooms.length, name:null, label:'autre', level:0, polygon:poly,
+    area_m2:Math.max(area(poly),0.01), height_m:2.6, openings:[], exterior_wall_orientations:[], is_occupied:true, is_wet_room:false});
+  sel=B.rooms.length-1; setMode('idle');
+}
+function roomlist(){
+  var d=document.getElementById('roomlist');
+  if(!B.rooms.length){ d.innerHTML='<p style="color:#888">Aucune pièce tracée. Clique « Tracer une pièce ».</p>'; return; }
+  d.innerHTML='<h3>Pièces tracées ('+B.rooms.length+')</h3>'+B.rooms.map(function(r,i){
+    var lab=LABELS.map(function(l){return '<option value="'+l+'"'+(l===r.label?' selected':'')+'>'+l+'</option>';}).join('');
+    var chips=ORS.map(function(o){return '<label class="chip"><input type="checkbox" data-i="'+i+'" data-or="'+o+'"'+(r.exterior_wall_orientations.indexOf(o)>=0?' checked':'')+'>'+o+'</label>';}).join('');
+    return '<div class="card" style="margin:.4rem 0;'+(i===sel?'outline:2px solid #0e9aa7':'')+'"><div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">'+
+      '<select data-lab="'+i+'">'+lab+'</select><b>'+fmt(r.area_m2)+' m\\u00b2</b>'+
+      (through(r)?'<span class="badge-ok">traversant</span>':'')+
+      '<button type="button" data-del="'+i+'" class="btn ghost">supprimer</button></div>'+
+      '<div style="font-size:.8rem;color:#888;margin:.3rem 0 .1rem">Façades extérieures :</div>'+
+      '<div class="chips">'+chips+'</div></div>';
+  }).join('');
+  Array.prototype.forEach.call(d.querySelectorAll('[data-lab]'),function(s){s.onchange=function(){B.rooms[parseInt(s.dataset.lab)].label=s.value;render();};});
+  Array.prototype.forEach.call(d.querySelectorAll('[data-del]'),function(b){b.onclick=function(){B.rooms.splice(parseInt(b.dataset.del),1);sel=-1;render();};});
+  Array.prototype.forEach.call(d.querySelectorAll('[data-or]'),function(c){c.onchange=function(){var r=B.rooms[parseInt(c.dataset.i)],o=c.dataset.or,st=new Set(r.exterior_wall_orientations);if(c.checked){st.add(o);}else{st.delete(o);}r.exterior_wall_orientations=Array.from(st);render();};});
+}
+function syncHidden(){ document.getElementById('building_json').value=JSON.stringify(B); }
+document.addEventListener('DOMContentLoaded',function(){
+  svg().addEventListener('click',onClick);
+  document.getElementById('t-draw').onclick=function(){ setMode(mode==='draw'?'idle':'draw'); };
+  document.getElementById('t-finish').onclick=finishRoom;
+  document.getElementById('t-cal').onclick=function(){ setMode('calibrate'); };
+  render();
+});
+"""
+
+
+def render_tracing(
+    image_uri: str, w_px: int, h_px: int, m_per_px: float, hidden_fields: str
+) -> str:
+    """Éditeur de **tracé** : plan en fond, l'ingénieur trace les pièces au clic.
+
+    La mesure vient des clics calibrés (échelle), pas d'une lecture du raster.
+    Produit un `building_json` (polygones en mètres) → mêmes résultats.
+    """
+    data = json.dumps({"mpp": m_per_px, "w": w_px, "h": h_px})
+    body = f"""
+<h1>Tracer les pièces sur le plan</h1>
+<p class="lead" style="color:var(--muted)">Ton plan est en fond. <b>Trace chaque
+pièce</b> (clique ses coins, puis « Terminer »), nomme-la et coche ses façades —
+la <b>surface réelle</b> est calculée via l'échelle. Calibre en cliquant une cote
+connue si besoin.</p>
+<div class="tracebar">
+  <button type="button" class="btn ghost" id="t-draw">✏️ Tracer une pièce</button>
+  <button type="button" class="btn ghost" id="t-finish">✓ Terminer la pièce</button>
+  <button type="button" class="btn ghost" id="t-cal">📏 Calibrer l'échelle</button>
+  <span id="scaleinfo" style="color:var(--muted);font-size:.85rem"></span>
+  <span id="hint" style="color:#e8590c;font-weight:600"></span>
+</div>
+<svg id="plan" viewBox="0 0 {w_px} {h_px}"
+  style="width:100%;height:72vh;border:1px solid var(--line);border-radius:.6rem;background:#fff">
+  <image href="{image_uri}" x="0" y="0" width="{w_px}" height="{h_px}"/>
+</svg>
+<div id="roomlist" style="margin-top:1rem"></div>
+<form id="valform" method="post" action="/etude/resultat" onsubmit="syncHidden()">
+  {hidden_fields}
+  <input type="hidden" name="building_json" id="building_json">
+  <p style="margin-top:1rem">
+    <a class="btn ghost" href="/etude">← Config</a>
+    <button class="btn" type="submit">Confirmer &amp; calculer →</button>
+  </p>
+</form>
+<script>window.TRACE={data};</script>
+<script>{_TRACING_JS}</script>"""
+    return _layout("Zéphyr — tracé du plan", body, cta=False)
 
 
 def render_validation(building: Building, hidden_fields: str, warnings: list[str]) -> str:

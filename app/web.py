@@ -39,6 +39,7 @@ from zephyr.web import (
     render_landing,
     render_results,
     render_study_form,
+    render_tracing,
     render_validation,
 )
 
@@ -112,6 +113,24 @@ def _compute_page(building: Building, cfg: dict[str, str], flags: dict[str, bool
     return render_results(result, building=building)
 
 
+def _pdf_tracing_page(pdf_path: Path, hidden: str) -> str:
+    """Rend le PDF en image de fond + échelle, puis ouvre l'éditeur de tracé.
+
+    Échelle par défaut estimée depuis le format A0 (1189 mm) à 1:50 ; l'ingénieur
+    recalibre au clic d'une cote connue si besoin (formats/échelles variés).
+    """
+    import base64
+
+    from zephyr.ingestion import render_pdf_page
+
+    zoom = 0.5
+    png, w_px, h_px, w_pt, _h_pt = render_pdf_page(pdf_path, zoom=zoom)
+    uri = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+    mm_per_pt = (1189.0 / w_pt) if w_pt > 0 else 0.3528  # hypothèse A0
+    m_per_px = mm_per_pt * 50.0 / 1000.0 / zoom  # 1:50 par défaut, m / pixel image
+    return render_tracing(uri, w_px, h_px, m_per_px, hidden)
+
+
 def _parametric(cfg: dict[str, str]) -> Building:
     return parametric_building(
         float(cfg["area"]),
@@ -155,22 +174,24 @@ async def submit_config(
     raw = await dxf.read() if dxf is not None else b""
     name = (dxf.filename or "").lower() if dxf is not None else ""
     if raw:
-        from zephyr.geometry import build_building
-        from zephyr.ingestion import parse_dxf, parse_pdf
-
         is_pdf = name.endswith(".pdf") or raw[:5] == b"%PDF-"
         suffix = ".pdf" if is_pdf else ".dxf"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(raw)
             tmp_path = Path(tmp.name)
-        try:
-            rawvec = parse_pdf(tmp_path) if is_pdf else parse_dxf(tmp_path)
-            geo = build_building(rawvec, inertia=InertiaClass(inertia), north_angle_deg=north)
-        except Exception as exc:  # noqa: BLE001 - surface l'erreur à l'utilisateur
-            return render_error(str(exc))
-        # Config + drapeaux en champs cachés (la géométrie éditable est rendue à part).
         cfg_with_flags = {**cfg, **{k: ("on" if v else "") for k, v in flags.items()}}
         hidden = _hidden_fields(cfg_with_flags, None)
+        try:
+            if is_pdf:
+                return _pdf_tracing_page(tmp_path, hidden)
+            from zephyr.geometry import build_building
+            from zephyr.ingestion import parse_dxf
+
+            geo = build_building(
+                parse_dxf(tmp_path), inertia=InertiaClass(inertia), north_angle_deg=north
+            )
+        except Exception as exc:  # noqa: BLE001 - surface l'erreur à l'utilisateur
+            return render_error(str(exc))
         return render_validation(geo.building, hidden, geo.warnings)
 
     # Pas de DXF : pas de géométrie à valider → résultats directs (paramétrique).

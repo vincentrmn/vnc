@@ -219,3 +219,20 @@ def parse_pdf(path: str | Path, *, page_index: int = 0, unit_scale_m: float = 1.
         unit_scale_m=s,
         warnings=warnings,
     )
+
+
+def render_pdf_page(
+    path: str | Path, *, page_index: int = 0, zoom: float = 0.5
+) -> tuple[bytes, int, int, float, float]:
+    """Rend une page PDF en PNG **pour l'affichage** (tracé humain), + dimensions.
+
+    Le raster sert UNIQUEMENT de fond pour que l'ingénieur trace les pièces ; on
+    ne **mesure** rien dessus par vision — la mesure vient des clics calibrés.
+    Renvoie (png, largeur_px, hauteur_px, largeur_pt, hauteur_pt).
+    """
+    import fitz
+
+    doc = fitz.open(str(path))
+    page = doc[page_index]
+    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+    return pix.tobytes("png"), pix.width, pix.height, page.rect.width, page.rect.height
