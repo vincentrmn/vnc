@@ -148,11 +148,14 @@ def _pdf_tracing_page(pdf_path: Path, hidden: str) -> str:
 
     from zephyr.ingestion import render_pdf_page
 
-    zoom = 0.5
-    png, w_px, h_px, w_pt, _h_pt = render_pdf_page(pdf_path, zoom=zoom)
+    # Rendu net : le zoom/pan permet d'agrandir sans pixelliser → on rastérise haut,
+    # plafonné à 4500 px de côté pour borner le poids du PNG embarqué.
+    png, w_px, h_px, w_pt, _h_pt = render_pdf_page(pdf_path, zoom=3.0, max_side_px=4500)
     uri = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+    # Échelle déduite des dimensions réelles (indépendante du zoom effectif) :
+    # A0 (1189 mm) à 1:50 → largeur réelle ≈ 59,45 m, répartie sur w_px pixels.
     mm_per_pt = (1189.0 / w_pt) if w_pt > 0 else 0.3528  # hypothèse A0
-    m_per_px = mm_per_pt * 50.0 / 1000.0 / zoom  # 1:50 par défaut, m / pixel image
+    m_per_px = mm_per_pt * 50.0 / 1000.0 * w_pt / max(w_px, 1)  # 1:50 par défaut
     return render_tracing(uri, w_px, h_px, m_per_px, hidden)
 
 
