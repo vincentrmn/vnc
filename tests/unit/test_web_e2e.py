@@ -120,6 +120,34 @@ def test_cpe_upload_reads_text_then_back_to_form(monkeypatch: object) -> None:
     assert 'name="u_wall"' in r.text  # le formulaire est re-rendu
 
 
+def test_resume_study_from_file() -> None:
+    """Sauvegarde/reprise sans BDD : un .json d'étude rouvre la géométrie."""
+    import io
+    import json as _json
+
+    from zephyr.schemas import Building, Orientation, Room, RoomLabel
+
+    b = Building(
+        id="x",
+        rooms=[Room(id="r0", label=RoomLabel.SEJOUR, area_m2=25.0, height_m=2.6,
+                    polygon=[(0, 0), (5, 0), (5, 5), (0, 5)],
+                    exterior_wall_orientations=[Orientation.S, Orientation.W])],
+    )
+    study = {"zephyr_study": 1, "config": {"project_type": "logement", "inertia": "lourde"},
+             "building_json": b.model_dump_json()}
+    blob = io.BytesIO(_json.dumps(study).encode())
+    r = client.post("/etude/reprendre", files={"study": ("etude.json", blob, "application/json")})
+    assert r.status_code == 200
+    assert "Validation de la géométrie" in r.text and "reprise depuis un fichier" in r.text
+
+
+def test_config_has_resume_and_editor_has_download() -> None:
+    from zephyr.web import render_tracing
+
+    assert "Reprendre une étude" in client.get("/etude").text
+    assert "downloadStudy()" in render_tracing("data:image/png;base64,A", 800, 600, 0.03, "")
+
+
 def test_cpe_upload_rejects_scan() -> None:
     pytest.importorskip("fitz")
     import tempfile

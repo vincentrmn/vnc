@@ -353,6 +353,17 @@ score d'aptitude VNC et le bilan financier.</p>
 <!-- Formulaire principal (vide) : les champs des cartes lui sont rattachés via form="mainform". -->
 <form id="mainform" method="post" action="/etude" enctype="multipart/form-data"></form>
 
+<div class="card" style="margin:1rem 0;background:#f0faf8">
+  <h2 style="margin-top:0">↩️ Reprendre une étude</h2>
+  <p style="color:var(--muted);font-size:.9rem;margin:.2rem 0 .6rem">Vous avez
+  téléchargé une étude (fichier <code>.json</code>) ? Rechargez-la ici pour
+  reprendre la géométrie et la config là où vous en étiez.</p>
+  <form method="post" action="/etude/reprendre" enctype="multipart/form-data">
+    <input type="file" name="study" accept=".json,application/json">
+    <button class="btn ghost" type="submit">Reprendre →</button>
+  </form>
+</div>
+
 <div class="card" style="margin:1rem 0">
   <h2 style="margin-top:0">📐 Plan &amp; tracé</h2>
   <p style="color:var(--muted);font-size:.9rem;margin:.2rem 0 .6rem">Déposez un
@@ -943,6 +954,23 @@ _COMPASS_SVG = """
 """
 
 
+# Export d'une étude (sauvegarde/reprise sans BDD) — partagé par les deux éditeurs.
+_STUDY_IO_JS = """
+function downloadStudy(){
+  if(window.syncHidden){ try{ syncHidden(); }catch(e){} }
+  var form=document.getElementById('valform'), cfg={};
+  Array.prototype.forEach.call(form.querySelectorAll('[name]'), function(el){
+    if(el.name!=='building_json'){ cfg[el.name]=(el.type==='checkbox')?(el.checked?'on':''):el.value; }
+  });
+  var bj=(document.getElementById('building_json')||{}).value||'';
+  var data={zephyr_study:1, config:cfg, building_json:bj};
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='etude-zephyr.json'; document.body.appendChild(a); a.click(); a.remove();
+}
+"""
+
+
 def render_tracing(
     image_uri: str, w_px: int, h_px: int, m_per_px: float, hidden_fields: str
 ) -> str:
@@ -992,11 +1020,13 @@ avant de tracer ; chaque pièce garde le sien.</p>
   <input type="hidden" name="building_json" id="building_json">
   <p style="margin-top:1rem">
     <a class="btn ghost" href="/etude">← Config</a>
+    <button type="button" class="btn ghost" onclick="downloadStudy()">💾 Télécharger l'étude</button>
     <button class="btn" type="submit">Confirmer &amp; calculer →</button>
   </p>
 </form>
 <script>window.TRACE={data};</script>
-<script>{_TRACING_JS}</script>"""
+<script>{_TRACING_JS}</script>
+<script>{_STUDY_IO_JS}</script>"""
     return _layout("Zéphyr — tracé du plan", body, cta=False)
 
 
@@ -1042,11 +1072,13 @@ corriger son <b>label</b>, ses <b>façades</b> et ses <b>châssis</b>. Le
   </div>
   <p style="margin-top:1.2rem">
     <a class="btn ghost" href="/etude">← Config</a>
+    <button type="button" class="btn ghost" onclick="downloadStudy()">💾 Télécharger l'étude</button>
     <button class="btn" type="submit">Confirmer &amp; calculer →</button>
   </p>
 </form>
 <script>window.BUILDING={data};window.LABEL_COLORS={colors};</script>
-<script>{_VALIDATION_JS}</script>"""
+<script>{_VALIDATION_JS}</script>
+<script>{_STUDY_IO_JS}</script>"""
     else:
         edit_blocks = "".join(_room_edit_block(i, r) for i, r in enumerate(rooms))
         core = f"""

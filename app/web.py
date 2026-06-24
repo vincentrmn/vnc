@@ -223,6 +223,29 @@ async def submit_cpe(cpe: UploadFile | None = File(default=None)) -> str:  # noq
     return render_study_form(_cpe_prefill(ext), cpe_banner=render_cpe_banner(ext))
 
 
+@app.post("/etude/reprendre", response_class=HTMLResponse)
+async def resume_study(study: UploadFile | None = File(default=None)) -> str:  # noqa: B008
+    """Reprend une étude depuis un fichier .json téléchargé (géométrie + config)."""
+    import json
+
+    raw = await study.read() if study is not None else b""
+    if not raw:
+        return render_study_form(
+            cpe_banner=render_cpe_banner(None, message="Aucun fichier d'étude.")
+        )
+    try:
+        data = json.loads(raw)
+        building = Building.model_validate_json(data["building_json"])
+        cfg = {k: str(v) for k, v in (data.get("config") or {}).items()}
+    except Exception as exc:  # noqa: BLE001 - fichier d'étude invalide
+        return render_study_form(
+            cpe_banner=render_cpe_banner(None, message=f"Fichier d'étude illisible : {exc}")
+        )
+    hidden = _hidden_fields(cfg, None)
+    note = "Étude reprise depuis un fichier — vérifiez/éditez puis calculez."
+    return render_validation(building, hidden, [note])
+
+
 @app.post("/etude", response_class=HTMLResponse)
 async def submit_config(
     dxf: UploadFile | None = File(default=None),  # noqa: B008
