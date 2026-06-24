@@ -610,7 +610,7 @@ var ORS=["N","NE","E","SE","S","SW","W","NW"];
 var ORDIR={N:[0,1],NE:[0.7,0.7],E:[1,0],SE:[0.7,-0.7],S:[0,-1],SW:[-0.7,-0.7],W:[-1,0],NW:[-0.7,0.7]};
 var LABELS=["sejour","chambre","cuisine","sdb","wc","circulation","bureau","technique","autre"];
 var COLORS={sejour:"#cfe8cf",chambre:"#cfe0f5",cuisine:"#f5e6cf",sdb:"#cfeef0",wc:"#e6cff5",circulation:"#eeeeee",bureau:"#f5cfd6",technique:"#dddddd",autre:"#f0f0f0"};
-var sel=-1, mode='idle', draft=[], calib=[];
+var sel=-1, mode='idle', draft=[], calib=[], winDrag=null;
 // Vue (viewBox) pour zoom/pan ; coordonnées en px-image (T.w × T.h).
 var view={x:0, y:0, w:T.w, h:T.h};
 function applyView(){ svg().setAttribute('viewBox', view.x+' '+view.y+' '+view.w+' '+view.h); }
@@ -622,7 +622,10 @@ function area(poly){var s=0;for(var i=0;i<poly.length;i++){var a=poly[i],b=poly[
 function through(r){return new Set(r.exterior_wall_orientations).size>=2;}
 function fmt(n){return Math.round(n*10)/10;}
 function svg(){return document.getElementById('plan');}
-function setMode(m){mode=m;draft=[];calib=[];document.getElementById('hint').textContent=(m==='draw'?'Cliquez les coins de la pièce, puis « Terminer ».':m==='calibrate'?'Cliquez deux points d\\'une cote connue.':'');render();}
+function centroidM(r){var x=0,y=0,n=r.polygon.length||1;r.polygon.forEach(function(p){x+=p[0];y+=p[1];});return [x/n,y/n];}
+function nearestOri(dx,dy){var best='N',bd=-1e9,L=Math.hypot(dx,dy)||1;dx/=L;dy/=L;ORS.forEach(function(o){var d=ORDIR[o],dot=dx*d[0]+dy*d[1];if(dot>bd){bd=dot;best=o;}});return best;}
+var HINTS={draw:'Cliquez les coins de la pièce, puis « Terminer ».',calibrate:'Cliquez deux points d\\'une cote connue.',window:'Glissez le long de la façade pour poser un châssis (longueur = largeur).'};
+function setMode(m){mode=m;draft=[];calib=[];winDrag=null;document.getElementById('hint').textContent=HINTS[m]||'';render();}
 function render(){
   var s=svg();
   applyView();
@@ -643,7 +646,20 @@ function render(){
     (r.exterior_wall_orientations||[]).forEach(function(o){var d=ORDIR[o];if(!d)return;
       var mx=dcx+d[0]*0.4*rw, my=dcy-d[1]*0.4*rh;
       var tm=el('text',{x:mx,y:my,'text-anchor':'middle','font-size':zf(13),fill:'#0e9aa7','font-weight':'700'});tm.textContent=o;s.appendChild(tm);});
+    // Châssis tracés sur la façade (clic en mode idle = supprimer).
+    (r.openings||[]).forEach(function(op,k){
+      var seg=op._seg; if(!seg) return;
+      var ln=el('line',{x1:seg[0][0],y1:seg[0][1],x2:seg[1][0],y2:seg[1][1],
+        stroke:(op.openable?'#1a73e8':'#9aa3ad'),'stroke-width':zf(4),'stroke-linecap':'round'});
+      ln.style.cursor='pointer';
+      ln.addEventListener('click',(function(ri,oi){return function(e){ if(mode==='idle'){ e.stopPropagation(); B.rooms[ri].openings.splice(oi,1); render(); } };})(i,k));
+      s.appendChild(ln);
+    });
   });
+  if(winDrag){
+    s.appendChild(el('line',{x1:winDrag.a[0],y1:winDrag.a[1],x2:winDrag.b[0],y2:winDrag.b[1],
+      stroke:'#1a73e8','stroke-width':zf(4),'stroke-dasharray':zf(6)+' '+zf(4),'stroke-linecap':'round'}));
+  }
   if(draft.length){
     s.appendChild(el('polyline',{points:draft.map(function(p){return p[0]+','+p[1];}).join(' '), fill:'none', stroke:'#e8590c','stroke-width':zf(2),'stroke-dasharray':zf(6)+' '+zf(4)}));
     draft.forEach(function(p){s.appendChild(el('circle',{cx:p[0],cy:p[1],r:zf(3.5),fill:'#e8590c'}));});
@@ -672,6 +688,19 @@ function finishRoom(){
     area_m2:Math.max(area(poly),0.01), height_m:2.6, openings:[], exterior_wall_orientations:[], is_occupied:true, is_wet_room:false});
   sel=B.rooms.length-1; setMode('idle');
 }
+// §10.2 — châssis tracé au glisser sur la façade : longueur = largeur de baie.
+function addWindow(a,b){
+  if(Math.hypot(a[0]-b[0],a[1]-b[1])<3){ return; }  // simple clic → ignoré
+  var r=B.rooms[sel]; if(!r){ return; }
+  var ma=toM(a[0],a[1]), mb=toM(b[0],b[1]);
+  var lenM=Math.hypot(ma[0]-mb[0],ma[1]-mb[1]);
+  var c=centroidM(r), o=nearestOri((ma[0]+mb[0])/2-c[0],(ma[1]+mb[1])/2-c[1]);
+  var sashEl=document.querySelector('input[name=sash]'), sash=sashEl?(parseFloat(sashEl.value)||1.6):1.6;
+  r.openings.push({id:r.id+'_w'+r.openings.length, kind:'window', orientation:o,
+    area_m2:Math.max(lenM*sash,0.1), sill_height_m:0.9, head_height_m:0.9+sash,
+    openable:true, free_area_ratio:0.5, _seg:[a,b]});
+  if(r.exterior_wall_orientations.indexOf(o)<0){ r.exterior_wall_orientations.push(o); }
+}
 function roomlist(){
   var d=document.getElementById('roomlist');
   if(!B.rooms.length){ d.innerHTML='<p style="color:#888">Aucune pièce tracée. Clique « Tracer une pièce ».</p>'; return; }
@@ -681,6 +710,7 @@ function roomlist(){
     return '<div class="card" style="margin:.4rem 0;'+(i===sel?'outline:2px solid #0e9aa7':'')+'"><div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">'+
       '<select data-lab="'+i+'">'+lab+'</select><b>'+fmt(r.area_m2)+' m\\u00b2</b>'+
       (through(r)?'<span class="badge-ok">traversant</span>':'')+
+      '<span style="color:#888;font-size:.8rem">'+(r.openings||[]).length+' châssis</span>'+
       '<button type="button" data-del="'+i+'" class="btn ghost">supprimer</button></div>'+
       '<div style="font-size:.8rem;color:#888;margin:.3rem 0 .1rem">Façades extérieures :</div>'+
       '<div class="chips">'+chips+'</div></div>';
@@ -698,8 +728,12 @@ function zoomAt(p, f){
 }
 function onWheel(ev){ ev.preventDefault(); zoomAt(evtPoint(ev), ev.deltaY<0?0.85:1.18); }
 var pan=null, panned=false;
-function onDown(ev){ pan={cx:ev.clientX, cy:ev.clientY, vx:view.x, vy:view.y}; panned=false; }
+function onDown(ev){
+  if(mode==='window' && sel>=0){ var p=evtPoint(ev); winDrag={a:p, b:p}; return; }
+  pan={cx:ev.clientX, cy:ev.clientY, vx:view.x, vy:view.y}; panned=false;
+}
 function onMove(ev){
+  if(winDrag){ winDrag.b=evtPoint(ev); render(); return; }
   if(!pan) return;
   var dx=ev.clientX-pan.cx, dy=ev.clientY-pan.cy;
   if(!panned && Math.abs(dx)+Math.abs(dy)<5) return;
@@ -708,7 +742,10 @@ function onMove(ev){
   view.x=pan.vx - dx*view.w/rect.width; view.y=pan.vy - dy*view.h/rect.height;
   applyView();
 }
-function onUp(ev){ if(pan && !panned){ onClick(ev); } pan=null; }
+function onUp(ev){
+  if(winDrag){ addWindow(winDrag.a, winDrag.b); winDrag=null; render(); return; }
+  if(pan && !panned){ onClick(ev); } pan=null;
+}
 document.addEventListener('DOMContentLoaded',function(){
   var s=svg();
   s.addEventListener('pointerdown',onDown);
@@ -719,6 +756,10 @@ document.addEventListener('DOMContentLoaded',function(){
   document.getElementById('t-draw').onclick=function(){ setMode(mode==='draw'?'idle':'draw'); };
   document.getElementById('t-finish').onclick=finishRoom;
   document.getElementById('t-cal').onclick=function(){ setMode('calibrate'); };
+  document.getElementById('t-win').onclick=function(){
+    if(sel<0){ document.getElementById('hint').textContent='Sélectionnez d\\'abord une pièce, puis tracez le châssis sur sa façade.'; return; }
+    setMode(mode==='window'?'idle':'window');
+  };
   document.getElementById('t-zin').onclick=function(){ zoomAt([view.x+view.w/2, view.y+view.h/2], 0.8); };
   document.getElementById('t-zout').onclick=function(){ zoomAt([view.x+view.w/2, view.y+view.h/2], 1.25); };
   document.getElementById('t-zreset').onclick=function(){ view={x:0,y:0,w:T.w,h:T.h}; render(); };
@@ -740,11 +781,14 @@ def render_tracing(
 <h1>Tracer les pièces sur le plan</h1>
 <p class="lead" style="color:var(--muted)">Ton plan est en fond. <b>Trace chaque
 pièce</b> (clique ses coins, puis « Terminer »), nomme-la et coche ses façades —
-la <b>surface réelle</b> est calculée via l'échelle. Calibre en cliquant une cote
-connue si besoin. <b>Molette</b> = zoom, <b>glisser</b> = déplacer le plan.</p>
+la <b>surface réelle</b> est calculée via l'échelle. Sélectionne une pièce puis
+<b>trace ses châssis</b> sur la façade (glisser → largeur de la baie). Calibre en
+cliquant une cote connue si besoin. <b>Molette</b> = zoom, <b>glisser</b> = déplacer
+le plan.</p>
 <div class="tracebar">
   <button type="button" class="btn ghost" id="t-draw">✏️ Tracer une pièce</button>
   <button type="button" class="btn ghost" id="t-finish">✓ Terminer la pièce</button>
+  <button type="button" class="btn ghost" id="t-win">🪟 Tracer un châssis</button>
   <button type="button" class="btn ghost" id="t-cal">📏 Calibrer l'échelle</button>
   <span style="display:inline-flex;gap:.3rem">
     <button type="button" class="btn ghost" id="t-zout" title="Dézoomer">−</button>

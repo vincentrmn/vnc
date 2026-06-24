@@ -109,6 +109,14 @@ def test_tracing_editor_has_zoom_pan() -> None:
     assert "touch-action:none" in h  # pas de scroll page au glisser tactile
 
 
+def test_tracing_editor_can_draw_windows() -> None:
+    """§10.2 — tracer un châssis au glisser sur la façade."""
+    h = render_tracing("data:image/png;base64,ABC", 800, 600, 0.0353, "")
+    assert 'id="t-win"' in h  # bouton « Tracer un châssis »
+    assert "addWindow" in h and "nearestOri" in h  # longueur→largeur + façade auto
+    assert "'window'" in h  # mode de tracé de châssis
+
+
 def test_building_from_form_roundtrip() -> None:
     form = {
         "n_rooms": "1",
