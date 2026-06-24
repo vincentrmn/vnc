@@ -176,6 +176,17 @@ S'il y a plusieurs valeurs U pour un même type, prends la valeur U calculée
 représentative (pas une couche intermédiaire). Les décimales peuvent être notées
 avec une virgule (ex. 0,18) — recopie le nombre tel quel dans `source`.
 
+Indices de nommage (CPE LU, FR/DE) : un tableau récapitulatif liste souvent les
+éléments sous la forme « N Nom / U: valeur ». Correspondances :
+- mur extérieur ← « Façade » (PAS « Façade ventilée » si une « Façade » simple
+  existe, PAS « Mur contre non chauffé ») ; en allemand « Aussenwand ».
+- toiture ← « Toiture » / « Dach » ; plancher bas ← « Radier » / « Dalle » /
+  « Bodenplatte ».
+- fenêtres ← « Fenster » / « fenêtre » : prends la valeur « U-Wert Fenster » (U
+  de la fenêtre complète, pas du verre ni du cadre seuls). NE PRENDS PAS les
+  « Porte(s) » (ce sont des portes, pas des vitrages).
+- n50 ← « Luftdichtheitswert für Berechnung » / valeur n50 retenue pour le calcul.
+
 SORTIE : un SEUL objet JSON, rien d'autre (pas de texte, pas de balises code).
 Forme : {"u_wall_w_m2k": {"value": 0.18, "source": "..."}, ...}. Pour un champ
 absent : null. N'INVENTE AUCUN CHIFFRE — si tu n'es pas sûr, mets null.
