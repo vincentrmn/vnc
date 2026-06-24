@@ -54,6 +54,21 @@ class RawBlock:
 
 
 @dataclass
+class CpeText:
+    """Texte brut extrait d'un CPE (passeport énergétique) PDF vectoriel.
+
+    Brique **layout-indépendante** du parsing CPE (CLAUDE.md §10) : on extrait le
+    texte (déterministe), on refuse les scans (zéro vision, §2.3). Le mapping
+    texte → champs d'enveloppe (U, n50, inertie…) se fait ensuite (hybride :
+    règles + LLM, chiffres vérifiés verbatim, pré-remplit le formulaire).
+    """
+
+    text: str  # texte concaténé de toutes les pages
+    pages: list[str]  # texte par page (ordre du document)
+    n_images: int = 0
+
+
+@dataclass
 class RawDXF:
     """Entités CAO brutes extraites du DXF (coordonnées en mètres)."""
 
@@ -242,3 +257,27 @@ def render_pdf_page(
         zoom = min(zoom, max_side_px / longest_pt)
     pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
     return pix.tobytes("png"), pix.width, pix.height, page.rect.width, page.rect.height
+
+
+def parse_cpe(path: str | Path) -> CpeText:
+    """Extrait le **texte** d'un CPE PDF vectoriel — déterministe, zéro vision.
+
+    Brique générique du parsing CPE : on lit le texte réel du PDF (pas d'OCR).
+    Un CPE **scanné** (que des images, aucun texte) est **refusé** (CLAUDE.md
+    §2.3) — il faudrait de la vision/OCR, hors périmètre v1. Le mapping du texte
+    vers les champs d'enveloppe (U, Uw, n50, inertie…) est fait en aval (hybride).
+    """
+    import fitz
+
+    doc = fitz.open(str(path))
+    pages: list[str] = [page.get_text("text") for page in doc]
+    n_images = sum(len(page.get_images()) for page in doc)
+    text = "\n".join(pages)
+    if not text.strip():
+        if n_images:
+            raise ValueError(
+                "CPE scanné (image, aucun texte) : non supporté en v1 — il faudrait de "
+                "l'OCR/vision. Fournir un CPE PDF vectoriel (texte sélectionnable)."
+            )
+        raise ValueError("CPE vide : aucun texte extractible du PDF.")
+    return CpeText(text=text, pages=pages, n_images=n_images)

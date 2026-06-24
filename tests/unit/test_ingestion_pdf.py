@@ -15,7 +15,7 @@ fitz = pytest.importorskip("fitz")  # PyMuPDF (extra pdf)
 pytest.importorskip("shapely")  # build_building (extra cao)
 
 from zephyr.geometry import build_building  # noqa: E402
-from zephyr.ingestion import parse_pdf  # noqa: E402
+from zephyr.ingestion import parse_cpe, parse_pdf  # noqa: E402
 
 
 def _make_vector_pdf(path: Path) -> None:
@@ -44,6 +44,30 @@ def test_pdf_rooms_from_labels(tmp_path: Path) -> None:
     assert "chambre" in labels and "cuisine" in labels
     areas = sorted(round(r.area_m2, 1) for r in b.rooms)
     assert 15.1 in areas and 12.0 in areas
+
+
+def test_parse_cpe_extracts_text(tmp_path: Path) -> None:
+    doc = fitz.open()
+    page = doc.new_page(width=300, height=400)
+    page.insert_text((40, 60), "Coefficient U mur 0,18 W/(m2.K)")
+    page.insert_text((40, 90), "n50 = 1,5 1/h")
+    p = tmp_path / "cpe.pdf"
+    doc.save(str(p))
+    cpe = parse_cpe(p)
+    assert "n50" in cpe.text and "0,18" in cpe.text
+    assert len(cpe.pages) == 1
+
+
+def test_parse_cpe_rejects_scan(tmp_path: Path) -> None:
+    doc = fitz.open()
+    page = doc.new_page(width=100, height=100)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 60, 60))
+    pix.clear_with(220)
+    page.insert_image(fitz.Rect(0, 0, 60, 60), pixmap=pix)
+    p = tmp_path / "scan_cpe.pdf"
+    doc.save(str(p))
+    with pytest.raises(ValueError, match="scanné"):
+        parse_cpe(p)
 
 
 def test_parse_pdf_rejects_scan(tmp_path: Path) -> None:
