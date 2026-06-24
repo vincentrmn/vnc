@@ -113,6 +113,31 @@ def _compute_page(building: Building, cfg: dict[str, str], flags: dict[str, bool
     return render_results(result, building=building)
 
 
+def _dxf_tracing_page(raw: object, hidden: str) -> str:
+    """Tracé **universel** sur DXF (§10.3) : DXF rendu en image de fond.
+
+    Utilisé quand la reconstruction automatique ne sort pas de polygones de pièces
+    propres (murs doublés, pas de polylignes fermées…). Le DXF étant en mètres,
+    l'échelle est exacte (pas de calibrage nécessaire).
+    """
+    import base64
+
+    from zephyr.viz import render_segments_background
+
+    segs: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    for ln in getattr(raw, "lines", []):
+        segs.append((ln.start, ln.end))
+    for pl in getattr(raw, "polylines", []):
+        pts = pl.points
+        for i in range(len(pts) - 1):
+            segs.append((pts[i], pts[i + 1]))
+        if pl.closed and len(pts) >= 3:
+            segs.append((pts[-1], pts[0]))
+    png, w_px, h_px, m_per_px = render_segments_background(segs)
+    uri = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+    return render_tracing(uri, w_px, h_px, m_per_px, hidden)
+
+
 def _pdf_tracing_page(pdf_path: Path, hidden: str) -> str:
     """Rend le PDF en image de fond + échelle, puis ouvre l'éditeur de tracé.
 
@@ -187,12 +212,17 @@ async def submit_config(
             from zephyr.geometry import build_building
             from zephyr.ingestion import parse_dxf
 
+            raw_dxf = parse_dxf(tmp_path)
             geo = build_building(
-                parse_dxf(tmp_path), inertia=InertiaClass(inertia), north_angle_deg=north
+                raw_dxf, inertia=InertiaClass(inertia), north_angle_deg=north
             )
         except Exception as exc:  # noqa: BLE001 - surface l'erreur à l'utilisateur
             return render_error(str(exc))
-        return render_validation(geo.building, hidden, geo.warnings)
+        # DXF propre (polygones de pièces) → validation auto ; sinon → tracé
+        # universel sur le DXF rendu en fond (§10.3).
+        if any(r.polygon for r in geo.building.rooms):
+            return render_validation(geo.building, hidden, geo.warnings)
+        return _dxf_tracing_page(raw_dxf, hidden)
 
     # Pas de DXF : pas de géométrie à valider → résultats directs (paramétrique).
     return _compute_page(_parametric(cfg), cfg, flags)

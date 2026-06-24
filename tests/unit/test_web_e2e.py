@@ -70,3 +70,31 @@ def test_dxf_flow_validation_then_results() -> None:
     assert r2.status_code == 200
     assert "Aptitude à la VNC" in r2.text
     assert "Détail par critère" in r2.text
+
+
+def test_dxf_without_polygons_routes_to_tracing() -> None:
+    """§10.3 — DXF sans polygones de pièces propres → éditeur de tracé universel."""
+    pytest.importorskip("matplotlib")
+    import tempfile
+    from typing import Any, cast
+
+    import ezdxf
+
+    doc = cast(Any, ezdxf).new()
+    msp = doc.modelspace()
+    # Que des LINE (murs en traits) + clutter : pas de polyligne fermée → 0 pièce.
+    for a, b in [((0, 0), (5, 0)), ((5, 0), (5, 4)), ((5, 4), (0, 4)),
+                 ((0, 4), (0, 0)), ((1, 1), (2, 2))]:
+        msp.add_line(a, b)
+    path = Path(tempfile.mktemp(suffix=".dxf"))
+    doc.saveas(path)
+
+    with path.open("rb") as fh:
+        r = client.post(
+            "/etude",
+            data={"project_type": "logement", "inertia": "lourde"},
+            files={"dxf": ("messy.dxf", fh, "application/dxf")},
+        )
+    assert r.status_code == 200
+    assert "Tracer les pièces" in r.text and "window.TRACE" in r.text
+    assert "data:image/png;base64," in r.text  # DXF rendu en image de fond
