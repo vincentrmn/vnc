@@ -513,6 +513,19 @@ function render(){
       tm.textContent = o;
       svg.appendChild(tm);
     });
+    // Châssis : barres sur la façade correspondante (bleu = ouvrable, gris = fixe).
+    var byOri = {};
+    (r.openings||[]).forEach(function(op){ if(ORDIR[op.orientation]){ (byOri[op.orientation]=byOri[op.orientation]||[]).push(op); } });
+    Object.keys(byOri).forEach(function(o){
+      var d=ORDIR[o], ux=d[0], uy=d[1], tnx=-uy, tny=ux;
+      var epx=dcx+ux*(rw/2), epy=dcy+uy*(rh/2), list=byOri[o];
+      list.forEach(function(op,k){
+        var off=(k-(list.length-1)/2)*0.7, bx=epx+tnx*off, by=epy+tny*off, half=0.28;
+        var ln=svgEl('line', {x1:bx-tnx*half, y1:fy(by-tny*half), x2:bx+tnx*half, y2:fy(by+tny*half),
+          stroke:(op.openable?'#1a73e8':'#9aa3ad'), 'stroke-width':0.18, 'stroke-linecap':'round'});
+        svg.appendChild(ln);
+      });
+    });
   });
   syncHidden();
 }
@@ -554,13 +567,13 @@ function wire(){
     else if(f==='area'){ op.area_m2=parseFloat(el.value||'1.5'); }
     else if(f==='sash'){ var v=parseFloat(el.value); op.sill_height_m=(op.sill_height_m!=null?op.sill_height_m:0.9); op.head_height_m=isNaN(v)?null:(op.sill_height_m+v); }
     else if(f==='openable'){ op.openable=el.checked; }
-    syncHidden();
+    render(); syncHidden();
   };});
-  Array.prototype.forEach.call(document.querySelectorAll('#panel [data-del]'), function(b){ b.onclick=function(){ r.openings.splice(parseInt(b.dataset.del),1); panel(); syncHidden(); };});
+  Array.prototype.forEach.call(document.querySelectorAll('#panel [data-del]'), function(b){ b.onclick=function(){ r.openings.splice(parseInt(b.dataset.del),1); render(); panel(); syncHidden(); };});
   document.getElementById('p-add').onclick=function(){
     if(!r.openings){ r.openings=[]; }
     r.openings.push({id:r.id+'_w'+r.openings.length, kind:'window', orientation:(r.exterior_wall_orientations[0]||'S'), area_m2:1.5, sill_height_m:0.9, head_height_m:2.2, openable:true, free_area_ratio:0.5});
-    panel(); syncHidden();
+    render(); panel(); syncHidden();
   };
 }
 function syncHidden(){
