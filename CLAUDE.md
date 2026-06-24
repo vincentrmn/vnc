@@ -205,14 +205,12 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 
 **Fait cette session** : pivot déterministe ; score + recommandations ; pénalité degrés-jours ; bilan financier détaillé ; plateforme web (landing/config/validation/résultats) ; déploiement Railway ; ingestion **PDF vectoriel** + rejet scans ; reconnaissance géométrique des **façades/traversant** + angle du Nord + blocs ; repli **pièces depuis libellés** ; **éditeur de validation interactif** (SVG) ; **éditeur de tracé** (plan en fond, calibrage, surfaces réelles).
 
+**Fait depuis (éditeur de tracé)** : **zoom/pan** (molette + glisser, poignées à taille constante) ; **tracé des châssis** au glisser sur la façade (longueur → largeur de baie, façade déduite) ; **tracé universel sur DXF** (DXF rendu en image de fond quand la reconstruction auto ne donne pas de polygones propres — échelle exacte, sans calibrage) ; **multi-niveaux** (niveau courant + niveau par pièce, badge N{n}).
+
 **Prochaines étapes (priorité = définition du bâtiment, puis méthode)** — cf. §11 pour les questions ouvertes :
-1. **Zoom/pan** dans l'éditeur de tracé (plan A0 = grand, tracé précis impossible sans zoom).
-2. **Tracer les châssis sur le plan** (clic-glisser pour la longueur sur la façade).
-3. **Unifier les entrées** : proposer le **tracé aussi pour les DXF** (rendu DXF→image de fond) → un seul flux universel ; garder la reconstruction auto quand le DXF est propre.
-4. **CPE** : clarifier/automatiser ce qu'on en tire (U, inertie, vitrage) — éventuellement parser un CPE PDF.
-5. **Multi-niveaux / plusieurs plans par planche** (l'A0 a RdC + rez-de-jardin + étage).
-6. **Portes intérieures** → chemins d'air pour un traversant « réel » (pas juste ≥ 2 façades).
-7. **Recalibrer les coûts ROI** par taille/typologie (cf. §6, limite petite échelle).
+1. **CPE** : clarifier/automatiser ce qu'on en tire (U, inertie, vitrage) — éventuellement parser un CPE PDF.
+2. **Portes intérieures** → chemins d'air pour un traversant « réel » (pas juste ≥ 2 façades).
+3. **Recalibrer les coûts ROI** par taille/typologie (cf. §6, limite petite échelle).
 
 ---
 
