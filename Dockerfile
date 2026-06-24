@@ -1,6 +1,7 @@
 # Image de déploiement de la plateforme web Zéphyr (FastAPI).
 # Build reproductible via uv + extras (app = FastAPI/uvicorn/multipart,
-# cao = ezdxf/shapely, viz = matplotlib). Pas de WeasyPrint (PDF optionnel).
+# cao = ezdxf/shapely, viz = matplotlib, pdf = pymupdf, llm = SDK Anthropic pour
+# l'extraction CPE — actif si ANTHROPIC_API_KEY est défini). Pas de WeasyPrint.
 FROM python:3.11-slim
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -14,7 +15,7 @@ WORKDIR /app
 # 1) Dépendances d'abord (couche de cache) : pyproject + lock + sources du paquet.
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
-RUN uv sync --frozen --no-dev --extra app --extra cao --extra viz --extra pdf
+RUN uv sync --frozen --no-dev --extra app --extra cao --extra viz --extra pdf --extra llm
 
 # 2) Code applicatif (change souvent → couche séparée).
 COPY app ./app

@@ -33,6 +33,32 @@ def test_study_form_has_inputs() -> None:
     for field in ("project_type", "nature", "u_wall", "glazing", "sash", "n50", "pollution"):
         assert f'name="{field}"' in h
     assert 'action="/etude"' in h
+    assert 'action="/etude/cpe"' in h and 'name="cpe"' in h  # import CPE
+
+
+def test_study_form_prefills_envelope() -> None:
+    h = render_study_form({"u_wall": "0.18", "n50": "0.6", "inertia": "lourde", "area": "739.3"})
+    assert 'name="u_wall" value="0.18"' in h
+    assert 'name="n50" value="0.6"' in h
+    assert 'name="area" value="739.3"' in h
+
+
+def test_cpe_banner_shows_values_and_provenance() -> None:
+    from zephyr.schemas import CpeExtraction, InertiaClass
+    from zephyr.web import render_cpe_banner
+
+    ext = CpeExtraction(
+        u_wall_w_m2k=0.18, air_permeability_ach50=0.6, inertia_class=InertiaClass.LOURDE,
+        sources={"u_wall_w_m2k": "valeur U 0,18 W/(m²K)"},
+        notes=["u_roof_w_m2k=0.99 écarté : valeur non retrouvée verbatim dans le CPE."],
+    )
+    h = render_cpe_banner(ext)
+    assert "CPE extrait" in h and "0.18" in h
+    assert "valeur U 0,18" in h  # provenance affichée
+    assert "écarté" in h  # note de garde-fou
+
+    msg = render_cpe_banner(None, message="Texte du CPE lu, extraction indisponible.")
+    assert "indisponible" in msg
 
 
 def test_results_have_scale_and_detailed_financials() -> None:

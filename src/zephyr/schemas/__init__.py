@@ -14,6 +14,7 @@ from zephyr.schemas.building import (
     Room,
     RoomLabel,
 )
+from zephyr.schemas.cpe import CpeExtraction
 from zephyr.schemas.results import (
     HeatingPenalty,
     Range,
@@ -35,6 +36,8 @@ __all__ = [
     "Orientation",
     "Room",
     "RoomLabel",
+    # cpe
+    "CpeExtraction",
     # study
     "EnvelopeData",
     "ProjectType",

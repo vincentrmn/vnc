@@ -35,6 +35,7 @@ from zephyr.schemas import (
 from zephyr.study import compute_study
 from zephyr.web import (
     building_from_form,
+    render_cpe_banner,
     render_error,
     render_landing,
     render_results,
@@ -166,6 +167,60 @@ def _parametric(cfg: dict[str, str]) -> Building:
         inertia=InertiaClass(cfg["inertia"]),
         main_orientation=Orientation.S,
     )
+
+
+def _cpe_prefill(ext: object) -> dict[str, str]:
+    """Mappe une CpeExtraction vers les champs du formulaire (valeurs chaînes)."""
+    out: dict[str, str] = {}
+    pairs = {
+        "u_wall": "u_wall_w_m2k", "u_window": "u_window_w_m2k",
+        "glazing": "glazing_to_floor_ratio", "n50": "air_permeability_ach50",
+        "area": "floor_area_m2",
+    }
+    for field, attr in pairs.items():
+        val = getattr(ext, attr, None)
+        if val is not None:
+            out[field] = f"{val:g}"
+    inertia = getattr(ext, "inertia_class", None)
+    if inertia is not None:
+        out["inertia"] = inertia.value
+    return out
+
+
+@app.post("/etude/cpe", response_class=HTMLResponse)
+async def submit_cpe(cpe: UploadFile | None = File(default=None)) -> str:  # noqa: B008
+    """Extrait un CPE (PDF vectoriel) et pré-remplit le formulaire (humain valide)."""
+    raw = await cpe.read() if cpe is not None else b""
+    if not raw:
+        return render_study_form(cpe_banner=render_cpe_banner(None, message="Aucun CPE déposé."))
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(raw)
+        tmp_path = Path(tmp.name)
+
+    from zephyr.ingestion import parse_cpe
+
+    try:
+        cpe_text = parse_cpe(tmp_path)
+    except Exception as exc:  # noqa: BLE001 - surface l'erreur (scan refusé, etc.)
+        return render_study_form(cpe_banner=render_cpe_banner(None, message=str(exc)))
+
+    from zephyr.llm import cpe_extraction_available, extract_cpe
+
+    if not cpe_extraction_available():
+        return render_study_form(
+            cpe_banner=render_cpe_banner(
+                None,
+                message="Texte du CPE lu, mais l'extraction automatique est indisponible "
+                "(clé API absente sur ce déploiement). Saisissez l'enveloppe à la main.",
+            )
+        )
+    try:
+        ext = extract_cpe(cpe_text.text)
+    except Exception as exc:  # noqa: BLE001 - l'extraction LLM peut échouer
+        return render_study_form(
+            cpe_banner=render_cpe_banner(None, message=f"Extraction CPE échouée : {exc}")
+        )
+    return render_study_form(_cpe_prefill(ext), cpe_banner=render_cpe_banner(ext))
 
 
 @app.post("/etude", response_class=HTMLResponse)

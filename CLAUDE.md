@@ -73,7 +73,7 @@ Deux usages : **interne** (priorité, tolérance à l'approximation si honnête 
 | Module | Rôle | Tech |
 |---|---|---|
 | `schemas` | Contrat pydantic v2 : `Building`/`Room`/`Opening`, `EnvelopeData`, `SiteContext`, `VNCScore`/`ScoreCriterion`, `HeatingPenalty`, `ROIResult`, `StudyResult`, `Verdict` | pydantic |
-| `ingestion` | DXF → entités brutes (`RawDXF` : polylignes, textes, lignes, **blocs INSERT**). **PDF vectoriel** → mêmes entités (`parse_pdf`) + `render_pdf_page` (image de fond pour le tracé). Refuse les PDF scannés. | ezdxf, **pymupdf** |
+| `ingestion` | DXF → entités brutes (`RawDXF` : polylignes, textes, lignes, **blocs INSERT**). **PDF vectoriel** → mêmes entités (`parse_pdf`) + `render_pdf_page` (image de fond pour le tracé). **CPE** → texte (`parse_cpe`). Refuse les scans. | ezdxf, **pymupdf** |
 | `geometry` | Reconstruit pièces (polygones fermés), labels (texte/calque FR/EN), **façades extérieures géométriques** (union des pièces → mur extérieur vs mitoyen, orientation cardinale, angle du Nord), châssis (lignes/blocs « fenêtre »), traversant. **Repli « pièces depuis les libellés »** (nom + surface) quand pas de polygones. | shapely |
 | `rules` | **Moteur de SCORE** (0–100) pondéré + recommandations : ventilation (traversant/châssis ≥1,5 m), vitrage (vitrée/sol), inertie (CPE), isolation (U). Drapeaux durs de site (pollution, occupation incompatible) → verdict NO_GO. | code pur |
 | `thermal` | **Pénalité de chauffage VNC en degrés-jours** (déterministe). C'est tout. | code pur + climate |
@@ -81,7 +81,7 @@ Deux usages : **interne** (priorité, tolérance à l'approximation si honnête 
 | `roi` | TCO/VAN paramétrique VNC vs VMC (cf. §6), sensibilité (tornado, SALib), fourchettes. | numpy, SALib |
 | `study` | Orchestrateur `compute_study` → `StudyResult` (score + pénalité + ROI). | — |
 | `web` | **Pages HTML du produit** (fonctions pures testables) : landing, formulaire de config, **éditeur de validation** (DXF reconstruit) et **éditeur de tracé** (PDF/plan en fond), page de résultats. + un peu de **JS vanilla** (SVG interactif). | stdlib HTML + JS |
-| `llm` | Service transverse : **narratif** (Opus) en sortie. Labelling sémantique différé. | SDK Anthropic |
+| `llm` | Service transverse : **narratif** (Opus) en sortie ; **extraction CPE** (Sonnet) texte → champs d'enveloppe, **chiffres vérifiés verbatim** (`extract_cpe` / `verify_cpe_extraction`). Labelling pièces différé. | SDK Anthropic |
 | `report` | Rapport HTML (PDF optionnel WeasyPrint). | HTML → PDF |
 | `viz` | Rendu matplotlib d'un plan reconstruit (PNG / data-URI). | matplotlib |
 | `builders` | `parametric_building` (saisie sans plan). | — |
@@ -205,10 +205,12 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 
 **Fait cette session** : pivot déterministe ; score + recommandations ; pénalité degrés-jours ; bilan financier détaillé ; plateforme web (landing/config/validation/résultats) ; déploiement Railway ; ingestion **PDF vectoriel** + rejet scans ; reconnaissance géométrique des **façades/traversant** + angle du Nord + blocs ; repli **pièces depuis libellés** ; **éditeur de validation interactif** (SVG) ; **éditeur de tracé** (plan en fond, calibrage, surfaces réelles).
 
-**Fait depuis (éditeur de tracé)** : **zoom/pan** (molette + glisser, poignées à taille constante) ; **tracé des châssis** au glisser sur la façade (longueur → largeur de baie, façade déduite) ; **tracé universel sur DXF** (DXF rendu en image de fond quand la reconstruction auto ne donne pas de polygones propres — échelle exacte, sans calibrage) ; **multi-niveaux** (niveau courant + niveau par pièce, badge N{n}).
+**Fait depuis (éditeur de tracé)** : **zoom/pan** (molette + glisser, poignées à taille constante) ; **tracé des châssis** au glisser sur la façade (longueur → largeur de baie, façade déduite) ; **tracé universel sur DXF** (DXF rendu en image de fond quand la reconstruction auto ne donne pas de polygones propres — échelle exacte, sans calibrage) ; **multi-niveaux** (niveau courant + niveau par pièce, badge N{n}) ; **curseur de taille des repères** de tracé.
+
+**Fait depuis (CPE)** : **parsing hybride** du CPE (passeport énergétique LU). `ingestion.parse_cpe` extrait le **texte** (déterministe, refuse les scans) ; `llm.extract_cpe` (Sonnet) **mappe** le texte aux champs d'enveloppe (U murs/toit/plancher, Uw, n50, inertie, surface, année) ; chaque **chiffre est vérifié verbatim** dans le texte source (`verify_cpe_extraction`) — un nombre absent est écarté et signalé (jamais inventé, §11). Le résultat **pré-remplit** le formulaire (`POST /etude/cpe`), l'ingénieur valide. Extra `llm` ajouté au Dockerfile ; actif si `ANTHROPIC_API_KEY` est défini sur Railway, sinon message honnête « indisponible » (le texte est quand même lu). *À valider sur le vrai CPE en live (le garde-fou verbatim est déjà validé sur le CPE Pommerloch).*
 
 **Prochaines étapes (priorité = définition du bâtiment, puis méthode)** — cf. §11 pour les questions ouvertes :
-1. **CPE** : clarifier/automatiser ce qu'on en tire (U, inertie, vitrage) — éventuellement parser un CPE PDF.
+1. **CPE** : valider l'extraction LLM en live ; couvrir d'autres mises en page/versions ; éventuellement choix de la valeur U représentative quand plusieurs murs.
 2. **Portes intérieures** → chemins d'air pour un traversant « réel » (pas juste ≥ 2 façades).
 3. **Recalibrer les coûts ROI** par taille/typologie (cf. §6, limite petite échelle).
 

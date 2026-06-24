@@ -290,13 +290,46 @@ def render_error(message: str) -> str:
     return _layout("Zéphyr — erreur", body, cta=False)
 
 
-def render_study_form() -> str:
-    """Page 1 — configuration & plans : tout ce qui ne se lit pas sur les plans."""
-    body = """
+def render_study_form(
+    prefill: Mapping[str, str] | None = None, *, cpe_banner: str = ""
+) -> str:
+    """Page 1 — configuration & plans : tout ce qui ne se lit pas sur les plans.
+
+    `prefill` pré-remplit l'enveloppe (issue d'un CPE extrait, par ex.) ; l'ingénieur
+    valide/corrige avant de continuer (human-in-the-loop). `cpe_banner` affiche le
+    bilan de l'extraction CPE (valeurs trouvées + provenance, ou message d'erreur).
+    """
+    p = dict(prefill or {})
+
+    def v(key: str, default: str) -> str:
+        return html.escape(str(p.get(key, default)))
+
+    def opt(key: str, val: str, default: str, lbl: str) -> str:
+        sel = " selected" if str(p.get(key, default)) == val else ""
+        return f'<option value="{val}"{sel}>{lbl}</option>'
+
+    inertia_opts = (
+        opt("inertia", "lourde", "lourde", "Lourde (béton / maçonnerie)")
+        + opt("inertia", "moyenne", "lourde", "Moyenne")
+        + opt("inertia", "legere", "lourde", "Légère (ossature)")
+    )
+    body = f"""
 <h1>Nouvelle étude — configuration</h1>
 <p class="lead" style="color:var(--muted)">Déposez les plans (DXF) et renseignez ce
 qu'un plan ne porte pas : nature du projet, matériaux/CPE, contexte. On lit la
 géométrie du DXF ; vous la validez à l'étape suivante.</p>
+
+<h2 class="sec">Importer un CPE (optionnel)</h2>
+<p style="color:var(--muted);font-size:.9rem">Pré-remplit l'enveloppe depuis un
+passeport énergétique <b>PDF vectoriel</b> (U, n50, inertie, surface). Les valeurs
+extraites sont <b>vérifiées dans le texte source</b> puis posées dans le formulaire :
+vous les validez ci-dessous.</p>
+<form method="post" action="/etude/cpe" enctype="multipart/form-data">
+  <input type="file" name="cpe" accept=".pdf">
+  <button class="btn ghost" type="submit">Extraire le CPE →</button>
+</form>
+{cpe_banner}
+
 <form method="post" action="/etude" enctype="multipart/form-data">
   <h2 class="sec">Plans</h2>
   <label>Plan vectoriel DXF ou PDF (optionnel — sinon saisie paramétrique)</label>
@@ -324,13 +357,9 @@ géométrie du DXF ; vous la validez à l'étape suivante.</p>
     <div><label>Angle du Nord (° ; 0 = +y du plan)</label>
       <input type="number" name="north" value="0" step="5"></div>
     <div><label>Inertie (composition des parois — CPE)</label>
-      <select name="inertia">
-        <option value="lourde" selected>Lourde (béton / maçonnerie)</option>
-        <option value="moyenne">Moyenne</option>
-        <option value="legere">Légère (ossature)</option>
-      </select></div>
+      <select name="inertia">{inertia_opts}</select></div>
     <div><label>Surface ventilée (m²) — si pas de DXF</label>
-      <input type="number" name="area" value="1200" step="10"></div>
+      <input type="number" name="area" value="{v("area", "1200")}" step="10"></div>
     <div><label>Niveaux — si pas de DXF</label>
       <input type="number" name="levels" value="2" min="1"></div>
   </div>
@@ -338,15 +367,15 @@ géométrie du DXF ; vous la validez à l'étape suivante.</p>
   <h2 class="sec">Enveloppe (CPE)</h2>
   <div class="form-grid">
     <div><label>U murs (W/m²K)</label>
-      <input type="number" name="u_wall" value="0.20" step="0.01"></div>
+      <input type="number" name="u_wall" value="{v("u_wall", "0.20")}" step="0.01"></div>
     <div><label>Uw vitrage (W/m²K)</label>
-      <input type="number" name="u_window" value="0.9" step="0.1"></div>
+      <input type="number" name="u_window" value="{v("u_window", "0.9")}" step="0.1"></div>
     <div><label>Ratio vitrage / surface au sol</label>
-      <input type="number" name="glazing" value="0.18" step="0.01"></div>
+      <input type="number" name="glazing" value="{v("glazing", "0.18")}" step="0.01"></div>
     <div><label>Hauteur des châssis (m)</label>
-      <input type="number" name="sash" value="1.6" step="0.1"></div>
+      <input type="number" name="sash" value="{v("sash", "1.6")}" step="0.1"></div>
     <div><label>Perméabilité à l'air n50 (vol/h)</label>
-      <input type="number" name="n50" value="1.5" step="0.1"></div>
+      <input type="number" name="n50" value="{v("n50", "1.5")}" step="0.1"></div>
   </div>
 
   <h2 class="sec">Contexte du site</h2>
@@ -360,6 +389,48 @@ géométrie du DXF ; vous la validez à l'étape suivante.</p>
 </form>
 """
     return _layout("Zéphyr — nouvelle étude", body, cta=False)
+
+
+def render_cpe_banner(extraction: object | None, *, message: str = "") -> str:
+    """Bandeau récapitulatif de l'extraction CPE (valeurs + provenance, ou message)."""
+    if extraction is None:
+        return f'<div class="flag">{html.escape(message)}</div>' if message else ""
+    labels = {
+        "u_wall_w_m2k": "U murs", "u_roof_w_m2k": "U toiture",
+        "u_floor_w_m2k": "U plancher", "u_window_w_m2k": "Uw vitrage",
+        "air_permeability_ach50": "n50", "glazing_to_floor_ratio": "Ratio vitrage",
+        "inertia_class": "Inertie", "floor_area_m2": "Surface réf.",
+        "construction_year": "Année",
+    }
+    sources = getattr(extraction, "sources", {}) or {}
+    rows = []
+    for key, lab in labels.items():
+        val = getattr(extraction, key, None)
+        if val is None:
+            continue
+        shown = val.value if hasattr(val, "value") else val
+        src = sources.get(key, "")
+        src_html = (
+            f'<small style="color:var(--muted)"> — « {html.escape(str(src)[:80])} »</small>'
+            if src else ""
+        )
+        rows.append(f"<li><b>{lab}</b> : {html.escape(str(shown))}{src_html}</li>")
+    notes = getattr(extraction, "notes", []) or []
+    if not rows:
+        return (
+            '<div class="flag">CPE lu, mais aucune valeur d\'enveloppe vérifiable n\'a '
+            "été extraite. Saisissez les champs à la main.</div>"
+        )
+    notes_html = (
+        '<p style="color:var(--muted);font-size:.85rem;margin:.4rem 0 0">'
+        + "<br>".join(html.escape(n) for n in notes)
+        + "</p>"
+    ) if notes else ""
+    return (
+        '<div class="reco"><b>CPE extrait</b> — valeurs posées dans le formulaire '
+        "(vérifiées dans le texte source ; à valider) :"
+        f'<ul style="margin:.4rem 0">{"".join(rows)}</ul>{notes_html}</div>'
+    )
 
 
 def _orient_select(name: str, selected: str, *, empty: bool = False) -> str:

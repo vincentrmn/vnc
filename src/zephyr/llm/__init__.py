@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, cast
 
-from zephyr.schemas import StudyResult
+from zephyr.schemas import CpeExtraction, InertiaClass, StudyResult
 
 # Modèles de référence (CLAUDE.md §5/§8). Ne pas confondre avec l'identité du
 # modèle qui exécute Claude Code.
@@ -136,13 +136,161 @@ def write_narrative(result: StudyResult, *, max_tokens: int = 1200) -> str:
 
     system, messages = build_narrative_messages(result)
     client = anthropic.Anthropic()
-    response = client.messages.create(
+    response = cast(Any, client).messages.create(
         model=MODEL_NARRATIVE,
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": messages}],
     )
     return "".join(block.text for block in response.content if block.type == "text")
+
+
+# --------------------------------------------------------------------------- #
+# Extraction CPE (hybride : règles + LLM, chiffres vérifiés verbatim)
+# --------------------------------------------------------------------------- #
+# Bloc système STATIQUE (mis en cache). Décrit la tâche + le contrat de sortie.
+_CPE_SYSTEM = """\
+Tu es un extracteur de données pour Zéphyr (pré-étude VNC). On te donne le TEXTE
+BRUT d'un CPE luxembourgeois (passeport énergétique / Energiepass, bilingue
+FR/DE), extrait d'un PDF — la mise en page est désordonnée (colonnes mélangées).
+
+Ta tâche : retrouver, SI ELLES SONT PRÉSENTES, les valeurs d'enveloppe ci-dessous,
+et UNIQUEMENT celles-là. Tu ne calcules rien, tu ne devines rien : tu RECOPIES ce
+qui est écrit. Pour CHAQUE valeur trouvée, tu fournis aussi un court extrait du
+texte (`source`) copié mot pour mot, contenant la valeur (sert de preuve).
+
+Champs (clé JSON → sens) :
+- u_wall_w_m2k : valeur U du mur extérieur (Aussenwand / mur extérieur), W/(m²K).
+- u_roof_w_m2k : valeur U de la toiture (Dach), W/(m²K).
+- u_floor_w_m2k : valeur U du plancher bas / radier (Bodenplatte), W/(m²K).
+- u_window_w_m2k : valeur Uw des fenêtres (Fenster), W/(m²K).
+- air_permeability_ach50 : n50 retenu pour le calcul (vol/h sous 50 Pa).
+- glazing_to_floor_ratio : ratio surface vitrée / surface (si explicitement donné).
+- inertia_class : "lourde" (béton/maçonnerie), "moyenne" ou "legere" (ossature
+  bois/légère), DÉDUITE de la composition des parois ; mets en `source` les
+  matériaux qui le justifient.
+- floor_area_m2 : surface de référence énergétique, m².
+- construction_year : année de construction (entier).
+
+S'il y a plusieurs valeurs U pour un même type, prends la valeur U calculée
+représentative (pas une couche intermédiaire). Les décimales peuvent être notées
+avec une virgule (ex. 0,18) — recopie le nombre tel quel dans `source`.
+
+SORTIE : un SEUL objet JSON, rien d'autre (pas de texte, pas de balises code).
+Forme : {"u_wall_w_m2k": {"value": 0.18, "source": "..."}, ...}. Pour un champ
+absent : null. N'INVENTE AUCUN CHIFFRE — si tu n'es pas sûr, mets null.
+"""
+
+# Champs numériques attendus (les autres : inertia_class, construction_year).
+_CPE_NUMERIC = (
+    "u_wall_w_m2k", "u_roof_w_m2k", "u_floor_w_m2k", "u_window_w_m2k",
+    "air_permeability_ach50", "glazing_to_floor_ratio", "floor_area_m2",
+)
+
+
+def build_cpe_messages(text: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Construit (system, user) pour l'extraction CPE. Pur, testable sans API."""
+    system = [{"type": "text", "text": _CPE_SYSTEM, "cache_control": {"type": "ephemeral"}}]
+    user = [{"type": "text", "text": "Texte du CPE :\n" + text}]
+    return system, user
+
+
+def parse_cpe_response(raw: str) -> dict[str, Any]:
+    """Parse la réponse JSON du modèle (tolère un éventuel bloc ```)."""
+    s = raw.strip()
+    start, end = s.find("{"), s.rfind("}")
+    if start == -1 or end == -1:
+        return {}
+    obj = json.loads(s[start : end + 1])
+    return obj if isinstance(obj, dict) else {}
+
+
+def _number_in_text(value: float, text: str) -> bool:
+    """La valeur apparaît-elle telle quelle dans le texte (virgule ou point) ?
+
+    On ne teste que des rendus **fidèles** (qui ré-évaluent à la même valeur), donc
+    pas d'arrondi trompeur (0,18 ne « matche » jamais via 0,2). Anti-hallucination.
+    """
+    norm = text.replace(",", ".")
+    for d in range(5):
+        r = f"{value:.{d}f}"
+        if r not in ("0", "0.0") and abs(float(r) - value) < 1e-9 and r in norm:
+            return True
+    return False
+
+
+def verify_cpe_extraction(parsed: dict[str, Any], source_text: str) -> CpeExtraction:
+    """Vérifie chaque champ proposé contre le texte source et construit l'extraction.
+
+    Tout nombre qui n'apparaît pas **verbatim** dans le CPE est écarté (et noté) :
+    le LLM ne peut pas introduire de chiffre absent (CLAUDE.md §11).
+    """
+    fields: dict[str, Any] = {}
+    sources: dict[str, str] = {}
+    notes: list[str] = []
+
+    def _val(entry: Any) -> tuple[Any, str]:
+        if isinstance(entry, dict):
+            return entry.get("value"), str(entry.get("source", ""))
+        return entry, ""
+
+    for key in (*_CPE_NUMERIC, "construction_year"):
+        v, src = _val(parsed.get(key))
+        if v is None:
+            continue
+        try:
+            num = float(v)
+        except (TypeError, ValueError):
+            continue
+        if _number_in_text(num, source_text):
+            fields[key] = int(num) if key == "construction_year" else num
+            if src:
+                sources[key] = src
+        else:
+            notes.append(f"{key}={v} écarté : valeur non retrouvée verbatim dans le CPE.")
+
+    v, src = _val(parsed.get("inertia_class"))
+    if isinstance(v, str) and v in {c.value for c in InertiaClass}:
+        fields["inertia_class"] = InertiaClass(v)
+        if src:
+            sources["inertia_class"] = src
+
+    return CpeExtraction(**fields, sources=sources, notes=notes)
+
+
+def cpe_extraction_available() -> bool:
+    """L'extraction CPE est-elle appelable (SDK + clé API) ?"""
+    return narrative_available()
+
+
+def extract_cpe(text: str, *, max_tokens: int = 1500) -> CpeExtraction:
+    """Extrait les champs d'enveloppe d'un CPE (Sonnet 4.6) puis les vérifie.
+
+    Hybride : extraction texte déterministe (amont) → mapping LLM → vérification
+    verbatim des chiffres. Le résultat pré-remplit le formulaire (humain valide).
+
+    Raises:
+        RuntimeError: si le SDK Anthropic ou la clé API ne sont pas disponibles.
+    """
+    try:
+        import anthropic
+    except ImportError as e:  # pragma: no cover - dépend de l'extra llm
+        raise RuntimeError(
+            "SDK Anthropic absent : installer l'extra 'llm' (uv sync --extra llm)."
+        ) from e
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise RuntimeError("ANTHROPIC_API_KEY absente : extraction CPE indisponible.")
+
+    system, messages = build_cpe_messages(text)
+    client = anthropic.Anthropic()
+    response = cast(Any, client).messages.create(
+        model=MODEL_LABELLING,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": messages}],
+    )
+    raw = "".join(block.text for block in response.content if block.type == "text")
+    return verify_cpe_extraction(parse_cpe_response(raw), text)
 
 
 def label_room(context: str) -> str:

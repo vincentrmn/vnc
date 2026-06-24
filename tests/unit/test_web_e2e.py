@@ -98,3 +98,42 @@ def test_dxf_without_polygons_routes_to_tracing() -> None:
     assert r.status_code == 200
     assert "Tracer les pièces" in r.text and "window.TRACE" in r.text
     assert "data:image/png;base64," in r.text  # DXF rendu en image de fond
+
+
+def test_cpe_upload_reads_text_then_back_to_form(monkeypatch: object) -> None:
+    """CPE vectoriel uploadé → texte lu ; sans clé API → message + formulaire."""
+    pytest.importorskip("fitz")
+    import tempfile
+
+    import fitz
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)  # type: ignore[attr-defined]
+    doc = fitz.open()
+    page = doc.new_page(width=300, height=300)
+    page.insert_text((40, 60), "Coefficient U mur 0,18 W/(m2.K) n50 0,60")
+    p = Path(tempfile.mktemp(suffix=".pdf"))
+    doc.save(str(p))
+    with p.open("rb") as fh:
+        r = client.post("/etude/cpe", files={"cpe": ("cpe.pdf", fh, "application/pdf")})
+    assert r.status_code == 200
+    assert "indisponible" in r.text  # pas de clé → message honnête
+    assert 'name="u_wall"' in r.text  # le formulaire est re-rendu
+
+
+def test_cpe_upload_rejects_scan() -> None:
+    pytest.importorskip("fitz")
+    import tempfile
+
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page(width=100, height=100)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 60, 60))
+    pix.clear_with(220)
+    page.insert_image(fitz.Rect(0, 0, 60, 60), pixmap=pix)
+    p = Path(tempfile.mktemp(suffix=".pdf"))
+    doc.save(str(p))
+    with p.open("rb") as fh:
+        r = client.post("/etude/cpe", files={"cpe": ("scan.pdf", fh, "application/pdf")})
+    assert r.status_code == 200
+    assert "scanné" in r.text  # refusé (zéro vision)
