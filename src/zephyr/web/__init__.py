@@ -277,6 +277,16 @@ def render_landing() -> str:
     return _layout("Zéphyr — pré-étude VNC", body)
 
 
+def render_error(message: str) -> str:
+    """Page d'erreur simple (ex. PDF scanné refusé, fichier illisible)."""
+    body = (
+        '<h1>Fichier non exploitable</h1>'
+        f'<div class="disclaimer">⚠️ {html.escape(message)}</div>'
+        '<p><a class="btn" href="/etude">← Revenir à la configuration</a></p>'
+    )
+    return _layout("Zéphyr — erreur", body, cta=False)
+
+
 def render_study_form() -> str:
     """Page 1 — configuration & plans : tout ce qui ne se lit pas sur les plans."""
     body = """
@@ -286,8 +296,11 @@ qu'un plan ne porte pas : nature du projet, matériaux/CPE, contexte. On lit la
 géométrie du DXF ; vous la validez à l'étape suivante.</p>
 <form method="post" action="/etude" enctype="multipart/form-data">
   <h2 class="sec">Plans</h2>
-  <label>Plan DXF vectorisé (optionnel — sinon saisie paramétrique)</label>
-  <input type="file" name="dxf" accept=".dxf">
+  <label>Plan vectoriel DXF ou PDF (optionnel — sinon saisie paramétrique)</label>
+  <input type="file" name="dxf" accept=".dxf,.pdf">
+  <p style="color:var(--muted);font-size:.85rem;margin:.3rem 0">PDF <b>vectoriel</b>
+  uniquement (export archi/CAO) — un PDF scanné (image) n'est pas lu (ce serait
+  de la vision).</p>
 
   <h2 class="sec">Projet (non lisible des plans)</h2>
   <div class="form-grid">

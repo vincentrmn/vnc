@@ -134,3 +134,88 @@ def parse_dxf(path: str | Path, *, unit_scale_m: float | None = None) -> RawDXF:
         blocks=blocks,
         warnings=warnings,
     )
+
+
+def parse_pdf(path: str | Path, *, page_index: int = 0, unit_scale_m: float = 1.0) -> RawDXF:
+    """Parse un **PDF vectoriel** (PyMuPDF) en entités brutes — **déterministe, zéro vision**.
+
+    On extrait les segments vectoriels (lignes, rectangles, courbes échantillonnées)
+    et les **textes réels** (noms/surfaces de pièces). Un PDF **scanné** (que des
+    images, aucun vecteur) est refusé : ce serait de la vision, exclue en v1
+    (CLAUDE.md §2.3). L'axe Y est retourné (origine en bas, +y = haut).
+
+    ⚠️ L'échelle d'un PDF d'archi n'est pas auto-déductible (coordonnées en points
+    à l'échelle papier) : ``unit_scale_m`` est à calibrer, et les **surfaces
+    fiables viennent des libellés**. Les coordonnées servent surtout au tracé.
+    """
+    import fitz  # PyMuPDF
+
+    path = Path(path)
+    warnings: list[str] = []
+    doc = fitz.open(str(path))
+    if page_index >= doc.page_count:
+        raise ValueError(f"Page {page_index} absente (PDF à {doc.page_count} page(s)).")
+    page = doc[page_index]
+    height = page.rect.height
+    s = unit_scale_m
+
+    def pt(p: Any) -> tuple[float, float]:
+        x = getattr(p, "x", None)
+        if x is None:
+            x, y = p[0], p[1]
+        else:
+            y = p.y
+        return (x * s, (height - y) * s)  # mise à l'échelle + flip vertical
+
+    lines: list[RawLine] = []
+    polylines: list[RawPolyline] = []
+    for d in page.get_drawings():
+        for it in d["items"]:
+            kind = it[0]
+            if kind == "l":  # segment
+                lines.append(RawLine("pdf", pt(it[1]), pt(it[2])))
+            elif kind == "re":  # rectangle → polyligne fermée
+                r = it[1]
+                polylines.append(
+                    RawPolyline(
+                        "pdf",
+                        [pt((r.x0, r.y0)), pt((r.x1, r.y0)), pt((r.x1, r.y1)), pt((r.x0, r.y1))],
+                        True,
+                    )
+                )
+            elif kind == "c":  # bézier cubique → segment entre extrémités
+                lines.append(RawLine("pdf", pt(it[1]), pt(it[4])))
+            elif kind == "qu":  # quad → ses deux diagonales d'extrémité
+                q = it[1]
+                lines.append(RawLine("pdf", pt(q.ul), pt(q.lr)))
+
+    texts: list[RawText] = []
+    for block in page.get_text("dict").get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                txt = span.get("text", "").strip()
+                if txt:
+                    bx = span["bbox"]
+                    texts.append(RawText("pdf", txt, pt((bx[0], bx[3]))))
+
+    n_images = len(page.get_images())
+    if not lines and not polylines and n_images:
+        raise ValueError(
+            "PDF scanné (image, aucun vecteur) : non supporté en v1 — il faudrait de la "
+            "vision. Fournir un PDF vectoriel (export depuis le logiciel d'archi/CAO)."
+        )
+    warnings.append(
+        "PDF vectoriel : échelle non auto-déduite (points) — à calibrer ; surfaces "
+        "fiables via les libellés."
+    )
+    if n_images:
+        warnings.append(f"{n_images} image(s) dans le PDF — ignorée(s) (on ne lit que le vecteur).")
+
+    return RawDXF(
+        layers=["pdf"],
+        polylines=polylines,
+        texts=texts,
+        lines=lines,
+        unit_scale_m=s,
+        warnings=warnings,
+    )

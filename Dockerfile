@@ -14,7 +14,7 @@ WORKDIR /app
 # 1) Dépendances d'abord (couche de cache) : pyproject + lock + sources du paquet.
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
-RUN uv sync --frozen --no-dev --extra app --extra cao --extra viz
+RUN uv sync --frozen --no-dev --extra app --extra cao --extra viz --extra pdf
 
 # 2) Code applicatif (change souvent → couche séparée).
 COPY app ./app

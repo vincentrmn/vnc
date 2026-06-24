@@ -35,6 +35,9 @@ report = [
 viz = [
     "matplotlib>=3.7",
 ]
+pdf = [
+    "pymupdf>=1.24",
+]
 app = [
     "fastapi>=0.110",
     "streamlit>=1.32",
@@ -43,7 +46,7 @@ app = [
 ]
 # Méta-extra : tout le runtime « v1 interne ».
 full = [
-    "zephyr[cao,climate,llm,report,viz,app]",
+    "zephyr[cao,climate,llm,report,viz,app,pdf]",
 ]
 
 [dependency-groups]

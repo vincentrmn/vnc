@@ -35,6 +35,7 @@ from zephyr.schemas import (
 from zephyr.study import compute_study
 from zephyr.web import (
     building_from_form,
+    render_error,
     render_landing,
     render_results,
     render_study_form,
@@ -152,16 +153,21 @@ async def submit_config(
     }
 
     raw = await dxf.read() if dxf is not None else b""
+    name = (dxf.filename or "").lower() if dxf is not None else ""
     if raw:
         from zephyr.geometry import build_building
-        from zephyr.ingestion import parse_dxf
+        from zephyr.ingestion import parse_dxf, parse_pdf
 
-        with tempfile.NamedTemporaryFile(suffix=".dxf", delete=False) as tmp:
+        is_pdf = name.endswith(".pdf") or raw[:5] == b"%PDF-"
+        suffix = ".pdf" if is_pdf else ".dxf"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(raw)
             tmp_path = Path(tmp.name)
-        geo = build_building(
-            parse_dxf(tmp_path), inertia=InertiaClass(inertia), north_angle_deg=north
-        )
+        try:
+            rawvec = parse_pdf(tmp_path) if is_pdf else parse_dxf(tmp_path)
+            geo = build_building(rawvec, inertia=InertiaClass(inertia), north_angle_deg=north)
+        except Exception as exc:  # noqa: BLE001 - surface l'erreur à l'utilisateur
+            return render_error(str(exc))
         # Config + drapeaux en champs cachés (la géométrie éditable est rendue à part).
         cfg_with_flags = {**cfg, **{k: ("on" if v else "") for k, v in flags.items()}}
         hidden = _hidden_fields(cfg_with_flags, None)

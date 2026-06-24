@@ -12,6 +12,7 @@ avant calcul. Les avertissements (`warnings`) signalent ce qui doit être vérif
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -22,19 +23,24 @@ if TYPE_CHECKING:
     from shapely.geometry import Point as _Point
     from shapely.geometry.base import BaseGeometry as _Geom
 
-# Mots-clés (texte/calque) → label de pièce.
+# Mots-clés (texte/calque) → label de pièce (FR + EN).
 _LABEL_KEYWORDS: list[tuple[tuple[str, ...], RoomLabel]] = [
-    (("sejour", "séjour", "living", "salon"), RoomLabel.SEJOUR),
-    (("chambre", "bedroom", "ch.", "chbre"), RoomLabel.CHAMBRE),
+    (("sejour", "séjour", "living", "salon", "lounge"), RoomLabel.SEJOUR),
+    (("chambre", "bedroom", "ch.", "chbre", "bed"), RoomLabel.CHAMBRE),
     (("cuisine", "kitchen"), RoomLabel.CUISINE),
-    (("sdb", "bain", "bath", "douche", "sdd"), RoomLabel.SDB),
+    (("sdb", "bain", "bath", "douche", "sdd", "shower"), RoomLabel.SDB),
     (("wc", "toilet"), RoomLabel.WC),
     (
-        ("couloir", "circulation", "hall", "palier", "degagement", "dégagement"),
+        ("couloir", "circulation", "hall", "palier", "degagement", "dégagement",
+         "corridor", "landing", "stair", "entrance", "mezzanine"),
         RoomLabel.CIRCULATION,
     ),
-    (("bureau", "office"), RoomLabel.BUREAU),
-    (("technique", "local", "garage", "buanderie", "cave", "grenier"), RoomLabel.TECHNIQUE),
+    (("bureau", "office", "study"), RoomLabel.BUREAU),
+    (
+        ("technique", "local", "garage", "buanderie", "cave", "grenier", "attic",
+         "laundry", "pantry", "storage", "utility", "boiler"),
+        RoomLabel.TECHNIQUE,
+    ),
 ]
 
 _WINDOW_KEYWORDS = ("fenetre", "fenêtre", "window", "baie", "ouvr", "vitr")
@@ -54,6 +60,45 @@ def _label_from_text(text: str) -> RoomLabel | None:
         if any(k in low for k in keys):
             return label
     return None
+
+
+# Surface annoncée dans un libellé : « Bedroom 15.10m² », « Cuisine 19,6 m » …
+_AREA_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*m", re.IGNORECASE)
+
+
+def _label_and_area(text: str) -> tuple[RoomLabel | None, float | None]:
+    clean = text.replace("\\P", " ").replace("\\p", " ").strip()
+    m = _AREA_RE.search(clean)
+    return _label_from_text(clean), (float(m.group(1).replace(",", ".")) if m else None)
+
+
+def _rooms_from_labels(raw: RawDXF, hsp_m: float, level: int) -> list[Room]:
+    """Pièces depuis les **libellés** (nom + surface) — repli quand le fichier n'a
+    pas de polygones de pièces (murs en lignes : PDF d'archi, export Home.io…).
+
+    Sans polygone : ni façade ni châssis ni traversant déduits — à compléter dans
+    la validation. Mais on récupère la liste des pièces, leurs types et surfaces.
+    """
+    rooms: list[Room] = []
+    seen: set[tuple[str, float, float, float]] = set()
+    for t in raw.texts:
+        label, area = _label_and_area(t.text)
+        if label is None or area is None or area <= 0:
+            continue
+        key = (label.value, round(area, 1), round(t.position[0], 2), round(t.position[1], 2))
+        if key in seen:
+            continue
+        seen.add(key)
+        rooms.append(
+            Room(
+                id=f"label_{len(rooms)}",
+                label=label,
+                area_m2=area,
+                height_m=hsp_m,
+                level=level,
+            )
+        )
+    return rooms
 
 
 # Secteurs de boussole (convention plan : +x = Est, +y = Nord ; angle math).
@@ -147,7 +192,22 @@ def build_building(
             room_polys.append((poly, pl.layer))
 
     if not room_polys:
-        warnings.append("Aucune pièce reconstructible (polylignes fermées de taille plausible).")
+        # Repli : pas de polygones (murs en lignes / PDF) → pièces depuis les libellés.
+        label_rooms = _rooms_from_labels(raw, hsp_m, level)
+        if label_rooms:
+            total = sum(r.area_m2 for r in label_rooms)
+            warnings.append(
+                f"{len(label_rooms)} pièce(s) lues dans les LIBELLÉS (nom + surface, "
+                f"total {total:.0f} m²) — pas de polygones de pièces dans ce fichier."
+            )
+            warnings.append(
+                "Façades, châssis et traversant NON déduits — à saisir/valider pièce "
+                "par pièce ci-dessous (§2.8)."
+            )
+            return GeometryResult(
+                Building(id=building_id, rooms=label_rooms, inertia_class=inertia), warnings
+            )
+        warnings.append("Aucune pièce reconstructible (ni polygone fermé, ni libellé nom+surface).")
         return GeometryResult(Building(id=building_id, inertia_class=inertia), warnings)
 
     # Emprise du bâtiment (union des pièces) → distingue murs extérieurs/mitoyens.
