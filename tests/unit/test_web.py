@@ -117,6 +117,15 @@ def test_tracing_editor_can_draw_windows() -> None:
     assert "'window'" in h  # mode de tracé de châssis
 
 
+def test_tracing_editor_has_levels() -> None:
+    """§10.5 — multi-niveaux : niveau courant + niveau par pièce (plans/planche)."""
+    h = render_tracing("data:image/png;base64,ABC", 800, 600, 0.0353, "")
+    assert 'id="t-level"' in h  # niveau courant des nouvelles pièces
+    assert "curLevel()" in h  # appliqué au tracé
+    assert "data-lvl=" in h  # réaffectation du niveau par pièce
+    assert "num_levels" in h  # recalculé pour le bâtiment
+
+
 def test_building_from_form_roundtrip() -> None:
     form = {
         "n_rooms": "1",
