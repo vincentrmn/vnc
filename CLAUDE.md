@@ -1,269 +1,272 @@
 # CLAUDE.md — Zéphyr
 
-> Moteur de pré-étude de faisabilité pour l'intégration de la **VNC** (Ventilation Naturelle Contrôlée) dans les bâtiments.
-> Ce fichier est le contexte de référence pour toute session Claude Code sur ce repo. Lis-le en entier avant d'écrire du code.
+> Moteur de **pré-étude de faisabilité** pour l'intégration de la **VNC** (Ventilation Naturelle Contrôlée) dans les bâtiments.
+> Ce fichier est le contexte de référence pour toute session Claude Code sur ce repo. **Lis-le en entier avant d'écrire du code.**
 
-> **Repo** : `/vnc` (racine). **Codename moteur** : Zéphyr. **Un seul repo (monorepo)** — jamais de split front/back.
+> **Repo** : `/vnc` (racine). **Codename moteur** : Zéphyr. **Monorepo** — jamais de split front/back.
+
+> ⚠️ **Ce document a été réécrit après un pivot produit majeur (voir §0).** Si tu trouves de vieux artefacts qui parlent de « 5R1C / STD / verdict », c'est obsolète — c'est le présent fichier qui fait foi.
+
+---
+
+## 0. Pivot produit (à lire en premier)
+
+Le projet a démarré sur l'idée d'un **screen thermique** (modèle 5R1C validé contre STD IDA ICE) rendant un **verdict** go/no-go. **On a abandonné cette approche** au profit d'un produit plus simple, plus honnête et déployable. Décisions actées :
+
+1. **La VNC est éligible sur ~95 % des bâtiments** (le principe est universel ; reste à savoir s'il faut un appoint de chauffage selon l'inertie). Donc un **verdict** binaire n'a quasiment pas de valeur : **simuler finement la température ne sert à rien**.
+2. **On ne fait PAS de STD** : ni 5R1C maison, ni EnergyPlus, ni surrogate ML. **Full déterministe.**
+3. Le produit est : **lire les plans (DXF/PDF) + le CPE → un SCORE d'aptitude VNC (0–100) avec recommandations → un BILAN FINANCIER** (VNC vs VMC double-flux).
+4. Le **seul terme thermique** nécessaire est le **surcoût de chauffage** VNC vs VMC (la VMC récupère la chaleur de l'air extrait, la VNC non) — calculé en **degrés-jours** (déterministe), jamais par simulation.
+5. **Plateforme web** (FastAPI + HTML/CSS/JS) déployée sur **Railway**. Plus de Streamlit comme cible.
+6. **Priorité actuelle : la DÉFINITION du bâtiment** (pièces, châssis, traversant) et la **méthode**. L'interprétation (notes/ROI) est secondaire tant que la définition n'est pas fiable.
+
+Le 5R1C avait été calibré contre une STD réelle (maison Heffingen) à ±2,5 °C — ce travail a confirmé que le déterministe simple tenait, puis on l'a retiré. La pénalité degrés-jours est encore plus robuste (différence de pertes de ventilation).
 
 ---
 
 ## 1. Mission
 
-À partir de plans, de quelques paramètres techniques et du type de projet, Zéphyr doit produire **en quelques minutes** une pré-étude qu'un ingénieur mettait des heures à faire :
+À partir de plans (DXF ou **PDF vectoriel**) et du CPE, Zéphyr produit **en quelques minutes** :
 
-1. un **verdict de faisabilité** VNC (go / no-go / conditionnel) ;
-2. un **ROI chiffré** (VNC vs VMC double-flux), avec fourchettes ;
-3. des **explications** lisibles et un **rapport exportable**.
+1. un **score d'aptitude VNC** (déterministe, 4 critères pondérés) avec des **recommandations** d'amélioration ;
+2. un **bilan financier** chiffré (VNC vs VMC double-flux), avec fourchettes et sensibilité (tornado) ;
+3. le tout via une **plateforme web** où l'ingénieur dépose un plan, **valide/trace la géométrie**, et obtient le résultat.
 
-Deux usages, deux niveaux d'exigence :
-- **Interne (priorité actuelle)** : aller vite, pré-qualifier des bâtiments. Tolérance à l'approximation, tant que l'outil est *honnête sur son incertitude*.
-- **Client (plus tard)** : argumentaire commercial. Relève fortement le curseur QA et la prudence juridique. **Pas le sujet de la v1.**
+Contexte business : on **vend de la VNC** (ouvrants motorisés + capteurs + plateforme BOS). Zéphyr est un **accélérateur interne / outil de pré-qualification**, **jamais une étude opposable**.
 
-Contexte business : on **vend de la VNC** (ouvrants motorisés + capteurs + plateforme BOS). Zéphyr est d'abord un accélérateur interne et un outil de pré-qualification, **jamais une étude opposable**.
+Deux usages : **interne** (priorité, tolérance à l'approximation si honnête sur l'incertitude) et **client** (plus tard, curseur QA relevé — pas le sujet v1).
 
 ---
 
 ## 2. Décisions d'architecture (NON négociables sauf décision explicite)
 
-Ces décisions ont été actées en cadrage. Ne les rouvre pas sans raison.
-
-1. **Déterministe d'abord, ML différé.** Le cœur est un moteur de règles + physique simplifiée. Le surrogate ML (métamodèle de STD) est repoussé en **Phase 5**, conditionné à : (a) un produit déterministe qui marche, (b) un dataset suffisant. Ne commence **pas** par le ML.
-
-2. **Le code mesure, le LLM interprète et explique.** Toute grandeur géométrique ou physique est calculée par du code déterministe. Le LLM sert au *labelling sémantique* (à l'ingestion) et à la *rédaction* (en sortie). **Interdit** : faire « lire » des cotes ou mesurer une surface par un modèle de vision.
-
-3. **Entrée = DXF uniquement (v1).** On exige des plans **vectorisés à l'échelle, au format DXF** (export 1 clic depuis n'importe quel outil CAO). Pas de DWG (format fermé, non lu par ezdxf — éviter l'étape de conversion), pas de raster scanné. L'IFC est un bonus futur (sémantique native), pas un prérequis.
-
-4. **Honnêteté sur l'incertitude > fausse précision.** L'outil affiche des **fourchettes**, pas des points magiques. Un outil biaisé toujours dans le même sens (typiquement trop optimiste sur la VNC, puisqu'on la vend) détruit la confiance. Toute sortie doit être *directionnellement fiable* et exposer ses hypothèses.
-
-5. **Pénalité de chauffage VNC : CALCULÉE, jamais postulée.** Voir §6. En VNC il n'y a **aucun échangeur air-air** → la récupération stricte est ~0 %. MAIS la pénalité *effective* est très inférieure aux pertes pleines grâce à la commande à la demande, à l'inertie et au scheduling. Ce delta est **sorti par le modèle thermique**, pas codé en dur. Si un chiffre de « récupération équivalente » est affiché, c'est une **sortie dérivée et validée**, pas une entrée.
-
-6. **STD = validation, pas entraînement.** On a peu de projets STD (IDA ICE). C'est trop peu pour entraîner un modèle qui généralise, mais c'est le **banc de validation** du screen thermique. Cible : `data/validation/` contient les exports IDA ICE (température par pièce/saison) ; `tests/validation/` vérifie que le modèle 5R1C les reproduit dans une tolérance définie.
-
-7. **Bâtiments cibles : inertie lourde** (dalle béton, murs béton/maçonnés). C'est l'hypothèse par défaut et le cas le plus favorable (stockage de fraîcheur nocturne l'été, amortissement de la pénalité de chauffe l'hiver). Le modèle thermique doit avoir un **nœud de masse** capable de représenter ça.
-
-8. **Human-in-the-loop sur la géométrie.** La reconstruction topologique depuis un DXF est faillible. L'ingénieur valide/corrige la géométrie extraite avant calcul. C'est une étape produit, pas un détail.
+1. **Déterministe, point.** Cœur = règles + calculs déterministes. **Pas de ML, pas de STD, pas de moteur de simulation thermique.** Si un jour on veut des chiffres opposables sur un cas précis, le bon outil serait EnergyPlus + AirflowNetwork — **pas** un modèle maison —, mais ce n'est pas le produit.
+2. **Le code mesure, l'humain donne la topologie, le LLM explique.** Toute grandeur géométrique/physique est calculée par du code déterministe. Le LLM ne sert qu'au *narratif* (rédaction de sortie) et, plus tard, au *labelling* sémantique. **Interdit** : faire « mesurer » une géométrie par un modèle de vision.
+3. **Entrée = vecteur à l'échelle.** **DXF** (ezdxf) **et PDF vectoriel** (PyMuPDF). Un **PDF scanné** (image) est **refusé** — ce serait de la vision. Pas de DWG.
+4. **Reconnaissance auto faillible → tracé assisté.** Les vrais plans (présentation archi) n'ont souvent **ni libellés de pièces ni polygones propres** (murs en lignes doublées + mobilier + hachures, plusieurs plans par planche, échelle non triviale). La reconstruction automatique n'est **pas fiable** dessus. La réponse déterministe honnête : **afficher le plan en fond et laisser l'ingénieur tracer les pièces au clic**, le code mesurant à partir de coordonnées **calibrées** (échelle). C'est l'esprit « code mesure » : l'humain fournit la topologie, le code calcule surfaces/façades.
+5. **Honnêteté sur l'incertitude > fausse précision.** Fourchettes, pas de points magiques. Toujours afficher une sensibilité (tornado). Ne jamais survendre la VNC (on la vend → rester crédible).
+6. **Surcoût de chauffage VNC : CALCULÉ en degrés-jours, jamais postulé.** Voir §6. C'est une *différence de pertes de ventilation* non récupérées par la VNC, atténuée par la **commande à la demande**. Jamais 0, jamais un % de récupération posé en dur.
+7. **Bâtiments cibles : inertie lourde** (béton/maçonnerie) — hypothèse par défaut, lue du CPE.
+8. **Human-in-the-loop sur la géométrie.** L'ingénieur **valide/corrige/trace** la géométrie avant calcul (éditeur web). Étape produit centrale, pas un détail.
 
 ---
 
 ## 3. Glossaire métier
 
-- **VNC** — Ventilation Naturelle Contrôlée. Renouvellement d'air par forces naturelles (tirage thermique + vent) via **ouvrants motorisés** pilotés par capteurs/BOS. C'est notre produit.
-- **VMC DF** — Ventilation Mécanique Contrôlée double-flux. Référence de comparaison. Ventilateurs + **récupérateur de chaleur** (70–90 %).
-- **BOS** — Building Operating System. La plateforme qui pilote ouvrants + capteurs (gateways, edge, supervision cloud). Fourni dans notre offre.
-- **STD** — Simulation Thermique Dynamique. Modélisation horaire annuelle du comportement thermique. Notre outil de référence interne : **IDA ICE**.
-- **CPE** — Certificat de Performance Énergétique (passeport énergétique LU ; équivalent du DPE français). Source de données d'enveloppe.
-- **Free-cooling / rafraîchissement passif** — refroidir le bâtiment par ventilation (souvent nocturne) sans machine frigorifique. Bénéfice clé de la VNC.
-- **Effet de cheminée (tirage)** — débit d'air induit par différence de température et de hauteur. ∝ √(Δh · ΔT).
-- **Degrés-heures (DH)** — cumul horaire des écarts de température à un seuil ; indicateur de surchauffe/free-cooling, purement déterministe à partir d'un fichier météo.
-- **Inertie thermique** — capacité du bâtiment à stocker/déphaser la chaleur. Lourde ici. Modélisée par la capacité `C` du 5R1C.
-- **5R1C** — modèle thermique réduit (5 résistances, 1 capacité) de l'ISO 52016/13790. Léger, horaire, avec nœud de masse. Notre niveau de modélisation Phase 2.
-- **TMY / EPW** — fichier météo typique (Typical Meteorological Year), format EnergyPlus Weather. Entrée du calcul climatique.
+- **VNC** — Ventilation Naturelle Contrôlée : renouvellement d'air par forces naturelles (tirage + vent) via **ouvrants motorisés** pilotés (capteurs/BOS). Notre produit.
+- **VMC DF** — Ventilation Mécanique Contrôlée double-flux : référence de comparaison. Ventilateurs + **récupérateur de chaleur** (70–90 %).
+- **BOS** — Building Operating System : plateforme qui pilote ouvrants + capteurs. Fourni dans l'offre.
+- **CPE** — Certificat de Performance Énergétique (passeport énergétique LU). Source des données d'enveloppe **non lisibles sur un plan**.
+- **Traversant** — pièce/logement balayé(e) par un flux d'air d'une façade à l'autre. (Aujourd'hui : pièce exposée sur ≥ 2 façades. *Question ouverte* : restreindre aux façades **opposées** — voir §11.)
+- **Châssis** — ouvrant (fenêtre). À partir de ~**1,5 m de hauteur**, l'air circule par tirage **mono-façade** (suffisant à défaut de traversant).
+- **Effet de cheminée (tirage)** — débit ∝ √(Δh·ΔT).
+- **Degrés-jours (DJU)** — cumul des écarts de température à un seuil (base 18 °C). Déterministe, depuis l'EPW.
+- **Free-cooling** — rafraîchissement passif par ventilation (souvent nocturne).
+- **TMY / EPW** — fichier météo typique (EnergyPlus Weather).
 
 ---
 
-## 4. Architecture (cf. schéma moteur)
+## 4. Architecture (pipeline déterministe)
 
-Pipeline, des entrées vers les sorties. Couleurs du schéma : teal = code déterministe, corail = cœur physique, gris = données/LLM.
+`ingestion` (DXF/PDF) → `geometry` (topologie → `Building`, **validée/tracée par l'humain**) → `rules` (**score d'aptitude**) & `thermal` (**pénalité chauffage degrés-jours**) → `roi` (économie) → `web` / `report`.
 
-| Module | Rôle | Tech principale |
+| Module | Rôle | Tech |
 |---|---|---|
-| `ingestion` | Parse le DXF → entités CAO brutes (calques, blocs, polylignes, textes) | ezdxf |
-| `geometry` | Reconstruit la **topologie** : pièces (polygones fermés), murs int/ext, ouvrants, orientations, hauteurs. → objet `Building`. Étape de **validation humaine + labelling LLM**. | shapely, networkx |
-| `climate` | Lit le TMY/EPW, calcule degrés-heures, potentiel de free-cooling | parseur EPW (ladybug/pvlib) |
-| `thermal` | Modèle **5R1C** (inertie) → heures de surchauffe + **pénalité de chauffage saisonnière** | numpy |
-| `ventilation` | Débits naturels (tirage + vent), dimensionnement des ouvrants, vérifs géométriques | numpy |
-| `rules` | Moteur déterministe de faisabilité : go/no-go/conditionnel + disqualifiants | code pur |
-| `roi` | TCO/VAN paramétrique VNC vs VMC (cf. §6), sensibilité, fourchettes | numpy, SALib |
-| `llm` | Service transverse : labelling sémantique (Sonnet/Haiku) + narratif (Opus) | SDK Anthropic |
-| `report` | Génère le rapport (verdict + ROI + graphes + explications) | HTML → PDF (weasyprint/playwright) |
-| `schemas` | Modèles de données transverses (pydantic) | pydantic v2 |
+| `schemas` | Contrat pydantic v2 : `Building`/`Room`/`Opening`, `EnvelopeData`, `SiteContext`, `VNCScore`/`ScoreCriterion`, `HeatingPenalty`, `ROIResult`, `StudyResult`, `Verdict` | pydantic |
+| `ingestion` | DXF → entités brutes (`RawDXF` : polylignes, textes, lignes, **blocs INSERT**). **PDF vectoriel** → mêmes entités (`parse_pdf`) + `render_pdf_page` (image de fond pour le tracé). Refuse les PDF scannés. | ezdxf, **pymupdf** |
+| `geometry` | Reconstruit pièces (polygones fermés), labels (texte/calque FR/EN), **façades extérieures géométriques** (union des pièces → mur extérieur vs mitoyen, orientation cardinale, angle du Nord), châssis (lignes/blocs « fenêtre »), traversant. **Repli « pièces depuis les libellés »** (nom + surface) quand pas de polygones. | shapely |
+| `rules` | **Moteur de SCORE** (0–100) pondéré + recommandations : ventilation (traversant/châssis ≥1,5 m), vitrage (vitrée/sol), inertie (CPE), isolation (U). Drapeaux durs de site (pollution, occupation incompatible) → verdict NO_GO. | code pur |
+| `thermal` | **Pénalité de chauffage VNC en degrés-jours** (déterministe). C'est tout. | code pur + climate |
+| `climate` | EPW → degrés-jours/heures, irradiance verticale (géométrie solaire auto-portée). | parseur EPW maison |
+| `roi` | TCO/VAN paramétrique VNC vs VMC (cf. §6), sensibilité (tornado, SALib), fourchettes. | numpy, SALib |
+| `study` | Orchestrateur `compute_study` → `StudyResult` (score + pénalité + ROI). | — |
+| `web` | **Pages HTML du produit** (fonctions pures testables) : landing, formulaire de config, **éditeur de validation** (DXF reconstruit) et **éditeur de tracé** (PDF/plan en fond), page de résultats. + un peu de **JS vanilla** (SVG interactif). | stdlib HTML + JS |
+| `llm` | Service transverse : **narratif** (Opus) en sortie. Labelling sémantique différé. | SDK Anthropic |
+| `report` | Rapport HTML (PDF optionnel WeasyPrint). | HTML → PDF |
+| `viz` | Rendu matplotlib d'un plan reconstruit (PNG / data-URI). | matplotlib |
+| `builders` | `parametric_building` (saisie sans plan). | — |
+| `presets` | Hypothèses par type de projet (débit hygiénique, pondérations score). | — |
 
-**Flux de données (logique, simplifiée) :**
-`Building` (+ `climate`) → `thermal` & `ventilation` → `rules` (faisabilité) & `roi` (économie) → `report`.
-Le LLM n'est **pas** une étape du pipeline : c'est un service appelé à deux endroits (labelling géométrie, narratif rapport).
-
-**Disqualifiants à coder dans `rules`** (chacun avec son seuil et son explication) : bruit extérieur excessif, pollution/pollen, sécurité au RdC, plan trop profond sans traversant possible (profondeur > ~2,5× HSP en simple-face, > ~5× en traversant), surface d'ouvrants insuffisante, absence d'exposition au vent, occupation incompatible.
+**App** (`app/web.py`) : serveur **FastAPI**. Flow : `GET /` (landing) → `GET/POST /etude` (config + upload) → **validation/tracé** → `POST /etude/resultat` (géométrie confirmée via `building_json`) → résultats.
 
 ---
 
 ## 5. Stack technique
 
-- **Langage** : Python 3.11+. Tout l'écosystème nécessaire (CAO, physique, ML futur) est en Python.
-- **Gestion projet** : `pyproject.toml` (uv ou poetry). Lockfile committé.
-- **Données** : `pydantic` v2 partout pour les schémas (validation + typage).
-- **CAO** : `ezdxf` (DXF). `shapely` (géométrie/topologie), `networkx` (adjacences) si besoin.
-- **Climat** : fichiers `.epw`. Parseur léger (ladybug-core ou pvlib).
-- **Thermique** : modèle 5R1C maison en `numpy` (pas de dépendance lourde type EnergyPlus en Phase 2).
-- **ROI / sensibilité** : `numpy`, `SALib` (analyse de sensibilité / tornado).
-- **LLM** : SDK Anthropic. Modèles :
-  - `claude-opus-4-8` — synthèse de faisabilité + narratif (qualité/jugement).
-  - `claude-sonnet-4-6` — labelling sémantique, tâches structurées (par défaut).
-  - `claude-haiku-4-5-20251001` — labelling massif/bon marché si volume.
-  - **Prompt caching** sur le bloc statique (règles, normes, exemples) → jusqu'à 90 % d'économie sur l'input répété. **Batch API** (−50 %) pour le non temps-réel.
-- **API** : `FastAPI`.
-- **UI interne** : `Streamlit` (rapide, pragmatique pour l'interne). Une vraie front React n'arrive que si on passe au client.
-- **Rapport** : HTML templaté → PDF via `weasyprint` (ou `playwright` si besoin de JS/graphes complexes).
-- **Tests** : `pytest`. Dossier dédié `tests/validation/` adossé à `data/validation/` (cas IDA ICE).
-- **Qualité** : `ruff` (lint+format), `mypy` (typage).
+- **Python 3.11+**, gestion par **uv** (lockfile committé).
+- **pydantic v2** partout (schémas).
+- **CAO** : `ezdxf` (DXF), `shapely` (géométrie/topologie). **PDF** : `pymupdf` (fitz) — extraction vectorielle + rendu d'image.
+- **Climat** : parseur `.epw` maison.
+- **ROI / sensibilité** : `numpy`, `SALib`.
+- **Web** : `FastAPI` + `uvicorn` + `python-multipart` (formulaires/upload). Pages rendues en **fonctions pures** retournant du HTML (testables sans serveur, comme `report`) + **JS vanilla** embarqué (aucun framework). `httpx` en dev pour le TestClient.
+- **LLM** : SDK Anthropic. Modèles : `claude-opus-4-8` (narratif), `claude-sonnet-4-6` (labelling), `claude-haiku-4-5-20251001` (labelling volume). Prompt caching sur le bloc statique. **Le narratif n'invente AUCUN chiffre.**
+- **Rapport** : HTML → PDF (`weasyprint`, optionnel).
+- **Viz** : `matplotlib` (backend Agg).
+- **Tests** : `pytest`. **Qualité** : `ruff` (lint+format, line-length 100) + `mypy` (strict). `[tool.ruff.lint.per-file-ignores]` ignore E501 sur `src/zephyr/web/__init__.py` (JS/CSS embarqués).
+- **Extras** : `cao`, `climate`, `llm`, `report`, `viz`, `app`, `pdf`, `full`.
+- **Déploiement** : `Dockerfile` (python:3.11-slim + uv, extras `app cao viz pdf`, bind `0.0.0.0:$PORT`) + `railway.json`. Déployé sur **Railway** depuis `main` (auto-redeploy au push). Lancer en local : `./scripts/run_web.sh`.
 
 ---
 
-## 6. Modèle ROI (spec à implémenter dans `roi`)
+## 6. Modèle ROI (module `roi`)
 
-Porté du comparatif Excel `comparatif_VNC_VMC` (cas Pommerloch, mixte logements + bureaux, LU). **Tous les ratios et hypothèses doivent être des paramètres exposés**, pas des constantes en dur. Presets régionaux prévus (`data/presets/`).
+Porté du comparatif Excel `comparatif_VNC_VMC` (Pommerloch, LU). **Tous les ratios/hypothèses = paramètres exposés**, rien en dur. Inchangé par le pivot.
 
-**Hypothèses bâtiment & financières** (exemples Pommerloch) :
-- surface totale ventilée = nb_logements × surface/logement + surface tertiaire ; volume = surface × HSP.
-- horizon 20 ans ; WACC 3 % ; inflation OPEX/énergie 2,5 % ; prix élec 0,28 €/kWh (Eurostat LU).
+- **CAPEX VMC** : ratios €/m² (centrales+récupérateurs, gaines, pose CVC, régulation, étanchéité, études, commissioning) + aléas.
+- **CAPEX VNC** : quantités (ouvrants motorisés, capteurs 4-en-1, station météo, plateforme BOS, câblage €/m², extraction pièces humides, forfait STD+ingénierie, commissioning/hypercare) + aléas. **Les ouvrants qu'on dimensionne sont un poste de CAPEX** (ce ne sont pas un critère de score).
+- **OPEX an 1** : VMC (énergie ventilateurs = volume×ACH×SFP×heures/1000×prix_élec, maintenance filtres, extraction) ; VNC (énergie actionneurs, maintenance, **abonnement BOS** €/pt/an, extraction, **+ pénalité de chauffage**).
+- **Renouvellement** mi-vie ; **VAN** cumulée actualisée du delta (économie VNC = coûts VMC − coûts VNC) ; **break-even** ; TCO.
+- **Sorties** : fourchettes + **tornado** (SALib) sur prix élec, WACC, nb ouvrants, abonnement BOS, pénalité chauffage.
 
-**CAPEX VMC DF** — par ratios €/m² (centrales+récupérateurs, réseau gaines, pose CVC, régulation, étanchéité, études, commissioning) + 10 % aléas.
-
-**CAPEX VNC** — par quantités : ouvrants motorisés (~1 ratio 1/25 m²), capteurs 4-en-1, station météo, plateforme BOS, câblage €/m², **extraction dédiée pièces humides** (hors VNC), forfait STD + ingénierie, commissioning/hypercare + 10 % aléas.
-
-**OPEX annuel (an 1, avant inflation)** :
-- VMC : énergie ventilateurs = `volume × ACH × SFP × heures / 1000 × prix_élec` ; maintenance €/m²/an (filtres) ; extraction pièces humides.
-- VNC : énergie actionneurs (~200 kWh/an total) ; maintenance ouvrants/capteurs €/m²/an ; **abonnement BOS cloud** €/pt/an × nb_points ; extraction pièces humides.
-
-**Renouvellement** à mi-vie (an 12) : VMC ~25 % du CAPEX, VNC ~15 %.
-
-**Sorties** : VAN cumulée actualisée du delta (VNC − VMC), année de break-even, TCO non actualisé des deux options.
-
-### ⚠️ Correction obligatoire vs l'Excel : la pénalité de chauffage
-L'Excel **ne compte que** l'énergie des ventilateurs, la maintenance et l'abonnement BOS. Il **omet** le coût de chauffage différentiel : la VMC DF **récupère** la chaleur de l'air extrait, la VNC non. En climat de chauffe (LU), c'est plusieurs MWh/an potentiels en faveur de la VMC.
-
-Le module `roi` doit recevoir de `thermal` un **terme OPEX « pénalité de chauffage VNC »** = besoin de chauffage supplémentaire dû à l'absence de récupération, **atténué** par : commande à la demande (débits hygiéniques mini hors occupation), inertie lourde, scheduling saisonnier. Ce terme est **calculé**, jamais un % posé. Sans lui, la VAN de la VNC est artificiellement flatteuse — inacceptable même en interne.
-
-### Avertissements méthodologiques (à reporter dans le rapport)
-- Les ratios €/m² VMC sont des ordres de grandeur marché LU/BE ; à confronter à ≥ 2 devis réels.
-- Aucune valeur résiduelle en fin d'horizon.
-- Résultats sensibles à : prix élec, WACC, nb d'ouvrants, abonnement BOS, pénalité de chauffage. **Toujours afficher une analyse de sensibilité (tornado), pas un point unique.**
-
----
-
-## 7. Le screen thermique (module `thermal`)
-
-- **Pourquoi 5R1C** : c'est le bon niveau d'honnêteté — horaire, léger, avec un **nœud de masse** (capacité `C`) qui capture l'inertie lourde et donc à la fois le free-cooling nocturne et l'atténuation de la pénalité de chauffe. Pas besoin d'EnergyPlus en Phase 2.
-- **Ce qu'il calcule** : heures de surchauffe (DH au-dessus de seuils de confort), bénéfice du night-cooling VNC, et le **delta de besoin de chauffage** VNC vs récupération.
-- **Calibration** : toute évolution du modèle est validée contre `data/validation/` (exports IDA ICE). Si le 5R1C ne reproduit pas les répartitions de température observées dans la tolérance, on recale **avant** de construire dessus. C'est le test qui de-risque le projet au moindre coût.
-- **Sortie « récup équivalente »** (optionnelle, pour la com') : dérivée du delta calculé, exprimée en % pour le lecteur, et validée. Jamais une entrée.
-
----
-
-## 8. Couche LLM (module `llm`)
-
-- **Rôles** (et seulement ceux-là) :
-  1. *Labelling sémantique* à l'ingestion : « cette polyligne fermée est-elle un séjour, une SDB, une circulation ? », « cet ouvrant est-il ouvrable ? ». Modèle : Sonnet 4.6 (ou Haiku si volume).
-  2. *Narratif* en sortie : transformer les résultats chiffrés en explications lisibles. Modèle : Opus 4.8.
-- **Interdits** : mesurer/estimer une géométrie par vision ; inventer des chiffres ; remplacer un calcul déterministe.
-- **Coût** : négligeable. ~1–5 € par étude tout compris, plausiblement < 1 € avec caching + Sonnet/Haiku sur les sous-tâches + batch. Tarifs (standard, par M tokens) : Opus 4.8 5/25 \$ ; Sonnet 4.6 3/15 \$ ; Haiku 4.5 1/5 \$. Le vrai coût du projet est le **dev + la validation**, pas l'inférence.
-- **Caching** : mettre le bloc statique (règles, normes, exemples few-shot) en cache. **Bornes** : `max_tokens` serré, effort adapté à la tâche (pas `xhigh` pour du labelling).
-
----
-
-## 9. Structure du repo (cible)
-
-Racine du repo : `/vnc`. Le layout ci-dessous est la forme **MVP interne** (Phases 0–4). Plus tard, évolution dans le **même repo** vers un monorepo à workspaces (jamais de split front/back) : `packages/zephyr/` (moteur), `apps/api/` (FastAPI), `apps/web/` (front React). Le front est la couche jetable, le moteur est l'actif.
+### ⚠️ Pénalité de chauffage — désormais en degrés-jours (module `thermal`)
+La VMC DF récupère η de la chaleur de l'air extrait, la VNC non. Terme **déterministe** :
 
 ```
-/vnc/                        (racine — projet : Zéphyr)
-├── CLAUDE.md
-├── README.md
-├── pyproject.toml
-├── .env.example              # clés API, chemins — JAMAIS de secret committé
-├── data/
-│   ├── climate/              # fichiers .epw (Luxembourg, etc.)
-│   ├── presets/              # presets coûts/réglementaires régionaux
-│   └── validation/           # exports IDA ICE (gitignored ou anonymisés)
+pertes_ventilation_saison ≈ ρc · Q_hyg · DJU · 24        [Wh]
+pénalité_VNC ≈ η_VMC · pertes · f_commande               [Wh]
+```
+
+avec `f_commande` < 1 l'atténuation par la **commande à la demande**. Branché dans l'OPEX VNC du ROI. Jamais 0, jamais un % posé.
+
+### ⚠️ Limite connue : le ROI ne tient pas à petite échelle
+Les **coûts fixes** (BOS, forfait STD, commissioning ≈ 60 k€) sont calibrés pour du gros tertiaire (Pommerloch, 4200 m²). Sur une maison de 150 m², la VAN est négative et il n'y a pas de break-even. **À recalibrer par taille/typologie** (presets de coûts) — décision métier, à faire.
+
+### Avertissements méthodologiques (reportés dans le rapport)
+Ratios €/m² = ordres de grandeur LU/BE (à confronter à ≥ 2 devis), pas de valeur résiduelle, résultats sensibles → toujours un tornado.
+
+---
+
+## 7. Le score d'aptitude VNC (module `rules`)
+
+**Score (0–100)** = moyenne pondérée de 4 critères, chacun noté en déterministe avec son **barème** (`ScoreCriterion.scale`) et une **recommandation** d'amélioration. Pondérations par défaut (`ScoreWeights`, surchargeables) :
+
+| Critère | Poids | Mesure | Source |
+|---|---|---|---|
+| **Ventilation** | 35 | par surface : traversant = 100, mono-façade **châssis ≥ 1,5 m** = 60, mono-façade bas = 30, aveugle = 0 ; × 0,5 si plan trop profond (> 2,5× HSP simple-face, > 5× traversant) | plans + hauteurs |
+| **Vitrage** | 20 | ratio **surface vitrée / surface au sol**, bande optimale 15–25 % | CPE / saisie |
+| **Inertie** | 25 | masse : lourde 100 / moyenne 60 / légère 25 | **CPE (composition parois)** |
+| **Isolation** | 20 | U mur 0,15→100 … 1,0→0 (70 %) ; Uw 0,8→100 … 2,5→0 (30 %) | CPE |
+
+- Lettres : A ≥ 80, B ≥ 65, C ≥ 50, D ≥ 35, E < 35.
+- **Les ouvrants ne sont PAS un critère** : c'est notre dimensionnement → un coût ROI.
+- **Drapeaux de site** : pollution/pollen élevés et occupation incompatible → **NO_GO** ; bruit, sécurité RdC → réserves (CONDITIONNEL). Le `Verdict` (GO/CONDITIONNEL/NO_GO) devient une **éligibilité** ; le détail est porté par le score.
+
+---
+
+## 8. Définition du bâtiment — DXF, PDF, tracé (priorité actuelle)
+
+C'est **le cœur du travail en cours**. Trois éléments à fiabiliser : **reconnaissance des pièces**, **des châssis**, **des espaces traversants**.
+
+### Données : plans vs CPE
+- **Plan (DXF/PDF) → géométrie** : pièces, **largeur** des baies, façades. Un plan 2D ne porte **pas** les hauteurs ni les matériaux.
+- **CPE / saisie client → le non-lisible** : **hauteur des châssis**, **ratio vitrage**, **composition des parois (inertie/masse)**, **isolation (U)**, perméabilité n50, nature (neuf/réno), angle du Nord. *Aujourd'hui ces champs sont saisis à la main dans le formulaire de config ; parser un CPE PDF automatiquement est un chantier futur (cf. §11).*
+
+### Deux modes selon le fichier
+1. **DXF avec polygones de pièces propres** → reconstruction auto (`build_building`) : pièces, façades extérieures **géométriques** (union → extérieur vs mitoyen, orientation, angle du Nord), châssis (lignes/blocs), traversant → **éditeur de validation interactif** (SVG cliquable : on corrige label/façades/châssis, le traversant se recalcule, châssis affichés sur la façade).
+2. **PDF (ou DXF sans polygones)** → **éditeur de TRACÉ** : plan rendu en image de fond, l'ingénieur **trace les pièces au clic**, le code calcule la surface réelle via l'**échelle calibrée** (par défaut A0 + 1:50 ; sinon **calibrage au clic d'une cote connue**). Façades et label par pièce. → produit le même `Building`.
+
+Les deux éditeurs produisent un **`building_json`** (polygones en mètres) posté à `POST /etude/resultat`.
+
+### Réalité apprise sur un vrai plan (PDF A0 d'archi, 1:50)
+~500 000 segments vectoriels (murs doublés + mobilier + hachures + cotes), **aucun libellé pièce+surface**, 3 plans/planche, 1 image (logo). → **auto-reconstruction non fiable**, mais on **affiche le plan** et on **calcule l'échelle** (A0 = 1189 mm → 0,3528 mm/pt → **0,01764 m/pt à 1:50**) automatiquement. Le **tracé** est la bonne voie universelle.
+
+---
+
+## 9. Structure du repo
+
+```
+/vnc/
+├── CLAUDE.md  README.md  pyproject.toml  uv.lock
+├── Dockerfile  railway.json  .dockerignore        # déploiement Railway
+├── scripts/        run_web.sh, make_sample_dxf.py
+├── examples/       plan_exemple.dxf                # DXF d'exemple (6 pièces)
+├── data/           climate/ (EPW), presets/, validation/ (gitignore sauf *.example.json)
 ├── src/zephyr/
-│   ├── schemas/              # StudyInput, Building, Room, Opening, ThermalResult, ROIResult, StudyResult
-│   ├── ingestion/            # DXF (ezdxf)
-│   ├── geometry/             # topologie (shapely): pièces, murs, ouvrants, orientation
-│   ├── climate/              # EPW, degrés-heures, free-cooling
-│   ├── thermal/              # 5R1C, surchauffe, pénalité de chauffage
-│   ├── ventilation/          # tirage + vent, dimensionnement ouvrants
-│   ├── rules/                # moteur de faisabilité + disqualifiants
-│   ├── roi/                  # TCO/VAN paramétrique (cf. §6)
-│   ├── llm/                  # client Anthropic, prompts, caching
-│   └── report/               # HTML → PDF
-├── app/                      # FastAPI + UI Streamlit interne
-├── tests/
-│   ├── unit/
-│   └── validation/           # tests adossés à data/validation (IDA ICE)
-└── notebooks/                # exploration, calibration thermique
+│   ├── schemas/    building.py, study.py, results.py
+│   ├── ingestion/  DXF + PDF (parse_dxf, parse_pdf, render_pdf_page)
+│   ├── geometry/   reconstruction + façades + libellés
+│   ├── climate/    EPW, degrés-jours, solaire
+│   ├── thermal/    pénalité chauffage degrés-jours
+│   ├── rules/      moteur de score
+│   ├── roi/        TCO/VAN + sensibilité
+│   ├── study.py    compute_study
+│   ├── web/        pages HTML + JS (landing, config, validation, tracé, résultats)
+│   ├── viz/        rendu plan matplotlib
+│   ├── llm/        narratif Opus
+│   ├── report/     rapport HTML/PDF
+│   ├── builders.py presets.py
+├── app/            web.py (FastAPI), main.py (ancien Streamlit, secondaire)
+└── tests/unit/  tests/validation/
 ```
 
 ---
 
-## 10. Roadmap (ordre de construction)
+## 10. Roadmap
 
-| Phase | Contenu | Estimation |
-|---|---|---|
-| **0** | Cadrage : schéma d'entrée, jeu de règles avec un thermicien, presets, disclaimers | ~1 sem |
-| **1** | `roi` paramétré (port Excel + **terme pénalité chauffage**) + sensibilité/fourchettes + **test de calibration thermique** sur 1-2 cas IDA ICE | qq jours–1 sem |
-| **2** | `climate` + `thermal` (5R1C) + `ventilation` + `rules`. **Cœur technique du MVP.** | ~2–4 sem |
-| **3** | `ingestion` + `geometry` + **UI de validation humaine**. La phase difficile, mais bornée par DXF. | ~3–6 sem |
-| **4** | `llm` (narratif) + `report` + UI Streamlit interne | ~2–4 sem |
-| **5 (différé)** | Surrogate ML de STD : générateur paramétrique (EnergyPlus) → dataset → métamodèle → validation contre IDA ICE | ~4–6 mois, track séparé |
+**Fait cette session** : pivot déterministe ; score + recommandations ; pénalité degrés-jours ; bilan financier détaillé ; plateforme web (landing/config/validation/résultats) ; déploiement Railway ; ingestion **PDF vectoriel** + rejet scans ; reconnaissance géométrique des **façades/traversant** + angle du Nord + blocs ; repli **pièces depuis libellés** ; **éditeur de validation interactif** (SVG) ; **éditeur de tracé** (plan en fond, calibrage, surfaces réelles).
 
-**MVP interne utile** ≈ Phases 0–2 + UI fine, ~4–7 semaines. La v1 « montrable » (jusqu'à Phase 4) ≈ 3–5 mois. Le temps écoulé est dominé par les **décisions métier, l'itération sur le parsing DXF et la validation** — pas par la vitesse d'écriture du code.
-
-**Première brique à attaquer** : Phase 1 — `roi` propre + le test de calibration thermique. C'est le test le moins cher qui dit si l'approche déterministe tient avant qu'on construise tout dessus.
+**Prochaines étapes (priorité = définition du bâtiment, puis méthode)** — cf. §11 pour les questions ouvertes :
+1. **Zoom/pan** dans l'éditeur de tracé (plan A0 = grand, tracé précis impossible sans zoom).
+2. **Tracer les châssis sur le plan** (clic-glisser pour la longueur sur la façade).
+3. **Unifier les entrées** : proposer le **tracé aussi pour les DXF** (rendu DXF→image de fond) → un seul flux universel ; garder la reconstruction auto quand le DXF est propre.
+4. **CPE** : clarifier/automatiser ce qu'on en tire (U, inertie, vitrage) — éventuellement parser un CPE PDF.
+5. **Multi-niveaux / plusieurs plans par planche** (l'A0 a RdC + rez-de-jardin + étage).
+6. **Portes intérieures** → chemins d'air pour un traversant « réel » (pas juste ≥ 2 façades).
+7. **Recalibrer les coûts ROI** par taille/typologie (cf. §6, limite petite échelle).
 
 ---
 
-## 11. Garde-fous — ce qu'il NE faut PAS faire
+## 11. Garde-fous & questions ouvertes
 
-- ❌ Faire mesurer une géométrie par un modèle de vision. Le code mesure (DXF → shapely).
-- ❌ Coder un « % de récupération » de la VNC en dur. Il est calculé par `thermal`.
-- ❌ Démarrer le surrogate ML avant un produit déterministe qui marche **et** un dataset suffisant.
+**Garde-fous (ne pas violer) :**
+- ❌ Faire **mesurer** une géométrie par un modèle de vision. Le code mesure (DXF/PDF vectoriel → shapely ; ou clics calibrés du tracé). Afficher un plan raster pour que l'**humain** trace = OK ; en **déduire** des mesures par CV = NON.
+- ❌ Accepter un **PDF scanné** comme source de mesure auto. (Le tracé manuel dessus resterait possible, mais ce n'est pas la cible v1.)
+- ❌ STD / 5R1C / EnergyPlus / ML dans le produit. Pénalité chauffage = degrés-jours.
+- ❌ Coder un « % de récupération » VNC en dur, ou une pénalité = 0.
 - ❌ Afficher un point unique de ROI sans fourchette/sensibilité.
-- ❌ Présenter l'outil comme une étude opposable ou « compliant ». C'est une pré-étude / aide à la décision.
-- ❌ Committer des plans, CPE ou exports STD réels (données clients sensibles). `data/validation/` et `data/` sensibles → gitignore ou anonymisation.
-- ❌ Accepter du DWG ou du raster en v1. DXF vectoriel uniquement.
-- ❌ Laisser un chiffre thermique non validé contre IDA ICE partir dans un rapport quand un cas de validation existe.
+- ❌ Présenter l'outil comme une étude opposable.
+- ❌ Committer des plans / CPE / fichiers clients (sensibles). `data/validation/` gitignore sauf `*.example.json` distillés/anonymisés. Les fichiers uploadés par l'utilisateur (DXF/PDF de test) ne sont pas committés.
+- ❌ Le **narratif LLM** n'invente aucun chiffre (reformule les valeurs fournies).
+- ❌ Faire apparaître l'identifiant de modèle (`claude-opus-4-8`, etc.) dans un commit/PR/code — réponses de chat uniquement.
+
+**Questions ouvertes (à trancher avec l'utilisateur) :**
+- **Traversant = façades opposées ?** Aujourd'hui `Room.is_through` = ≥ 2 façades distinctes. Une pièce d'angle (N + W, perpendiculaires) est donc comptée traversante — l'utilisateur a relevé que c'est discutable, puis a préféré laisser tel quel. À reconsidérer (seuil ≈ ≥ 135° entre façades).
+- **Échelle PDF** : par défaut A0 + 1:50. Généraliser (détection format, choix d'échelle, calibrage obligatoire si ambigu).
+- **CPE** : entrée manuelle vs parsing automatique.
 
 ---
 
-## 12. Definition of Done — MVP interne
+## 12. Definition of Done — produit interne
 
-- `roi` reproduit le comparatif Excel **+ le terme de pénalité de chauffage**, avec fourchettes et tornado.
-- `thermal` (5R1C) reproduit les répartitions de température IDA ICE de `data/validation/` dans la tolérance définie.
-- `rules` rend un verdict go/no-go/conditionnel justifié, avec disqualifiants explicites.
-- Un ingénieur peut uploader un DXF, valider/corriger la géométrie, et obtenir verdict + ROI + rapport.
-- Toute sortie expose ses hypothèses et son incertitude. Aucun chiffre orphelin non sourcé.
+- Un ingénieur dépose un **DXF ou un PDF**, **valide ou trace** la géométrie (pièces, châssis, façades, traversant), et obtient **score + recommandations + bilan financier**.
+- La **définition du bâtiment** est fiable (surfaces justes via échelle calibrée ; façades/traversant corrects ou corrigeables).
+- Le **surcoût de chauffage** est calculé (degrés-jours), branché au ROI.
+- Toute sortie expose ses **hypothèses** et son **incertitude** (fourchettes, tornado). Aucun chiffre orphelin.
+- La plateforme tourne en local (`run_web.sh`) **et** sur Railway.
 
 ---
 
-## 13. Bootstrap — premier scaffold (à exécuter par Claude Code dans `/vnc`)
+## 13. Conventions de dev (pour Claude Code)
 
-Ordre conseillé pour la toute première session. Cette conversation n'est pas en mémoire : ce qui suit *est* le plan de démarrage.
+- **Qualité avant commit** : `uv run ruff check .` , `uv run mypy` , `uv run pytest` doivent passer. Pour les tests web/PDF : `uv run --extra app --extra cao --extra viz --extra pdf pytest`.
+- **JS embarqué** : vanilla, validé par `node --check` (extraire la constante `_*_JS` dans un fichier `.js` et vérifier la syntaxe — on ne peut pas tester le navigateur ici). Construire le SVG via `createElementNS` (pas `innerHTML`), donner une **hauteur explicite** au `<svg>`.
+- **Pages web = fonctions pures** retournant du HTML (testables) ; le serveur (`app/web.py`) ne fait que router. La géométrie transite en `building_json` (sérialisation `Building`).
+- **Branche de dev** dédiée ; **merge fast-forward dans `main`** pour déclencher le redeploy Railway (workflow validé avec l'utilisateur).
+- **Tester en réel** : penser aux dépendances runtime (ex. `python-multipart` est OBLIGATOIRE pour FastAPI). Lancer le vrai serveur (uvicorn) + curl/TestClient quand on touche au web.
+- Commits en français, footers requis :
+  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` et `Claude-Session: …`.
 
-### 13.1 Squelette du repo
-Créer :
-- `pyproject.toml` (Python 3.11+). Runtime : `ezdxf`, `shapely`, `numpy`, `pydantic>=2`, `pandas`, `SALib`, `fastapi`, `streamlit`, `anthropic`, `weasyprint`. Dev : `pytest`, `ruff`, `mypy`. Committer le lockfile.
-- `src/zephyr/` avec un sous-package par module (`schemas`, `ingestion`, `geometry`, `climate`, `thermal`, `ventilation`, `rules`, `roi`, `llm`, `report`), chacun avec `__init__.py` + un stub (signatures typées, docstring FR, `raise NotImplementedError`).
-- `app/main.py` : stub Streamlit (upload DXF + formulaire + zone résultats, branché sur rien pour l'instant).
-- `data/climate/`, `data/presets/`, `data/validation/` (avec `.gitkeep`).
-- `tests/unit/`, `tests/validation/`.
-- `.gitignore` : `data/validation/`, `.env`, `__pycache__/`, `.venv/`, `node_modules/`, `.claude/worktrees/`, exports STD bruts (`*.idm`, etc.). **Les fichiers STD/CPE clients ne sont JAMAIS committés.**
-- `.env.example` : `ANTHROPIC_API_KEY=`, chemins de données.
-- `README.md` minimal qui pointe vers ce CLAUDE.md.
+---
 
-### 13.2 Schémas (`schemas`) — à écrire en premier
-Pydantic v2 : `Opening`, `Room`, `Building` (géométrie + inertie + orientations), `StudyInput` (type de projet, paramètres, CPE), `ThermalResult` (heures de surchauffe, pénalité de chauffage), `ROIResult`, `StudyResult` (agrégat). C'est le contrat transverse.
+## 14. Journal des décisions (session de pivot)
 
-### 13.3 Module `roi` — la première vraie brique
-Porter le modèle de §6 en module paramétré :
-- Toutes les hypothèses/ratios = paramètres (presets par défaut LU/Pommerloch), **rien en dur**.
-- Implémenter : CAPEX VMC (ratios €/m²), CAPEX VNC (quantités), OPEX an 1, inflation, actualisation (WACC), renouvellement an 12, VAN cumulée, break-even.
-- **Brancher le terme `heating_penalty_eur_per_year`** dans l'OPEX VNC. Tant que `thermal` n'existe pas, le passer en paramètre (valeur conservatrice explicite) — **jamais 0, jamais un % de récup posé en dur**.
-- Sorties avec **fourchettes + analyse de sensibilité (tornado, SALib)** sur : prix élec, WACC, nb d'ouvrants, abonnement BOS, pénalité chauffage.
-- Test de non-régression : reproduire les chiffres clés de l'Excel (pénalité = 0 pour comparer au modèle d'origine), puis montrer l'écart une fois le terme activé.
+Chronologie des choix actés avec l'utilisateur (pour qu'une nouvelle session ne les rouvre pas par erreur) :
 
-### 13.4 Calibration thermique — le test qui de-risque
-- Déposer 2-3 cas IDA ICE **anonymisés** dans `data/validation/` : le couple **entrées + sorties** (géométrie / enveloppe / apports / ventilation / météo + températures par pièce-saison).
-- `tests/validation/` rejouera (quand `thermal` existera) le 5R1C sur ces cas avec une tolérance définie. Poser le harnais + un cas de référence dès maintenant.
-- C'est le test le moins cher qui dit si l'approche déterministe tient. Le faire tôt.
-
-### 13.5 Suite
-Phase 2 (`climate` → `thermal` 5R1C → `ventilation` → `rules`), puis Phase 4 (`llm` narratif + `report` + UI). Cf. §10. **Ne pas démarrer le surrogate ML (Phase 5).**
+1. **Abandon STD/5R1C** : la VNC est ~universellement éligible → pas de verdict thermique, un **score**. Pas de simulation (ni maison, ni EnergyPlus, ni ML).
+2. **Pénalité chauffage** : remplacée par un calcul **degrés-jours**.
+3. **Produit** : plateforme qui lit plans + CPE → **score (4 critères : ventilation/vitrage/inertie/isolation) + recos + ROI**.
+4. **Critère ventilation** : traversant idéal, sinon **châssis ≥ 1,5 m** (tirage mono-façade). **Les ouvrants = notre dimensionnement → coût ROI**, pas un critère.
+5. **Web** : FastAPI + pages HTML pures + JS vanilla. Streamlit relégué. Déploiement **Railway** (Dockerfile + railway.json).
+6. **Entrées** : DXF **et PDF vectoriel** (déterministe, zéro vision) ; **PDF scanné refusé**.
+7. **Reconstruction auto faillible** sur vrais plans → **éditeur de tracé** (plan en fond, clics calibrés). Validé sur un vrai PDF A0 1:50.
+8. **Focus** : d'abord la **définition du bâtiment** (pièces, châssis, traversant) et la **méthode** ; l'interprétation (notes/ROI) ensuite.
