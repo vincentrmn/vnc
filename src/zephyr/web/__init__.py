@@ -452,6 +452,7 @@ _LABEL_COLORS: dict[str, str] = {
 _VALIDATION_JS = """
 var B = window.BUILDING, COLORS = window.LABEL_COLORS || {};
 var ORS = ["N","NE","E","SE","S","SW","W","NW"];
+var ORDIR = {N:[0,1],NE:[0.7,0.7],E:[1,0],SE:[0.7,-0.7],S:[0,-1],SW:[-0.7,-0.7],W:[-1,0],NW:[-0.7,0.7]};
 var LABELS = ["sejour","chambre","cuisine","sdb","wc","circulation","bureau","technique","autre"];
 var sel = -1;
 var lvl = Math.min.apply(null, B.rooms.map(function(r){return r.level;}));
@@ -486,17 +487,32 @@ function render(){
   B.rooms.forEach(function(r,i){
     if(r.level!==lvl || !r.polygon || r.polygon.length<3) return;
     var pts = r.polygon.map(function(p){return p[0]+','+fy(p[1]);}).join(' ');
+    var thru = through(r);
+    var stroke = (i===sel) ? '#08313a' : (thru ? '#0e9aa7' : '#999');
+    var sw = (i===sel) ? 0.14 : (thru ? 0.10 : 0.05);
     var pg = svgEl('polygon', {points:pts, fill:(COLORS[r.label]||'#eee'),
-      stroke:(i===sel?'#0e9aa7':'#444'), 'stroke-width':(i===sel?0.12:0.05)});
+      stroke:stroke, 'stroke-width':sw});
     pg.style.cursor = 'pointer';
     pg.addEventListener('click', (function(idx){ return function(){ sel=idx; render(); panel(); }; })(i));
     svg.appendChild(pg);
-    var cx=0, cy=0; r.polygon.forEach(function(p){cx+=p[0]; cy+=fy(p[1]);}); cx/=r.polygon.length; cy/=r.polygon.length;
-    var t1 = svgEl('text', {x:cx, y:cy, 'text-anchor':'middle', 'font-size':0.45, fill:'#222'});
+    var rxs = r.polygon.map(function(p){return p[0];}), rys = r.polygon.map(function(p){return p[1];});
+    var dminx=Math.min.apply(null,rxs), dmaxx=Math.max.apply(null,rxs);
+    var dminy=Math.min.apply(null,rys), dmaxy=Math.max.apply(null,rys);
+    var dcx=(dminx+dmaxx)/2, dcy=(dminy+dmaxy)/2, rw=dmaxx-dminx, rh=dmaxy-dminy;
+    var t1 = svgEl('text', {x:dcx, y:fy(dcy), 'text-anchor':'middle', 'font-size':0.45, fill:'#222'});
     t1.textContent = r.label;
-    var t2 = svgEl('text', {x:cx, y:cy+0.5, 'text-anchor':'middle', 'font-size':0.32, fill:'#666'});
+    var t2 = svgEl('text', {x:dcx, y:fy(dcy)+0.5, 'text-anchor':'middle', 'font-size':0.32, fill:'#666'});
     t2.textContent = fmt(r.area_m2) + ' m\\u00b2';
     svg.appendChild(t1); svg.appendChild(t2);
+    // Façades extérieures : lettres d'orientation placées vers la bonne direction.
+    (r.exterior_wall_orientations||[]).forEach(function(o){
+      var d = ORDIR[o]; if(!d) return;
+      var mx = dcx + d[0]*0.40*rw, my = dcy + d[1]*0.40*rh;
+      var tm = svgEl('text', {x:mx, y:fy(my), 'text-anchor':'middle', 'font-size':0.34,
+        fill:'#0e9aa7', 'font-weight':'700'});
+      tm.textContent = o;
+      svg.appendChild(tm);
+    });
   });
   syncHidden();
 }
