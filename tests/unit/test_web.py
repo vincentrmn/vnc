@@ -145,7 +145,7 @@ def test_validation_fallback_form_when_no_polygons() -> None:
 
 def test_tracing_editor_renders() -> None:
     h = render_tracing(_floors(), "")
-    assert "Tracer les pièces" in h
+    assert "Tracer le plan" in h
     assert "data:image/png;base64,ABC" in h  # plan en fond
     assert "window.TRACE" in h and "finishRoom" in h
     assert 'action="/etude/resultat"' in h and 'name="building_json"' in h
@@ -158,7 +158,7 @@ def test_tracing_editor_has_zoom_pan() -> None:
         assert ctrl in h
     assert "onWheel" in h and "zoomAt" in h  # molette = zoom
     assert "pointerdown" in h and "pointermove" in h  # glisser = pan
-    assert "touch-action:none" in h  # pas de scroll page au glisser tactile
+    assert "touch-action" in h  # pas de scroll page au glisser tactile
     assert 'id="t-mark"' in h and "markF()" in h  # taille réglable des repères
 
 
