@@ -235,25 +235,49 @@ input[type=file]::file-selector-button:hover { background: var(--teal); color: #
 .seg label + label { border-left: 1px solid var(--teal); }
 .seg label.on { background: var(--teal); color: #fff; }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
-/* Éditeur de tracé : grand plan collant à gauche, palette + liste à droite */
-.trace-layout { display: grid; grid-template-columns: 1fr 340px; gap: 1rem; align-items: start; }
+/* Éditeur de tracé : grand plan (Konva) collant à gauche, palette + liste à droite */
+.trace-layout { display: grid; grid-template-columns: 1fr 360px; gap: 1rem; align-items: start; }
 .trace-canvas-wrap { position: sticky; top: .6rem; }
-.trace-canvas-wrap #plan { width: 100%; height: 84vh; display: block; background: #fff;
-  border: 1px solid var(--line); border-radius: .6rem; touch-action: none; cursor: grab; }
-.palette { position: sticky; top: .6rem; display: flex; flex-direction: column; gap: .45rem;
-  background: var(--card); border: 1px solid var(--line); border-radius: .7rem; padding: .8rem; }
-.palette .btn { width: 100%; text-align: left; padding: .5rem .7rem; }
-.palette .row { display: flex; gap: .35rem; align-items: center; }
-.palette .row .btn { width: auto; flex: 1; text-align: center; }
+#stage { width: 100%; height: 84vh; background: #fff; border: 1px solid var(--line);
+  border-radius: .6rem; overflow: hidden; touch-action: none; }
+.trace-side { position: sticky; top: .6rem; max-height: calc(100vh - 1.2rem);
+  overflow-y: auto; display: flex; flex-direction: column; gap: .8rem; padding-right: .25rem; }
+.palette { display: flex; flex-direction: column; gap: .6rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: .7rem; padding: .9rem; }
+.pgroup { display: flex; flex-direction: column; gap: .4rem; padding-bottom: .6rem;
+  border-bottom: 1px solid var(--line); }
+.pgroup:last-of-type { border-bottom: 0; padding-bottom: 0; }
+.ptitle { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); font-weight: 700; }
+.palette .btn { width: 100%; text-align: center; padding: .5rem .7rem; }
+.palette .row { display: flex; gap: .35rem; }
+.palette .row .btn { flex: 1; }
 .palette .lbl { font-size: .82rem; font-weight: 600; color: var(--muted); }
-.palette hr { border: 0; border-top: 1px solid var(--line); margin: .25rem 0; width: 100%; }
-.palette #hint { color: #e8590c; font-weight: 600; font-size: .85rem; min-height: 1.1rem; }
-.trace-side .card { margin: .4rem 0; }
-.trace-side > #roomlist { margin-top: .8rem; max-height: 60vh; overflow: auto; padding-right: .2rem; }
+.palette #hint { color: #e8590c; font-weight: 600; font-size: .85rem; min-height: 1rem; }
+/* Carte pièce dans la liste */
+.room-card { background: var(--card); border: 1px solid var(--line); border-radius: .6rem;
+  padding: .6rem .7rem; margin: .45rem 0; }
+.room-card.sel { outline: 2px solid var(--teal); }
+.room-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+.room-head select { padding: .2rem; }
+.room-no { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem;
+  background: var(--teal); color: #fff; border-radius: 50%; font-size: .8rem; font-weight: 700; }
+.room-head .grow { flex: 1; }
+.nivlbl { font-size: .78rem; color: var(--muted); }
+.room-sec { margin-top: .5rem; }
+.room-seclbl { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); font-weight: 700; margin-bottom: .25rem; }
+.wintab { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.wintab th { text-align: left; font-weight: 600; color: var(--muted); font-size: .72rem; padding: .1rem .2rem; }
+.wintab td { padding: .12rem .2rem; }
+.iconbtn { border: 1px solid var(--line); background: #fff; color: var(--muted); cursor: pointer;
+  border-radius: .35rem; padding: .1rem .4rem; font-size: .8rem; }
+.iconbtn:hover { color: var(--coral); border-color: var(--coral); }
+.btn.mini { padding: .25rem .6rem; font-size: .82rem; margin-top: .4rem; }
 @media (max-width: 980px) {
   .trace-layout { grid-template-columns: 1fr; }
-  .trace-canvas-wrap, .palette { position: static; }
-  .trace-canvas-wrap #plan { height: 62vh; }
+  .trace-canvas-wrap, .trace-side { position: static; max-height: none; }
+  #stage { height: 62vh; }
 }
 """
 
@@ -825,252 +849,265 @@ document.addEventListener('DOMContentLoaded', function(){ render(); panel(); });
 
 # Éditeur de TRACÉ : plan en fond + tracé des pièces au clic (vanilla JS).
 _TRACING_JS = """
-var T=window.TRACE, floors=T.floors, fi=0, multi=floors.length>1, SVGNS='http://www.w3.org/2000/svg';
-var mpp=floors[0].mpp, H=floors[0].h;  // échelle/hauteur du niveau courant (sync via useFloor)
-function F(){ return floors[fi]; }
-function useFloor(){ mpp=F().mpp; H=F().h; }
-var inertiaEl=document.querySelector('input[name=inertia]');
-var B={id:'pdf', name:null, rooms:[], inertia_class:(inertiaEl?inertiaEl.value:'lourde'), num_levels:1, total_height_m:null, location:null, epw_path:null};
+var T=window.TRACE, floors=T.floors, fi=0, multi=floors.length>1;
 var ORS=["N","NE","E","SE","S","SW","W","NW"];
 var ORDIR={N:[0,1],NE:[0.7,0.7],E:[1,0],SE:[0.7,-0.7],S:[0,-1],SW:[-0.7,-0.7],W:[-1,0],NW:[-0.7,0.7]};
 var LABELS=["sejour","chambre","cuisine","sdb","wc","circulation","bureau","technique","autre"];
 var COLORS={sejour:"#cfe8cf",chambre:"#cfe0f5",cuisine:"#f5e6cf",sdb:"#cfeef0",wc:"#e6cff5",circulation:"#eeeeee",bureau:"#f5cfd6",technique:"#dddddd",autre:"#f0f0f0"};
-var sel=-1, mode='idle', draft=[], calib=[], winDrag=null;
-var lastSash=1.5;  // dernière hauteur de châssis saisie → proposée pour les suivants
-// Vue (viewBox) pour zoom/pan ; coordonnées en px-image du niveau courant.
-var view={x:0, y:0, w:floors[0].w, h:floors[0].h};
-function applyView(){ svg().setAttribute('viewBox', view.x+' '+view.y+' '+view.w+' '+view.h); }
-// Charge le fond + l'échelle du niveau courant et réinitialise la vue.
-function applyFloor(){
-  useFloor(); var f=F(), img=document.getElementById('planimg');
-  if(img){ img.setAttribute('href', f.image_uri); img.setAttributeNS('http://www.w3.org/1999/xlink','href', f.image_uri); img.setAttribute('width', f.w); img.setAttribute('height', f.h); }
-  view={x:0, y:0, w:f.w, h:f.h};
+var inertiaEl=document.querySelector('input[name=inertia]');
+var B={id:"pdf", name:null, rooms:[], inertia_class:(inertiaEl?inertiaEl.value:"lourde"), num_levels:1, total_height_m:null, location:null, epw_path:null};
+var sel=-1, mode="idle", draft=[], calib=[], winDrag=null, lastSash=1.5;
+var stage, bgLayer, shapeLayer, bg=null;
+function F(){ return floors[fi]; }
+function MPP(){ return F().mpp; }
+function HH(){ return F().h; }
+function toM(x,y){ return [x*MPP(), (HH()-y)*MPP()]; }
+function toPx(mx,my){ return [mx/MPP(), HH()-my/MPP()]; }
+function area(poly){ var s=0; for(var i=0;i<poly.length;i++){ var a=poly[i], b=poly[(i+1)%poly.length]; s+=a[0]*b[1]-b[0]*a[1]; } return Math.abs(s)/2; }
+function through(r){ return new Set(r.exterior_wall_orientations).size>=2; }
+function fmt(n){ return Math.round(n*10)/10; }
+function centroidM(r){ var x=0,y=0,n=r.polygon.length||1; r.polygon.forEach(function(p){x+=p[0];y+=p[1];}); return [x/n,y/n]; }
+function nearestOri(dx,dy){ var best="N",bd=-1e9,L=Math.hypot(dx,dy)||1; dx/=L; dy/=L; ORS.forEach(function(o){ var d=ORDIR[o],dot=dx*d[0]+dy*d[1]; if(dot>bd){bd=dot;best=o;} }); return best; }
+function sc(p){ return p/stage.scaleX(); }   // px ecran -> unites contenu (taille constante)
+function pm(m){ return m/MPP(); }            // metres -> px-image (taille physique)
+function markF(){ var e=document.getElementById("t-mark"); return e?(parseFloat(e.value)||1):1; }
+
+function fitStage(){
+  var c=stage.container(); stage.width(c.clientWidth); stage.height(c.clientHeight);
+  var f=F(), s=Math.min(stage.width()/f.w, stage.height()/f.h)*0.97;
+  if(!(s>0)){ s=1; }
+  stage.scale({x:s,y:s});
+  stage.position({x:(stage.width()-f.w*s)/2, y:(stage.height()-f.h*s)/2});
 }
+function loadBg(){
+  var f=F(), im=new Image();
+  im.onload=function(){ if(bg){bg.destroy();} bg=new Konva.Image({image:im,x:0,y:0,width:f.w,height:f.h,listening:false}); bgLayer.add(bg); bgLayer.batchDraw(); };
+  im.src=f.image_uri;
+}
+function applyFloor(){ if(bg){bg.destroy();bg=null;} loadBg(); fitStage(); }
 function goToLevel(lv){ for(var k=0;k<floors.length;k++){ if(floors[k].level===lv){ fi=k; applyFloor(); return true; } } return false; }
 function floorbar(){
-  var bar=document.getElementById('floorbar'); if(!bar) return;
-  if(!multi){ bar.innerHTML=''; return; }
-  bar.innerHTML=floors.map(function(f,k){return '<button type="button" class="'+(k===fi?'active':'')+'" data-fi="'+k+'">Niveau '+f.level+'</button>';}).join('');
-  Array.prototype.forEach.call(bar.querySelectorAll('button'),function(b){b.onclick=function(){fi=parseInt(b.dataset.fi);sel=-1;applyFloor();render();};});
+  var bar=document.getElementById("floorbar"); if(!bar){ return; }
+  if(!multi){ bar.innerHTML=""; return; }
+  bar.innerHTML=floors.map(function(f,k){ return '<button type="button" class="'+(k===fi?"active":"")+'" data-fi="'+k+'">Niveau '+f.level+"</button>"; }).join("");
+  Array.prototype.forEach.call(bar.querySelectorAll("button"),function(b){ b.onclick=function(){ fi=parseInt(b.dataset.fi); sel=-1; applyFloor(); render(); }; });
 }
-function px(m){ return m/mpp; }  // mètres → px-image : tailles physiques, lisibles au zoom
-function markF(){ var e=document.getElementById('t-mark'); return e?(parseFloat(e.value)||1):1; }
-function mk(m){ return px(m*markF()); }  // repères de tracé (ronds/pointillés), taille réglable
-function el(t,a){var e=document.createElementNS(SVGNS,t);for(var k in a)e.setAttribute(k,a[k]);return e;}
-function toM(x,y){return [x*mpp,(H-y)*mpp];}
-function toPx(mx,my){return [mx/mpp, H-my/mpp];}
-function area(poly){var s=0;for(var i=0;i<poly.length;i++){var a=poly[i],b=poly[(i+1)%poly.length];s+=a[0]*b[1]-b[0]*a[1];}return Math.abs(s)/2;}
-function through(r){return new Set(r.exterior_wall_orientations).size>=2;}
-function fmt(n){return Math.round(n*10)/10;}
-function svg(){return document.getElementById('plan');}
-function centroidM(r){var x=0,y=0,n=r.polygon.length||1;r.polygon.forEach(function(p){x+=p[0];y+=p[1];});return [x/n,y/n];}
-function nearestOri(dx,dy){var best='N',bd=-1e9,L=Math.hypot(dx,dy)||1;dx/=L;dy/=L;ORS.forEach(function(o){var d=ORDIR[o],dot=dx*d[0]+dy*d[1];if(dot>bd){bd=dot;best=o;}});return best;}
-var HINTS={draw:'Cliquez les coins de la pièce, puis « Terminer ».',calibrate:'Cliquez deux points d\\'une cote connue.',window:'Glissez le long de la façade de la pièce sélectionnée pour poser un châssis (longueur = largeur).'};
-function setMode(m){mode=m;draft=[];calib=[];winDrag=null;document.getElementById('hint').textContent=HINTS[m]||'';render();}
+function ptr(){ return stage.getRelativePointerPosition(); }
+
 function render(){
-  var s=svg();
-  applyView(); floorbar();
-  while(s.lastChild && s.lastChild.tagName!=='image'){ s.removeChild(s.lastChild); }
+  if(!stage){ return; }
+  shapeLayer.destroyChildren();
+  floorbar();
   B.rooms.forEach(function(r,i){
-    if(multi && r.level!==F().level){ return; }  // un fond par niveau : on n'affiche que l'étage courant
-    var xs=[],ys=[];
-    var pts=r.polygon.map(function(m){var p=toPx(m[0],m[1]);xs.push(p[0]);ys.push(p[1]);return p[0]+','+p[1];}).join(' ');
-    var pg=el('polygon',{points:pts, fill:(COLORS[r.label]||'#eee'), 'fill-opacity':0.45,
-      stroke:(i===sel?'#08313a':(through(r)?'#0e9aa7':'#555')), 'stroke-width':px(i===sel?0.12:(through(r)?0.08:0.05))});
-    pg.style.cursor='pointer';
-    pg.addEventListener('click',(function(idx){return function(){ if(mode==='idle'){ sel=idx; render(); } };})(i));
-    s.appendChild(pg);
+    if(multi && r.level!==F().level){ return; }
+    if(!r.polygon || r.polygon.length<2){ return; }
+    var pts=[], xs=[], ys=[];
+    r.polygon.forEach(function(m){ var p=toPx(m[0],m[1]); pts.push(p[0],p[1]); xs.push(p[0]); ys.push(p[1]); });
+    var poly=new Konva.Line({points:pts, closed:true, fill:(COLORS[r.label]||"#eee"), opacity:0.45,
+      stroke:(i===sel?"#08313a":(through(r)?"#0e9aa7":"#555")), strokeWidth:(i===sel?2.4:1.4), strokeScaleEnabled:false});
+    poly.on("click tap",function(e){ if(mode==="idle"){ e.cancelBubble=true; sel=i; render(); } });
+    poly.on("mouseenter",function(){ if(mode==="idle"){ stage.container().style.cursor="pointer"; } });
+    poly.on("mouseleave",function(){ stage.container().style.cursor=(mode==="idle"?"grab":"crosshair"); });
+    shapeLayer.add(poly);
     var cx=xs.reduce(function(a,b){return a+b;},0)/xs.length, cy=ys.reduce(function(a,b){return a+b;},0)/ys.length;
-    var t1=el('text',{x:cx,y:cy,'text-anchor':'middle','font-size':px(0.55),fill:'#111','font-weight':'600'});t1.textContent=r.label;s.appendChild(t1);
-    var t2=el('text',{x:cx,y:cy+px(0.62),'text-anchor':'middle','font-size':px(0.38),fill:'#333'});t2.textContent=fmt(r.area_m2)+' m\\u00b2 \\u00b7 N'+r.level;s.appendChild(t2);
+    var t1=new Konva.Text({x:cx,y:cy,text:r.label,fontSize:pm(0.5),fontFamily:"Inter, sans-serif",fontStyle:"600",fill:"#111",listening:false});
+    t1.offsetX(t1.width()/2); t1.offsetY(t1.height()/2+pm(0.32)); shapeLayer.add(t1);
+    var t2=new Konva.Text({x:cx,y:cy,text:fmt(r.area_m2)+" m² · N"+r.level,fontSize:pm(0.34),fontFamily:"Inter, sans-serif",fill:"#444",listening:false});
+    t2.offsetX(t2.width()/2); t2.offsetY(t2.height()/2-pm(0.32)); shapeLayer.add(t2);
     var minx=Math.min.apply(null,xs),maxx=Math.max.apply(null,xs),miny=Math.min.apply(null,ys),maxy=Math.max.apply(null,ys);
     var dcx=(minx+maxx)/2,dcy=(miny+maxy)/2,rw=maxx-minx,rh=maxy-miny;
-    (r.exterior_wall_orientations||[]).forEach(function(o){var d=ORDIR[o];if(!d)return;
+    (r.exterior_wall_orientations||[]).forEach(function(o){ var d=ORDIR[o]; if(!d){ return; }
       var mx=dcx+d[0]*0.4*rw, my=dcy-d[1]*0.4*rh;
-      var tm=el('text',{x:mx,y:my,'text-anchor':'middle','font-size':px(0.45),fill:'#0e9aa7','font-weight':'700'});tm.textContent=o;s.appendChild(tm);});
-    // Châssis tracés sur la façade (clic en mode idle = supprimer).
-    (r.openings||[]).forEach(function(op,k){
-      var seg=op._seg; if(!seg) return;
-      var ln=el('line',{x1:seg[0][0],y1:seg[0][1],x2:seg[1][0],y2:seg[1][1],
-        stroke:(op.openable?'#1a73e8':'#9aa3ad'),'stroke-width':px(0.09),'stroke-linecap':'round'});
-      ln.style.cursor='pointer';
-      ln.addEventListener('click',(function(ri,oi){return function(e){ if(mode==='idle'){ e.stopPropagation(); B.rooms[ri].openings.splice(oi,1); render(); } };})(i,k));
-      s.appendChild(ln);
+      var tt=new Konva.Text({x:mx,y:my,text:o,fontSize:pm(0.42),fontStyle:"700",fontFamily:"Inter, sans-serif",fill:"#0e9aa7",listening:false});
+      tt.offsetX(tt.width()/2); tt.offsetY(tt.height()/2); shapeLayer.add(tt);
     });
+    (r.openings||[]).forEach(function(op,k){
+      var seg=op._seg; if(!seg){ return; }
+      var ln=new Konva.Line({points:[seg[0][0],seg[0][1],seg[1][0],seg[1][1]], stroke:(op.openable?"#1a73e8":"#9aa3ad"), strokeWidth:pm(0.09), lineCap:"round"});
+      ln.on("click tap",function(e){ if(mode==="idle"){ e.cancelBubble=true; B.rooms[i].openings.splice(k,1); render(); } });
+      shapeLayer.add(ln);
+    });
+    if(i===sel){
+      r.polygon.forEach(function(m,vi){ var p=toPx(m[0],m[1]);
+        var h=new Konva.Circle({x:p[0],y:p[1],radius:sc(5),fill:"#fff",stroke:"#08313a",strokeWidth:sc(1.5),draggable:true});
+        h.on("dragmove",function(){
+          r.polygon[vi]=toM(h.x(),h.y());
+          var np=[]; r.polygon.forEach(function(mm){ var q=toPx(mm[0],mm[1]); np.push(q[0],q[1]); });
+          poly.points(np); r.area_m2=Math.max(area(r.polygon),0.01); shapeLayer.batchDraw();
+        });
+        h.on("dragend",function(){ render(); });
+        h.on("mouseenter",function(){ stage.container().style.cursor="move"; });
+        shapeLayer.add(h);
+      });
+    }
   });
-  if(winDrag){
-    s.appendChild(el('line',{x1:winDrag.a[0],y1:winDrag.a[1],x2:winDrag.b[0],y2:winDrag.b[1],
-      stroke:'#1a73e8','stroke-width':mk(0.2),'stroke-dasharray':mk(0.4)+' '+mk(0.25),'stroke-linecap':'round'}));
-  }
   if(draft.length){
-    s.appendChild(el('polyline',{points:draft.map(function(p){return p[0]+','+p[1];}).join(' '), fill:'none', stroke:'#e8590c','stroke-width':mk(0.14),'stroke-dasharray':mk(0.5)+' '+mk(0.3)}));
-    draft.forEach(function(p){s.appendChild(el('circle',{cx:p[0],cy:p[1],r:mk(0.22),fill:'#e8590c'}));});
+    var dp=[]; draft.forEach(function(p){ dp.push(p[0],p[1]); });
+    shapeLayer.add(new Konva.Line({points:dp, stroke:"#e8590c", strokeWidth:sc(2*markF()), dash:[sc(6*markF()),sc(4*markF())], listening:false}));
+    draft.forEach(function(p){ shapeLayer.add(new Konva.Circle({x:p[0],y:p[1],radius:sc(4*markF()),fill:"#e8590c",listening:false})); });
   }
-  if(calib.length===1){ s.appendChild(el('circle',{cx:calib[0][0],cy:calib[0][1],r:mk(0.25),fill:'#c0392b'})); }
-  document.getElementById('scaleinfo').textContent='Échelle ≈ '+(mpp*1000).toFixed(1)+' mm/px';
+  if(winDrag){ shapeLayer.add(new Konva.Line({points:[winDrag.a[0],winDrag.a[1],winDrag.b[0],winDrag.b[1]], stroke:"#1a73e8", strokeWidth:pm(0.12), dash:[sc(6),sc(4)], lineCap:"round", listening:false})); }
+  if(calib.length===1){ shapeLayer.add(new Konva.Circle({x:calib[0][0],y:calib[0][1],radius:sc(5),fill:"#c0392b",listening:false})); }
+  shapeLayer.batchDraw();
+  var si=document.getElementById("scaleinfo"); if(si){ si.textContent="Echelle ~ "+(MPP()*1000).toFixed(1)+" mm/px"; }
   roomlist(); syncHidden();
 }
-function evtPoint(ev){var s=svg(),pt=s.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;var p=pt.matrixTransform(s.getScreenCTM().inverse());return [p.x,p.y];}
-function onClick(ev){
-  if(mode==='draw'){ draft.push(evtPoint(ev)); render(); }
-  else if(mode==='calibrate'){
-    calib.push(evtPoint(ev));
-    if(calib.length===2){
-      var dpx=Math.hypot(calib[0][0]-calib[1][0],calib[0][1]-calib[1][1]);
-      var real=parseFloat(prompt('Longueur réelle de ce segment, en mètres ?','5'));
-      if(real>0 && dpx>0){ mpp=real/dpx; F().mpp=mpp; }
-      setMode('idle');
-    } else render();
-  }
+
+var HINTS={draw:"Cliquez les coins de la piece, puis Terminer.",calibrate:"Cliquez deux points d'une cote connue.",window:"Glissez le long de la facade de la piece selectionnee (longueur = largeur)."};
+function setMode(m){ mode=m; draft=[]; calib=[]; winDrag=null;
+  if(stage){ stage.draggable(m==="idle"); stage.container().style.cursor=(m==="idle"?"grab":"crosshair"); }
+  var hi=document.getElementById("hint"); if(hi){ hi.textContent=HINTS[m]||""; }
+  render();
 }
-function curLevel(){ if(multi){ return F().level; } var e=document.getElementById('t-level'); return e?(parseInt(e.value)||0):0; }
+function curLevel(){ if(multi){ return F().level; } var e=document.getElementById("t-level"); return e?(parseInt(e.value)||0):0; }
 function finishRoom(){
-  if(mode!=='draw' || draft.length<3){ setMode('idle'); return; }
-  var poly=draft.map(function(p){return toM(p[0],p[1]);});
-  B.rooms.push({id:'r'+B.rooms.length, name:null, label:'autre', level:curLevel(), polygon:poly,
+  if(mode!=="draw" || draft.length<3){ setMode("idle"); return; }
+  var poly=draft.map(function(p){ return toM(p[0],p[1]); });
+  B.rooms.push({id:"r"+B.rooms.length, name:null, label:"autre", level:curLevel(), polygon:poly,
     area_m2:Math.max(area(poly),0.01), height_m:2.6, openings:[], exterior_wall_orientations:[], is_occupied:true, is_wet_room:false});
-  sel=B.rooms.length-1; setMode('idle');
+  sel=B.rooms.length-1; setMode("idle");
 }
-// §10.2 — châssis tracé au glisser sur la façade : longueur = largeur de baie.
 function addWindow(a,b){
-  if(Math.hypot(a[0]-b[0],a[1]-b[1])<3){ return; }  // simple clic → ignoré
-  var r=B.rooms[sel]; if(!r){ return; }
+  if(Math.hypot(a[0]-b[0],a[1]-b[1])<3){ return null; }
+  var r=B.rooms[sel]; if(!r){ return null; }
   var ma=toM(a[0],a[1]), mb=toM(b[0],b[1]);
   var lenM=Math.hypot(ma[0]-mb[0],ma[1]-mb[1]);
-  // Façade = normale au mur tracé, orientée vers l'extérieur (loin du centroïde).
-  // Plus robuste que (milieu - centroïde) pour pièces allongées / segments courts.
   var c=centroidM(r), ex=mb[0]-ma[0], ey=mb[1]-ma[1], nx=-ey, ny=ex;
   var ox=(ma[0]+mb[0])/2-c[0], oy=(ma[1]+mb[1])/2-c[1];
   if(nx*ox+ny*oy<0){ nx=-nx; ny=-ny; }
-  var o=nearestOri(nx,ny);
-  var h=lastSash;  // reprend la dernière hauteur saisie
-  var w=Math.max(lenM,0.1);
-  var op={id:r.id+'_w'+r.openings.length, kind:'window', orientation:o,
+  var o=nearestOri(nx,ny), h=lastSash, w=Math.max(lenM,0.1);
+  var op={id:r.id+"_w"+r.openings.length, kind:"window", orientation:o,
     area_m2:Math.max(w*h,0.1), sill_height_m:0.9, head_height_m:0.9+h,
     openable:true, free_area_ratio:0.5, _w:w, _h:h, _seg:[a,b]};
   r.openings.push(op);
   if(r.exterior_wall_orientations.indexOf(o)<0){ r.exterior_wall_orientations.push(o); }
   return {ri:sel, oi:r.openings.length-1};
 }
-// Recalcule surface/linteau depuis largeur (_w) × hauteur (_h).
 function winRecalc(op){ op.area_m2=Math.max((op._w||0.1)*(op._h||1.5),0.1); op.sill_height_m=0.9; op.head_height_m=0.9+(op._h||1.5); }
-// Met la largeur à jour et redimensionne le repère tracé autour de son milieu.
 function setWinWidth(op,w){
   w=Math.max(w,0.05); var old=op._w||w; op._w=w; winRecalc(op);
   if(op._seg && old>0){ var a=op._seg[0],b=op._seg[1],mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,k=w/old;
     op._seg=[[mx+(a[0]-mx)*k,my+(a[1]-my)*k],[mx+(b[0]-mx)*k,my+(b[1]-my)*k]]; }
 }
-// Bulle pop-up pour saisir la hauteur du châssis juste après l'avoir tracé.
 function showHeightPopup(ref, x, y){
-  var r=B.rooms[ref.ri], op=r&&r.openings[ref.oi]; if(!op) return;
-  var pop=document.createElement('div');
-  pop.style.cssText='position:fixed;z-index:50;background:#fff;border:1px solid #0e9aa7;border-radius:.5rem;padding:.5rem .6rem;box-shadow:0 4px 16px rgba(0,0,0,.18);font:inherit';
-  pop.style.left=Math.min(x,window.innerWidth-180)+'px'; pop.style.top=(y+8)+'px';
-  pop.innerHTML='<div style="font-size:.8rem;font-weight:600;margin-bottom:.2rem">Hauteur du châssis (m)</div>'+
+  var r=B.rooms[ref.ri], op=r&&r.openings[ref.oi]; if(!op){ return; }
+  var pop=document.createElement("div");
+  pop.style.cssText="position:fixed;z-index:50;background:#fff;border:1px solid #0e9aa7;border-radius:.5rem;padding:.5rem .6rem;box-shadow:0 4px 16px rgba(0,0,0,.18);font:inherit";
+  pop.style.left=Math.min(x,window.innerWidth-180)+"px"; pop.style.top=(y+8)+"px";
+  pop.innerHTML='<div style="font-size:.8rem;font-weight:600;margin-bottom:.2rem">Hauteur du chassis (m)</div>'+
     '<input type="number" step="0.1" value="'+fmt(op._h)+'" style="width:90px;padding:.3rem"> '+
     '<button type="button" class="btn" style="padding:.3rem .6rem">OK</button>';
   document.body.appendChild(pop);
-  var inp=pop.querySelector('input'), ok=pop.querySelector('button');
+  var inp=pop.querySelector("input"), ok=pop.querySelector("button");
   function commit(){ var v=parseFloat(inp.value); if(v>0){ op._h=v; lastSash=v; winRecalc(op); } if(pop.parentNode){ pop.parentNode.removeChild(pop); } render(); }
   ok.onclick=commit;
-  inp.onkeydown=function(e){ if(e.key==='Enter'){ commit(); } else if(e.key==='Escape'){ if(pop.parentNode){pop.parentNode.removeChild(pop);} } };
+  inp.onkeydown=function(e){ if(e.key==="Enter"){ commit(); } else if(e.key==="Escape"){ if(pop.parentNode){ pop.parentNode.removeChild(pop); } } };
   inp.focus(); inp.select();
 }
 function roomlist(){
-  var d=document.getElementById('roomlist');
-  if(!B.rooms.length){ d.innerHTML='<p style="color:#888">Aucune pièce tracée. Clique « Tracer une pièce ».</p>'; return; }
-  d.innerHTML='<h3>Pièces tracées ('+B.rooms.length+')</h3>'+B.rooms.map(function(r,i){
-    var lab=LABELS.map(function(l){return '<option value="'+l+'"'+(l===r.label?' selected':'')+'>'+l+'</option>';}).join('');
-    var chips=ORS.map(function(o){return '<label class="chip"><input type="checkbox" data-i="'+i+'" data-or="'+o+'"'+(r.exterior_wall_orientations.indexOf(o)>=0?' checked':'')+'>'+o+'</label>';}).join('');
+  var d=document.getElementById("roomlist"); if(!d){ return; }
+  if(!B.rooms.length){ d.innerHTML='<p style="color:#888;font-size:.9rem">Aucune piece tracee. Clique "Tracer une piece".</p>'; return; }
+  d.innerHTML='<div class="ptitle" style="margin:.2rem 0 .4rem">Pieces ('+B.rooms.length+')</div>'+B.rooms.map(function(r,i){
+    var lab=LABELS.map(function(l){ return '<option value="'+l+'"'+(l===r.label?" selected":"")+">"+l+"</option>"; }).join("");
+    var chips=ORS.map(function(o){ return '<label class="chip"><input type="checkbox" data-i="'+i+'" data-or="'+o+'"'+(r.exterior_wall_orientations.indexOf(o)>=0?" checked":"")+">"+o+"</label>"; }).join("");
     var wins=(r.openings||[]).map(function(op,j){
-      var fopts=ORS.map(function(o){return '<option value="'+o+'"'+(o===op.orientation?' selected':'')+'>'+o+'</option>';}).join('');
-      return '<div class="winrow" style="gap:.3rem">'+
-        '<select data-wi="'+i+'" data-wj="'+j+'" data-wf="facade" title="façade" style="padding:.2rem">'+fopts+'</select>'+
-        '<label style="font-size:.78rem;color:#555;margin:0">l<input data-wi="'+i+'" data-wj="'+j+'" data-wf="w" type="number" step="0.1" value="'+fmt(op._w!=null?op._w:0)+'" style="width:62px;padding:.2rem;margin-left:.15rem"></label>'+
-        '<label style="font-size:.78rem;color:#555;margin:0">h<input data-wi="'+i+'" data-wj="'+j+'" data-wf="h" type="number" step="0.1" value="'+fmt(op._h!=null?op._h:0)+'" style="width:62px;padding:.2rem;margin-left:.15rem"></label>'+
-        '<span style="font-size:.78rem;color:#888">'+fmt(op.area_m2)+' m\\u00b2</span>'+
-        '<button type="button" data-wdel="'+i+'_'+j+'" class="btn ghost" style="padding:.1rem .45rem">\\u2715</button></div>';
-    }).join('') || '<span style="font-size:.8rem;color:#aaa">aucun</span>';
-    return '<div class="card" data-sel="'+i+'" style="cursor:pointer;margin:.4rem 0;'+(i===sel?'outline:2px solid #0e9aa7':'')+'"><div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">'+
-      '<select data-lab="'+i+'">'+lab+'</select><b>'+fmt(r.area_m2)+' m\\u00b2</b>'+
-      '<label style="font-size:.8rem;color:#555">niv.<input data-lvl="'+i+'" type="number" value="'+r.level+'" style="width:50px;padding:.2rem;margin-left:.2rem"></label>'+
-      (through(r)?'<span class="badge-ok">traversant</span>':'')+
-      '<button type="button" data-pick="'+i+'" class="btn ghost">🪟 + châssis</button>'+
-      '<button type="button" data-del="'+i+'" class="btn ghost">supprimer</button></div>'+
-      '<div style="font-size:.8rem;color:#888;margin:.3rem 0 .1rem">Façades extérieures :</div>'+
-      '<div class="chips">'+chips+'</div>'+
-      '<div style="font-size:.8rem;color:#888;margin:.4rem 0 .1rem">Châssis ('+(r.openings||[]).length+') — largeur l × hauteur h (m) :</div>'+
-      wins+'</div>';
-  }).join('');
-  Array.prototype.forEach.call(d.querySelectorAll('[data-sel]'),function(c){c.onclick=function(e){ if(e.target.closest('select,input,button,label')){ return; } sel=parseInt(c.dataset.sel); if(multi){ goToLevel(B.rooms[sel].level); } render(); };});
-  Array.prototype.forEach.call(d.querySelectorAll('[data-pick]'),function(b){b.onclick=function(){ sel=parseInt(b.dataset.pick); if(multi){ goToLevel(B.rooms[sel].level); } setMode('window'); };});
-  Array.prototype.forEach.call(d.querySelectorAll('[data-lab]'),function(s){s.onchange=function(){B.rooms[parseInt(s.dataset.lab)].label=s.value;render();};});
-  Array.prototype.forEach.call(d.querySelectorAll('[data-lvl]'),function(n){n.onchange=function(){B.rooms[parseInt(n.dataset.lvl)].level=parseInt(n.value)||0;render();};});
-  Array.prototype.forEach.call(d.querySelectorAll('[data-del]'),function(b){b.onclick=function(){B.rooms.splice(parseInt(b.dataset.del),1);sel=-1;render();};});
-  Array.prototype.forEach.call(d.querySelectorAll('[data-or]'),function(c){c.onchange=function(){var r=B.rooms[parseInt(c.dataset.i)],o=c.dataset.or,st=new Set(r.exterior_wall_orientations);if(c.checked){st.add(o);}else{st.delete(o);}r.exterior_wall_orientations=Array.from(st);render();};});
-  Array.prototype.forEach.call(d.querySelectorAll('[data-wf]'),function(el){el.onchange=function(){
+      var fopts=ORS.map(function(o){ return '<option value="'+o+'"'+(o===op.orientation?" selected":"")+">"+o+"</option>"; }).join("");
+      return '<tr><td><select data-wi="'+i+'" data-wj="'+j+'" data-wf="facade">'+fopts+'</select></td>'+
+        '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="w" type="number" step="0.1" value="'+fmt(op._w!=null?op._w:0)+'" style="width:54px;padding:.15rem"></td>'+
+        '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="h" type="number" step="0.1" value="'+fmt(op._h!=null?op._h:0)+'" style="width:54px;padding:.15rem"></td>'+
+        '<td style="color:#888">'+fmt(op.area_m2)+'</td>'+
+        '<td><button type="button" data-wdel="'+i+"_"+j+'" class="iconbtn">✕</button></td></tr>';
+    }).join("");
+    var wintable=wins?('<table class="wintab"><tr><th>facade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:#aaa">aucun chassis</div>';
+    return '<div class="room-card'+(i===sel?" sel":"")+'" data-sel="'+i+'">'+
+      '<div class="room-head">'+
+        '<span class="room-no">'+(i+1)+'</span>'+
+        '<select data-lab="'+i+'">'+lab+'</select>'+
+        '<b>'+fmt(r.area_m2)+' m²</b>'+
+        (through(r)?'<span class="badge-ok">traversant</span>':'')+
+        '<span class="grow"></span>'+
+        '<label class="nivlbl">niv.<input data-lvl="'+i+'" type="number" value="'+r.level+'" style="width:42px;padding:.15rem"></label>'+
+        '<button type="button" data-del="'+i+'" class="iconbtn" title="supprimer">✕</button>'+
+      '</div>'+
+      '<div class="room-sec"><span class="room-seclbl">Facades</span><div class="chips">'+chips+'</div></div>'+
+      '<div class="room-sec"><span class="room-seclbl">Chassis</span>'+wintable+
+        '<button type="button" data-pick="'+i+'" class="btn ghost mini">+ chassis</button></div>'+
+    "</div>";
+  }).join("");
+  Array.prototype.forEach.call(d.querySelectorAll("[data-sel]"),function(c){ c.onclick=function(e){ if(e.target.closest("select,input,button,label")){ return; } sel=parseInt(c.dataset.sel); if(multi){ goToLevel(B.rooms[sel].level); } render(); }; });
+  Array.prototype.forEach.call(d.querySelectorAll("[data-pick]"),function(b){ b.onclick=function(){ sel=parseInt(b.dataset.pick); if(multi){ goToLevel(B.rooms[sel].level); } setMode("window"); }; });
+  Array.prototype.forEach.call(d.querySelectorAll("[data-lab]"),function(s){ s.onchange=function(){ B.rooms[parseInt(s.dataset.lab)].label=s.value; render(); }; });
+  Array.prototype.forEach.call(d.querySelectorAll("[data-lvl]"),function(n){ n.onchange=function(){ B.rooms[parseInt(n.dataset.lvl)].level=parseInt(n.value)||0; render(); }; });
+  Array.prototype.forEach.call(d.querySelectorAll("[data-del]"),function(b){ b.onclick=function(){ B.rooms.splice(parseInt(b.dataset.del),1); sel=-1; render(); }; });
+  Array.prototype.forEach.call(d.querySelectorAll("[data-or]"),function(c){ c.onchange=function(){ var r=B.rooms[parseInt(c.dataset.i)],o=c.dataset.or,st=new Set(r.exterior_wall_orientations); if(c.checked){ st.add(o); } else { st.delete(o); } r.exterior_wall_orientations=Array.from(st); render(); }; });
+  Array.prototype.forEach.call(d.querySelectorAll("[data-wf]"),function(el){ el.onchange=function(){
     var rm=B.rooms[parseInt(el.dataset.wi)], op=rm.openings[parseInt(el.dataset.wj)];
-    if(el.dataset.wf==='facade'){ op.orientation=el.value; if(rm.exterior_wall_orientations.indexOf(el.value)<0){ rm.exterior_wall_orientations.push(el.value); } render(); return; }
-    var v=parseFloat(el.value); if(!(v>0)) return;
-    if(el.dataset.wf==='w'){ setWinWidth(op,v); } else { op._h=v; lastSash=v; winRecalc(op); }
+    if(el.dataset.wf==="facade"){ op.orientation=el.value; if(rm.exterior_wall_orientations.indexOf(el.value)<0){ rm.exterior_wall_orientations.push(el.value); } render(); return; }
+    var v=parseFloat(el.value); if(!(v>0)){ return; }
+    if(el.dataset.wf==="w"){ setWinWidth(op,v); } else { op._h=v; lastSash=v; winRecalc(op); }
     render();
-  };});
-  Array.prototype.forEach.call(d.querySelectorAll('[data-wdel]'),function(b){b.onclick=function(){var p=b.dataset.wdel.split('_');B.rooms[parseInt(p[0])].openings.splice(parseInt(p[1]),1);render();};});
+  }; });
+  Array.prototype.forEach.call(d.querySelectorAll("[data-wdel]"),function(b){ b.onclick=function(){ var p=b.dataset.wdel.split("_"); B.rooms[parseInt(p[0])].openings.splice(parseInt(p[1]),1); render(); }; });
 }
 function syncHidden(){
-  var ls=B.rooms.map(function(r){return r.level;});
+  var ls=B.rooms.map(function(r){ return r.level; });
   B.num_levels=B.rooms.length?(Math.max.apply(null,ls)-Math.min.apply(null,ls)+1):1;
-  document.getElementById('building_json').value=JSON.stringify(B);
+  var el=document.getElementById("building_json"); if(el){ el.value=JSON.stringify(B); }
 }
-// --- Zoom / pan (§10.1) : molette = zoom centré curseur, glisser = pan. ---
-function zoomAt(p, f){
-  var nw=Math.max(F().w*0.05, Math.min(F().w*5, view.w*f)), k=nw/view.w;
-  view.x=p[0]-(p[0]-view.x)*k; view.y=p[1]-(p[1]-view.y)*k;
-  view.w=nw; view.h*=k; render();
+function zoomBy(factor){
+  var old=stage.scaleX(), ns=Math.max(0.02,Math.min(50,old*factor));
+  var p={x:stage.width()/2,y:stage.height()/2}, mp={x:(p.x-stage.x())/old,y:(p.y-stage.y())/old};
+  stage.scale({x:ns,y:ns}); stage.position({x:p.x-mp.x*ns,y:p.y-mp.y*ns}); render();
 }
-function onWheel(ev){ ev.preventDefault(); zoomAt(evtPoint(ev), ev.deltaY<0?0.85:1.18); }
-var pan=null, panned=false;
-function onDown(ev){
-  if(mode==='window' && sel>=0){ var p=evtPoint(ev); winDrag={a:p, b:p}; return; }
-  pan={cx:ev.clientX, cy:ev.clientY, vx:view.x, vy:view.y}; panned=false;
+function onWheel(e){
+  e.evt.preventDefault(); var old=stage.scaleX(), p=stage.getPointerPosition();
+  var mp={x:(p.x-stage.x())/old,y:(p.y-stage.y())/old};
+  var ns=e.evt.deltaY>0?old/1.12:old*1.12; ns=Math.max(0.02,Math.min(50,ns));
+  stage.scale({x:ns,y:ns}); stage.position({x:p.x-mp.x*ns,y:p.y-mp.y*ns}); render();
 }
-function onMove(ev){
-  if(winDrag){ winDrag.b=evtPoint(ev); render(); return; }
-  if(!pan) return;
-  var dx=ev.clientX-pan.cx, dy=ev.clientY-pan.cy;
-  if(!panned && Math.abs(dx)+Math.abs(dy)<5) return;
-  panned=true;
-  var rect=svg().getBoundingClientRect();
-  view.x=pan.vx - dx*view.w/rect.width; view.y=pan.vy - dy*view.h/rect.height;
-  applyView();
+function onDown(e){ if(mode==="window" && sel>=0){ var p=ptr(); winDrag={a:[p.x,p.y],b:[p.x,p.y]}; } }
+function onMove(e){ if(winDrag){ var p=ptr(); winDrag.b=[p.x,p.y]; render(); } }
+function onUp(e){
+  if(winDrag){ var ref=addWindow(winDrag.a,winDrag.b); winDrag=null; render();
+    if(ref){ var ev=e.evt, cx=ev.clientX!=null?ev.clientX:(ev.changedTouches?ev.changedTouches[0].clientX:200), cy=ev.clientY!=null?ev.clientY:(ev.changedTouches?ev.changedTouches[0].clientY:200); showHeightPopup(ref,cx,cy); }
+  }
 }
-function onUp(ev){
-  if(winDrag){ var ref=addWindow(winDrag.a, winDrag.b); winDrag=null; render();
-    if(ref){ showHeightPopup(ref, ev.clientX, ev.clientY); } return; }
-  if(pan && !panned){ onClick(ev); } pan=null;
+function onClick(e){
+  if(mode==="draw"){ var p=ptr(); draft.push([p.x,p.y]); render(); }
+  else if(mode==="calibrate"){ var q=ptr(); calib.push([q.x,q.y]);
+    if(calib.length===2){ var dpx=Math.hypot(calib[0][0]-calib[1][0],calib[0][1]-calib[1][1]); var real=parseFloat(prompt("Longueur reelle de ce segment, en metres ?","5")); if(real>0 && dpx>0){ F().mpp=real/dpx; } setMode("idle"); }
+    else { render(); }
+  }
 }
-document.addEventListener('DOMContentLoaded',function(){
-  var s=svg();
-  s.addEventListener('pointerdown',onDown);
-  s.addEventListener('pointermove',onMove);
-  s.addEventListener('pointerup',onUp);
-  s.addEventListener('pointerleave',function(){ pan=null; });
-  s.addEventListener('wheel',onWheel,{passive:false});
-  document.getElementById('t-draw').onclick=function(){ setMode(mode==='draw'?'idle':'draw'); };
-  document.getElementById('t-finish').onclick=finishRoom;
-  document.getElementById('t-cal').onclick=function(){ setMode('calibrate'); };
-  document.getElementById('t-win').onclick=function(){
-    if(sel<0){ document.getElementById('hint').textContent='Sélectionnez une pièce (clic sur le plan ou « 🪟 + châssis » dans la liste), puis tracez le châssis sur sa façade.'; return; }
-    setMode(mode==='window'?'idle':'window');
+function initStage(){
+  stage=new Konva.Stage({container:"stage", width:10, height:10, draggable:true});
+  bgLayer=new Konva.Layer({listening:false}); shapeLayer=new Konva.Layer();
+  stage.add(bgLayer); stage.add(shapeLayer);
+  stage.on("wheel",onWheel);
+  stage.on("mousedown touchstart",onDown);
+  stage.on("mousemove touchmove",onMove);
+  stage.on("mouseup touchend",onUp);
+  stage.on("click tap",onClick);
+  stage.container().style.cursor="grab";
+}
+document.addEventListener("DOMContentLoaded",function(){
+  if(!window.Konva){ var s=document.getElementById("stage"); if(s){ s.innerHTML='<p style="padding:1rem;color:#c0392b">Konva non charge (verifie le reseau).</p>'; } return; }
+  initStage();
+  document.getElementById("t-draw").onclick=function(){ setMode(mode==="draw"?"idle":"draw"); };
+  document.getElementById("t-finish").onclick=finishRoom;
+  document.getElementById("t-cal").onclick=function(){ setMode("calibrate"); };
+  document.getElementById("t-win").onclick=function(){
+    if(sel<0){ var hi=document.getElementById("hint"); if(hi){ hi.textContent="Selectionne une piece (sur le plan ou via + chassis), puis trace sur sa facade."; } return; }
+    setMode(mode==="window"?"idle":"window");
   };
-  document.getElementById('t-zin').onclick=function(){ zoomAt([view.x+view.w/2, view.y+view.h/2], 0.8); };
-  document.getElementById('t-zout').onclick=function(){ zoomAt([view.x+view.w/2, view.y+view.h/2], 1.25); };
-  document.getElementById('t-zreset').onclick=function(){ view={x:0,y:0,w:F().w,h:F().h}; render(); };
-  document.getElementById('t-mark').oninput=function(){ render(); };
-  if(multi){ var lw=document.getElementById('t-levelwrap'); if(lw){ lw.style.display='none'; } }
+  document.getElementById("t-zin").onclick=function(){ zoomBy(1.25); };
+  document.getElementById("t-zout").onclick=function(){ zoomBy(0.8); };
+  document.getElementById("t-zreset").onclick=function(){ fitStage(); render(); };
+  document.getElementById("t-mark").oninput=function(){ render(); };
+  if(multi){ var lw=document.getElementById("t-levelwrap"); if(lw){ lw.style.display="none"; } }
   var se=document.querySelector('input[name=sash]'); if(se){ var sv=parseFloat(se.value); if(sv>0){ lastSash=sv; } }
-  applyFloor();
-  render();
+  window.addEventListener("resize",function(){ fitStage(); render(); });
+  applyFloor(); render();
 });
 """
 
@@ -1138,28 +1175,36 @@ donne la largeur, une bulle demande la hauteur). Molette = zoom, glisser = dépl
 <div class="trace-layout">
   <div class="trace-canvas-wrap">
     <div style="position:relative">
-      <svg id="plan" viewBox="0 0 100 100"><image id="planimg" x="0" y="0"/></svg>
+      <div id="stage"></div>
       {_COMPASS_SVG}
     </div>
   </div>
   <aside class="trace-side">
     <div class="palette">
-      <button type="button" class="btn" id="t-draw">✏️ Tracer une pièce</button>
-      <button type="button" class="btn ghost" id="t-finish">✓ Terminer la pièce</button>
-      <button type="button" class="btn ghost" id="t-win">🪟 Tracer un châssis</button>
-      <hr>
-      <label class="lbl" id="t-levelwrap">Niveau des nouvelles pièces
-        <input type="number" id="t-level" value="0" style="width:100%;padding:.3rem;margin-top:.2rem"></label>
-      <button type="button" class="btn ghost" id="t-cal">📏 Calibrer l'échelle</button>
-      <hr>
-      <div class="row">
-        <button type="button" class="btn ghost" id="t-zout" title="Dézoomer">−</button>
-        <button type="button" class="btn ghost" id="t-zin" title="Zoomer">+</button>
-        <button type="button" class="btn ghost" id="t-zreset" title="Vue entière">⤢</button>
+      <div class="pgroup">
+        <div class="ptitle">Pièces</div>
+        <button type="button" class="btn" id="t-draw">✏️ Tracer une pièce</button>
+        <button type="button" class="btn ghost" id="t-finish">✓ Terminer la pièce</button>
+        <label class="lbl" id="t-levelwrap">Niveau des nouvelles pièces
+          <input type="number" id="t-level" value="0" style="width:100%;padding:.3rem;margin-top:.2rem"></label>
       </div>
-      <label class="lbl" title="Grosseur des ronds et pointillés de tracé">Taille des repères
-        <input type="range" id="t-mark" min="0.5" max="4" step="0.5" value="1" style="width:100%"></label>
-      <span id="scaleinfo" style="color:var(--muted);font-size:.8rem"></span>
+      <div class="pgroup">
+        <div class="ptitle">Châssis</div>
+        <button type="button" class="btn ghost" id="t-win">🪟 Tracer un châssis</button>
+        <span class="lbl" style="font-weight:400">Sélectionne une pièce, puis glisse sur sa façade.</span>
+      </div>
+      <div class="pgroup">
+        <div class="ptitle">Échelle &amp; vue</div>
+        <button type="button" class="btn ghost" id="t-cal">📏 Calibrer l'échelle</button>
+        <div class="row">
+          <button type="button" class="btn ghost" id="t-zout" title="Dézoomer">−</button>
+          <button type="button" class="btn ghost" id="t-zin" title="Zoomer">+</button>
+          <button type="button" class="btn ghost" id="t-zreset" title="Vue entière">⤢</button>
+        </div>
+        <label class="lbl" title="Grosseur des repères de tracé">Taille des repères
+          <input type="range" id="t-mark" min="0.5" max="4" step="0.5" value="1" style="width:100%"></label>
+        <span id="scaleinfo" style="color:var(--muted);font-size:.8rem"></span>
+      </div>
       <span id="hint"></span>
     </div>
     <div id="roomlist"></div>
@@ -1174,6 +1219,7 @@ donne la largeur, une bulle demande la hauteur). Molette = zoom, glisser = dépl
     <button class="btn" type="submit">Confirmer &amp; calculer →</button>
   </p>
 </form>
+<script src="https://unpkg.com/konva@9/konva.min.js"></script>
 <script>window.TRACE={data};</script>
 <script>{_TRACING_JS}</script>
 <script>{_STUDY_IO_JS}</script>"""

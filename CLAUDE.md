@@ -98,7 +98,9 @@ Deux usages : **interne** (priorité, tolérance à l'approximation si honnête 
 - **CAO** : `ezdxf` (DXF), `shapely` (géométrie/topologie). **PDF** : `pymupdf` (fitz) — extraction vectorielle + rendu d'image.
 - **Climat** : parseur `.epw` maison.
 - **ROI / sensibilité** : `numpy`, `SALib`.
-- **Web** : `FastAPI` + `uvicorn` + `python-multipart` (formulaires/upload). Pages rendues en **fonctions pures** retournant du HTML (testables sans serveur, comme `report`) + **JS vanilla** embarqué (aucun framework). `httpx` en dev pour le TestClient.
+- **Web** : `FastAPI` + `uvicorn` + `python-multipart` (formulaires/upload). Pages rendues en **fonctions pures** retournant du HTML (testables sans serveur, comme `report`). `httpx` en dev pour le TestClient.
+- **Principe lib (NON négociable)** : pour tout besoin non trivial, **on s'appuie sur la meilleure lib spécialisée** plutôt que de réécrire à la main. Ne PAS bricoler en vanilla ce qu'une lib éprouvée fait mieux. Choisir la lib la plus adaptée au besoin précis (et la noter ici). Le JS « vanilla » reste pour le collage/glue ; le cœur métier d'un composant s'appuie sur du solide.
+- **Éditeur de tracé** : **Konva.js** (canvas 2D scene-graph, chargé via CDN `unpkg`) — zoom/pan, formes/poignées draggables, hit-testing natifs. Remplace l'ancien SVG vanilla (zoom/pan/coordonnées codés main, trop fragile).
 - **LLM** : SDK Anthropic. Modèles : `claude-opus-4-8` (narratif), `claude-sonnet-4-6` (labelling), `claude-haiku-4-5-20251001` (labelling volume). Prompt caching sur le bloc statique. **Le narratif n'invente AUCUN chiffre.**
 - **Rapport** : HTML → PDF (`weasyprint`, optionnel).
 - **Viz** : `matplotlib` (backend Agg).
@@ -251,7 +253,7 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 ## 13. Conventions de dev (pour Claude Code)
 
 - **Qualité avant commit** : `uv run ruff check .` , `uv run mypy` , `uv run pytest` doivent passer. Pour les tests web/PDF : `uv run --extra app --extra cao --extra viz --extra pdf pytest`.
-- **JS embarqué** : vanilla, validé par `node --check` (extraire la constante `_*_JS` dans un fichier `.js` et vérifier la syntaxe — on ne peut pas tester le navigateur ici). Construire le SVG via `createElementNS` (pas `innerHTML`), donner une **hauteur explicite** au `<svg>`.
+- **JS embarqué** : validé par `node --check` (extraire la constante `_*_JS` dans un fichier `.js` et vérifier la syntaxe — on ne peut pas tester le navigateur ici). Le **cœur du tracé s'appuie sur Konva** (CDN) ; le JS local ne fait que l'orchestration. Toujours préférer une lib spécialisée à du DOM/SVG/canvas à la main (cf. §5).
 - **Pages web = fonctions pures** retournant du HTML (testables) ; le serveur (`app/web.py`) ne fait que router. La géométrie transite en `building_json` (sérialisation `Building`).
 - **Branche de dev** dédiée ; **merge fast-forward dans `main`** pour déclencher le redeploy Railway (workflow validé avec l'utilisateur).
 - **Tester en réel** : penser aux dépendances runtime (ex. `python-multipart` est OBLIGATOIRE pour FastAPI). Lancer le vrai serveur (uvicorn) + curl/TestClient quand on touche au web.

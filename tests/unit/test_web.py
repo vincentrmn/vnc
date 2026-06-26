@@ -148,6 +148,7 @@ def test_tracing_editor_renders() -> None:
     assert "Tracer le plan" in h
     assert "data:image/png;base64,ABC" in h  # plan en fond
     assert "window.TRACE" in h and "finishRoom" in h
+    assert 'id="stage"' in h and "konva" in h.lower()  # éditeur Konva (lib spécialisée)
     assert 'action="/etude/resultat"' in h and 'name="building_json"' in h
 
 
@@ -156,8 +157,8 @@ def test_tracing_editor_has_zoom_pan() -> None:
     h = render_tracing(_floors(), "")
     for ctrl in ('id="t-zin"', 'id="t-zout"', 'id="t-zreset"'):
         assert ctrl in h
-    assert "onWheel" in h and "zoomAt" in h  # molette = zoom
-    assert "pointerdown" in h and "pointermove" in h  # glisser = pan
+    assert "onWheel" in h and "zoomBy" in h  # molette + boutons zoom
+    assert "draggable" in h  # pan via Konva stage draggable
     assert "touch-action" in h  # pas de scroll page au glisser tactile
     assert 'id="t-mark"' in h and "markF()" in h  # taille réglable des repères
 
@@ -167,7 +168,7 @@ def test_tracing_editor_can_draw_windows() -> None:
     h = render_tracing(_floors(), "")
     assert 'id="t-win"' in h  # bouton « Tracer un châssis »
     assert "addWindow" in h and "nearestOri" in h  # longueur→largeur + façade auto
-    assert "'window'" in h  # mode de tracé de châssis
+    assert '"window"' in h  # mode de tracé de châssis
 
 
 def test_tracing_editor_window_height_and_table() -> None:
@@ -192,7 +193,7 @@ def test_tracing_editor_multi_floor() -> None:
     ]
     h = render_tracing(floors, "")
     assert '"floors"' in h and '"level": 1' in h  # niveaux embarqués
-    assert 'id="floorbar"' in h and 'id="planimg"' in h  # barre de niveaux + image dynamique
+    assert 'id="floorbar"' in h and 'id="stage"' in h  # barre de niveaux + canvas Konva
     # Le JS doit lire la bonne clé d'image (régression : f.uri ≠ image_uri).
     assert "f.image_uri" in h and "f.uri" not in h
 

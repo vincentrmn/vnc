@@ -12,7 +12,14 @@ from __future__ import annotations
 import base64
 import io
 
-from zephyr.schemas import Building, RoomLabel
+from zephyr.schemas import Building, Opening, Orientation, RoomLabel
+
+# Direction cardinale → vecteur (x=Est, y=Nord) ; cohérent avec l'éditeur.
+_ORIENT_DIR: dict[Orientation, tuple[float, float]] = {
+    Orientation.N: (0.0, 1.0), Orientation.NE: (0.7, 0.7), Orientation.E: (1.0, 0.0),
+    Orientation.SE: (0.7, -0.7), Orientation.S: (0.0, -1.0), Orientation.SW: (-0.7, -0.7),
+    Orientation.W: (-1.0, 0.0), Orientation.NW: (-0.7, 0.7),
+}
 
 # Couleurs par label (lisibilité, pas normatif).
 _LABEL_COLOR: dict[RoomLabel, str] = {
@@ -58,15 +65,33 @@ def render_plan_png(building: Building) -> bytes:
             ax.text(
                 cx,
                 cy,
-                f"{room.label.value}\n{room.area_m2:.0f} m²",
+                f"{room.label.value}\n{room.area_m2:.1f} m²",
                 ha="center",
                 va="center",
                 fontsize=8,
             )
-            # Ouvrants : un petit trait bleu par ouvrant (schématique).
-            for k, _op in enumerate(room.openings):
-                x0 = min(xs) + 0.7 * k
-                ax.plot([x0, x0 + 0.6], [min(ys), min(ys)], color="#1a73e8", lw=3)
+            # Ouvrants : un trait bleu placé sur la FAÇADE correspondante (par
+            # orientation), comme dans l'éditeur — pas tous au même bord.
+            minx, maxx = min(xs), max(xs)
+            miny, maxy = min(ys), max(ys)
+            rw, rh = (maxx - minx) or 1.0, (maxy - miny) or 1.0
+            by_ori: dict[Orientation, list[Opening]] = {}
+            for op in room.openings:
+                by_ori.setdefault(op.orientation, []).append(op)
+            for ori, ops in by_ori.items():
+                dx, dy = _ORIENT_DIR.get(ori, (0.0, -1.0))
+                ex, ey = cx + dx * rw / 2, cy + dy * rh / 2  # point milieu de la façade
+                tx, ty = -dy, dx  # tangente le long du mur
+                for k, _op in enumerate(ops):
+                    off = (k - (len(ops) - 1) / 2) * 0.7
+                    bx, by = ex + tx * off, ey + ty * off
+                    ax.plot(
+                        [bx - tx * 0.3, bx + tx * 0.3],
+                        [by - ty * 0.3, by + ty * 0.3],
+                        color="#1a73e8",
+                        lw=3,
+                        solid_capstyle="round",
+                    )
         ax.relim()
         ax.autoscale_view()
 
