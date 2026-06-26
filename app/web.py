@@ -40,6 +40,7 @@ from zephyr.web import (
     render_landing,
     render_results,
     render_study_form,
+    render_styleguide,
     render_tracing,
     render_validation,
 )
@@ -55,6 +56,11 @@ def landing() -> str:
 @app.get("/etude", response_class=HTMLResponse)
 def study_form() -> str:
     return render_study_form()
+
+
+@app.get("/styleguide", response_class=HTMLResponse)
+def styleguide() -> str:
+    return render_styleguide()
 
 
 # Champs de configuration transmis de page en page (non géométriques).

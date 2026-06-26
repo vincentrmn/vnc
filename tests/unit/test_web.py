@@ -33,6 +33,19 @@ def test_landing_has_value_prop_and_cta() -> None:
     assert "opposable" in h  # disclaimer
 
 
+def test_design_system_charte() -> None:
+    """DA KORR : Helvetica Neue, vert #3a5b42, tokens, bascule clair/sombre."""
+    from zephyr.web import render_styleguide
+
+    h = render_landing()
+    assert "Helvetica Neue" in h  # police KORR
+    assert "#3a5b42" in h  # vert KORR (token primary)
+    assert "data-theme" in h and "toggleTheme" in h and 'id="themebtn"' in h  # dark mode
+    assert "--primary:" in h and "--bg:" in h  # design tokens présents
+    sg = render_styleguide()
+    assert "Charte Zéphyr" in sg and "Helvetica Neue" in sg
+
+
 def test_study_form_has_inputs() -> None:
     h = render_study_form()
     # Champs CPE + infos non lisibles des plans (nature, n50, occupation).
