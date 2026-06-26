@@ -22,3 +22,15 @@ def test_score_weights_default() -> None:
     w = score_weights_for(ProjectType.LOGEMENT)
     assert isinstance(w, ScoreWeights)
     assert w.ventilation > 0
+
+
+def test_cost_preset_scales_with_size() -> None:
+    """Forfaits VNC plus petits sur petit projet ; gros tertiaire = défauts."""
+    from zephyr.presets import cost_preset_for, heating_price_for
+    from zephyr.schemas import ProjectType
+
+    small = cost_preset_for(ProjectType.LOGEMENT, 150)
+    large = cost_preset_for(ProjectType.MIXTE, 4200)
+    assert small["vnc_bos_platform_eur"] < 25000.0
+    assert large == {}  # gros tertiaire garde les forfaits par défaut
+    assert heating_price_for("pac") < heating_price_for("electrique")

@@ -75,6 +75,8 @@ select = ["E", "F", "I", "UP", "B", "W"]
 [tool.ruff.lint.per-file-ignores]
 # JS/CSS embarqués (éditeur de plan) : lignes longues inévitables.
 "src/zephyr/web/__init__.py" = ["E501"]
+# Chaînes de formules financières (ROI à livre ouvert) : lignes longues lisibles.
+"src/zephyr/roi/engine.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

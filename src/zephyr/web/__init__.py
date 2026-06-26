@@ -19,6 +19,7 @@ from zephyr.schemas import (
     InertiaClass,
     Opening,
     Orientation,
+    ROIResult,
     Room,
     RoomLabel,
     StudyResult,
@@ -388,6 +389,13 @@ input[type=file]::file-selector-button:hover { background: var(--primary); color
   .proc + .proc { border-left: 0; padding-left: 0; }
   .score-hero { grid-template-columns: 1fr; }
 }
+/* ROI à livre ouvert : table des formules */
+table.calc { border-collapse: collapse; width: 100%; font-size: .85rem; margin: .2rem 0 .8rem; }
+table.calc th { text-align: left; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .04em; border-bottom: 1px solid var(--line); padding: .3rem .3rem; }
+table.calc td { border-bottom: 1px solid var(--line); padding: .35rem .3rem; vertical-align: top; }
+table.calc td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+table.calc td.formula { color: var(--muted); font-family: 'Helvetica Neue', Arial, sans-serif; }
 /* Page styleguide */
 .sg-swatch { display: inline-block; width: 64px; height: 64px; border-radius: var(--r1);
   border: 1px solid var(--line); vertical-align: middle; margin-right: .5rem; }
@@ -1729,14 +1737,29 @@ def _financial_section(result: StudyResult) -> str:
     if r is None:
         return ""
     be = f"an {r.break_even_year}" if r.break_even_year is not None else "hors horizon"
-    pen = result.heating_penalty.eur_per_year if result.heating_penalty else 0.0
+
+    def _sub(txt: str) -> str:
+        return f'<div style="font-size:.72rem;color:var(--muted);font-weight:400">{txt}</div>'
+
+    van_sub = ""
+    if r.npv_delta_range is not None:
+        van_sub = _sub(f"P10–P90 {_eur(r.npv_delta_range.low)} … {_eur(r.npv_delta_range.high)}")
+    be_sub = ""
+    if r.break_even_range is not None:
+        h = r.horizon_years
+        lo, hi = r.break_even_range.low, r.break_even_range.high
+        lo_s = "hors" if lo > h else f"an {lo:.0f}"
+        hi_s = "hors" if hi > h else f"an {hi:.0f}"
+        be_sub = _sub(f"P10–P90 {lo_s} … {hi_s}")
+    proba = r.assumptions.get("proba_van_favorable", "")
+    proba_sub = _sub("probabilité VNC gagnante") if proba else ""
     kpis = '<div class="kpis">' + "".join(
-        f'<div class="kpi"><div class="k">{html.escape(k)}</div><div class="v">{v}</div></div>'
-        for k, v in [
-            ("CAPEX VNC", _eur(r.capex_vnc_eur)),
-            ("VAN économie VNC", _eur(r.npv_delta_eur)),
-            ("Break-even", be),
-            ("Pénalité chauffage", f"{_eur(pen)}/an"),
+        f'<div class="kpi"><div class="k">{html.escape(k)}</div><div class="v">{v}</div>{sub}</div>'
+        for k, v, sub in [
+            ("CAPEX VNC", _eur(r.capex_vnc_eur), ""),
+            ("VAN économie VNC", _eur(r.npv_delta_eur), van_sub),
+            ("Break-even", be, be_sub),
+            ("VNC favorable", proba or "—", proba_sub),
         ]
     ) + "</div>"
 
@@ -1774,8 +1797,41 @@ def _financial_section(result: StudyResult) -> str:
         "<h2 class='sec'>Bilan financier — VNC vs VMC double-flux</h2>"
         f"{kpis}{_van_svg(r.npv_delta_cumulative_eur)}"
         "<p style='color:var(--muted);font-size:.85rem;margin:.4rem 0 1rem'>VAN cumulée de "
-        "l'économie VNC (coûts VMC − coûts VNC), actualisée, année par année.</p>"
-        f"{capex}{opex}{synth}{_tornado(result)}{warns}"
+        "l'économie VNC (coûts VMC − coûts VNC), actualisée, année par année. La fourchette "
+        "P10–P90 vient d'un tirage Monte-Carlo sur les hypothèses sensibles.</p>"
+        f"{capex}{opex}{synth}{_calc_detail(r)}{_tornado(result)}{warns}"
+    )
+
+
+def _calc_detail(r: ROIResult) -> str:
+    """ROI « à livre ouvert » : chaque poste avec sa formule (valeurs substituées) et son montant."""
+    if not r.calc_lines:
+        return ""
+    sections = [
+        ("capex_vmc", "CAPEX VMC double-flux"), ("capex_vnc", "CAPEX VNC"),
+        ("opex_vmc", "OPEX VMC — an 1"), ("opex_vnc", "OPEX VNC — an 1"),
+    ]
+    blocks = []
+    for key, title in sections:
+        rows = "".join(
+            f"<tr><td>{html.escape(line.label)}</td>"
+            f"<td class='formula'>{html.escape(line.formula)}</td>"
+            f"<td>{_eur(line.value_eur)}</td></tr>"
+            for line in r.calc_lines
+            if line.section == key
+        )
+        if rows:
+            blocks.append(
+                f"<h4 style='margin:.8rem 0 .2rem'>{title}</h4>"
+                "<table class='calc'><tr><th>poste</th><th>formule</th><th>montant</th></tr>"
+                f"{rows}</table>"
+            )
+    return (
+        "<details style='margin:.8rem 0'><summary style='cursor:pointer;font-weight:600'>"
+        "Calcul détaillé (à livre ouvert) — chaque poste, sa formule, son montant</summary>"
+        "<p style='color:var(--muted);font-size:.85rem;margin:.4rem 0'>Montants aléas inclus "
+        "(+10 %). OPEX an 1 avant inflation ; les flux sont ensuite inflatés et actualisés.</p>"
+        + "".join(blocks) + "</details>"
     )
 
 

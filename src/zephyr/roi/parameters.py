@@ -41,12 +41,39 @@ class ROIParameters(BaseModel):
     # ------------------------------------------------------------------ #
     horizon_years: int = Field(default=20, ge=1, description="Horizon d'analyse (ans).")
     wacc: float = Field(default=0.03, ge=0, description="Taux d'actualisation (WACC).")
-    inflation: float = Field(default=0.025, ge=0, description="Inflation annuelle OPEX/énergie.")
+    inflation: float = Field(
+        default=0.025, ge=0, description="Inflation annuelle OPEX (hors énergie)."
+    )
+    energy_inflation: float | None = Field(
+        default=None, description="Inflation annuelle de l'énergie (défaut = inflation générale)."
+    )
     price_elec_eur_kwh: float = Field(
         default=0.28, gt=0, description="Prix de l'électricité (€/kWh, Eurostat LU)."
     )
     contingency_rate: float = Field(
         default=0.10, ge=0, description="Provision aléas sur CAPEX (fraction)."
+    )
+    tva_rate: float = Field(
+        default=0.0, ge=0, description="TVA appliquée au CAPEX (affichage TTC)."
+    )
+
+    # ------------------------------------------------------------------ #
+    # Postes optionnels (neutres par défaut = 0 → n'altèrent pas le calcul)
+    # ------------------------------------------------------------------ #
+    subsidy_vnc_eur: float = Field(default=0.0, ge=0, description="Subvention/aide CAPEX VNC (€).")
+    subsidy_vmc_eur: float = Field(default=0.0, ge=0, description="Subvention/aide CAPEX VMC (€).")
+    carbon_price_eur_t: float = Field(default=0.0, ge=0, description="Prix du carbone (€/tCO₂).")
+    grid_carbon_kg_kwh: float = Field(
+        default=0.0, ge=0, description="Facteur carbone du réseau élec (kgCO₂/kWh)."
+    )
+    freecooling_kwh_year: float = Field(
+        default=0.0, ge=0, description="kWh de froid évités/an par free-cooling VNC (bénéfice)."
+    )
+    num_ouvrants_override: int | None = Field(
+        default=None, ge=0, description="Nb d'ouvrants imposé (depuis la géométrie tracée)."
+    )
+    vmc_fixed_eur: float = Field(
+        default=0.0, ge=0, description="Part fixe CAPEX VMC (centrale de base), symétrie des coûts."
     )
 
     # ------------------------------------------------------------------ #
@@ -146,8 +173,15 @@ class ROIParameters(BaseModel):
 
     @property
     def num_ouvrants(self) -> int:
-        """Nombre d'ouvrants motorisés (arrondi au supérieur)."""
+        """Nombre d'ouvrants motorisés : depuis la géométrie si fournie, sinon ratio."""
+        if self.num_ouvrants_override is not None:
+            return max(self.num_ouvrants_override, 1)
         return math.ceil(self.total_floor_area_m2 / self.vnc_m2_per_ouvrant)
+
+    @property
+    def energy_inflation_rate(self) -> float:
+        """Inflation énergie effective (défaut = inflation générale)."""
+        return self.energy_inflation if self.energy_inflation is not None else self.inflation
 
     @property
     def num_capteurs(self) -> int:

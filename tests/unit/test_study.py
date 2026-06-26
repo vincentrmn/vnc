@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from zephyr.climate import synthetic_climate
-from zephyr.roi import ROIParameters, compute_roi
 from zephyr.schemas import (
     Building,
     EnvelopeData,
@@ -47,9 +46,14 @@ def test_compute_study_full_pipeline() -> None:
 
 def test_penalty_degrades_vnc_economics() -> None:
     res = compute_study(_building(), synthetic_climate(), envelope=_ENV)
-    roi_zero = compute_roi(ROIParameters(), heating_penalty_eur_per_year=0.0)
-    assert res.roi is not None
-    assert res.roi.npv_delta_eur < roi_zero.npv_delta_eur
+    from zephyr.thermal import PenaltyParams
+
+    res0 = compute_study(
+        _building(), synthetic_climate(), envelope=_ENV,
+        penalty_params=PenaltyParams(recovery_efficiency=0.0),
+    )
+    assert res.roi is not None and res0.roi is not None
+    assert res.roi.npv_delta_eur < res0.roi.npv_delta_eur
 
 
 def test_compute_study_no_go_propagates() -> None:

@@ -130,11 +130,16 @@ pénalité_VNC ≈ η_VMC · pertes · f_commande               [Wh]
 
 avec `f_commande` < 1 l'atténuation par la **commande à la demande**. Branché dans l'OPEX VNC du ROI. Jamais 0, jamais un % posé.
 
-### ⚠️ Limite connue : le ROI ne tient pas à petite échelle
-Les **coûts fixes** (BOS, forfait STD, commissioning ≈ 60 k€) sont calibrés pour du gros tertiaire (Pommerloch, 4200 m²). Sur une maison de 150 m², la VAN est négative et il n'y a pas de break-even. **À recalibrer par taille/typologie** (presets de coûts) — décision métier, à faire.
+### Évolutions financières (faites)
+- **Presets de coûts par taille** (`presets.cost_preset_for`) : les forfaits VNC (BOS, STD, commissioning, extraction) sont échelonnés maison / petit collectif / gros tertiaire, + une **part fixe VMC** (symétrie de modélisation). Corrige la limite « petite échelle ».
+- **Type de chauffage → prix de l'énergie** de la pénalité (`heating_price_for` : PAC via COP, gaz, élec…). Effet majeur : en chauffage **électrique**, la pénalité explose et peut renverser le verdict.
+- **Dimensionnement des ouvrants depuis la géométrie tracée** (`size_from_geometry`) : sur un vrai plan, nb d'ouvrants = châssis ouvrables réels ; sinon ratio surface/ouvrant (paramétrique).
+- **Fourchette Monte-Carlo P10/P50/P90** sur la VAN + **break-even probabiliste** + **probabilité VNC favorable** (`sensitivity.monte_carlo`) → on n'affiche plus un point unique.
+- **Postes optionnels** exposés et **neutres par défaut** : subvention VNC/VMC, coût carbone, free-cooling, TVA, inflation énergie distincte.
+- **ROI « à livre ouvert »** : chaque poste porte sa **formule avec les nombres** (`CalcLine`), affichée dans un volet dépliable.
 
 ### Avertissements méthodologiques (reportés dans le rapport)
-Ratios €/m² = ordres de grandeur LU/BE (à confronter à ≥ 2 devis), pas de valeur résiduelle, résultats sensibles → toujours un tornado.
+Ratios €/m² = ordres de grandeur LU/BE (à confronter à ≥ 2 devis), pas de valeur résiduelle, résultats sensibles → toujours fourchette + tornado.
 
 ---
 

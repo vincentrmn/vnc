@@ -16,6 +16,7 @@ from zephyr.schemas.building import (
 )
 from zephyr.schemas.cpe import CpeExtraction
 from zephyr.schemas.results import (
+    CalcLine,
     HeatingPenalty,
     Range,
     ROIResult,
@@ -44,6 +45,7 @@ __all__ = [
     "SiteContext",
     "StudyInput",
     # results
+    "CalcLine",
     "HeatingPenalty",
     "Range",
     "ROIResult",

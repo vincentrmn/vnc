@@ -96,6 +96,21 @@ class SensitivityEntry(BaseModel):
         return abs(self.output_high - self.output_low)
 
 
+class CalcLine(BaseModel):
+    """Une ligne de calcul **traçable** : libellé, formule avec ses nombres, montant.
+
+    Sert à afficher le ROI « à livre ouvert » : chaque poste montre sa formule et
+    son résultat (CLAUDE.md §2.5 honnêteté). ``section`` regroupe (capex_vmc,
+    capex_vnc, opex_vmc, opex_vnc, penalite, synthese).
+    """
+
+    section: str
+    label: str
+    formula: str = Field(description="Formule avec les valeurs substituées.")
+    value_eur: float
+    note: str | None = None
+
+
 class ROIResult(BaseModel):
     """Sortie du module `roi` : TCO/VAN paramétrique VNC vs VMC DF.
 
@@ -133,7 +148,13 @@ class ROIResult(BaseModel):
 
     # Fourchette sur la VAN delta + sensibilité
     npv_delta_range: Range | None = None
+    break_even_range: Range | None = Field(
+        default=None, description="Break-even probabiliste (P10/médiane/P90), en années."
+    )
     sensitivity: list[SensitivityEntry] = Field(default_factory=list)
+
+    # Détail traçable : chaque poste avec sa formule et son montant.
+    calc_lines: list[CalcLine] = Field(default_factory=list)
 
     assumptions: dict[str, str] = Field(default_factory=dict)
     warnings: list[str] = Field(

@@ -10,13 +10,14 @@ from __future__ import annotations
 
 from zephyr.climate import ClimateData
 from zephyr.roi import ROIParameters, compute_roi
-from zephyr.roi.sensitivity import tornado
+from zephyr.roi.sensitivity import monte_carlo, tornado
 from zephyr.rules import ScoreWeights, evaluate_vnc
 from zephyr.schemas import (
     Building,
     EnvelopeData,
     HeatingPenalty,
     ProjectType,
+    Range,
     SiteContext,
     StudyResult,
 )
@@ -32,6 +33,20 @@ def _penalty_for_roi(
     return penalty_per_m2 * roi_params.total_floor_area_m2
 
 
+def _size_ouvrants_from_geometry(building: Building, roi_params: ROIParameters) -> ROIParameters:
+    """Dimensionne les ouvrants depuis la géométrie tracée (P2) si disponible.
+
+    Quand on a un vrai plan (polygones), on compte les châssis **ouvrables** réels
+    plutôt qu'un ratio surface/25 — le chiffre colle à ce que l'ingénieur a tracé.
+    """
+    if not any(r.polygon for r in building.rooms):
+        return roi_params
+    n_openable = sum(1 for r in building.rooms for o in r.openings if getattr(o, "openable", True))
+    if n_openable <= 0:
+        return roi_params
+    return roi_params.model_copy(update={"num_ouvrants_override": n_openable})
+
+
 def compute_study(
     building: Building,
     climate: ClimateData,
@@ -42,6 +57,7 @@ def compute_study(
     project_type: ProjectType = ProjectType.MIXTE,
     penalty_params: PenaltyParams | None = None,
     weights: ScoreWeights | None = None,
+    size_from_geometry: bool = False,
     with_narrative: bool = False,
 ) -> StudyResult:
     """Pipeline complet → `StudyResult` : score + pénalité chauffage + ROI.
@@ -56,9 +72,15 @@ def compute_study(
     penalty = heating_penalty(building, climate, penalty_params)
     result.heating_penalty = penalty
 
+    if size_from_geometry:
+        roi_params = _size_ouvrants_from_geometry(building, roi_params)
     penalty_roi = _penalty_for_roi(penalty, building, roi_params)
     roi = compute_roi(roi_params, heating_penalty_eur_per_year=penalty_roi)
     roi.sensitivity = tornado(roi_params, heating_penalty_eur_per_year=penalty_roi)
+    mc = monte_carlo(roi_params, heating_penalty_eur_per_year=penalty_roi)
+    roi.npv_delta_range = Range(low=mc["npv_p10"], central=roi.npv_delta_eur, high=mc["npv_p90"])
+    roi.break_even_range = Range(low=mc["be_p10"], central=mc["be_p50"], high=mc["be_p90"])
+    roi.assumptions["proba_van_favorable"] = f"{mc['prob_favorable']:.0%}"
     result.roi = roi
     result.assumptions["surface_ventilee_m2"] = f"{roi_params.total_floor_area_m2:.0f}"
     result.assumptions["type_projet"] = project_type.value

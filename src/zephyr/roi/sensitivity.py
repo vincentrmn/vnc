@@ -75,6 +75,55 @@ def tornado(
     return entries
 
 
+def monte_carlo(
+    params: ROIParameters | None = None,
+    *,
+    heating_penalty_eur_per_year: float,
+    specs: dict[str, tuple[float, float]] | None = None,
+    n: int = 500,
+    seed: int = 0,
+) -> dict[str, float]:
+    """Distribution de la VAN delta et du break-even par tirage Monte-Carlo.
+
+    Échantillonne uniformément les drivers §6 dans leurs bornes (mêmes que le
+    tornado) → P10/médiane/P90 de la VAN et du break-even. Tient la promesse §6
+    (fourchette, pas un point unique). Renvoie un dict de percentiles.
+    """
+    p = params or ROIParameters()
+    specs = specs or default_tornado_specs(p, heating_penalty_eur_per_year)
+    names = list(specs.keys())
+    rng = np.random.default_rng(seed)
+    lows = np.array([specs[k][0] for k in names])
+    highs = np.array([specs[k][1] for k in names])
+    sample = rng.uniform(lows, highs, size=(n, len(names)))
+
+    horizon_plus = p.horizon_years + 1
+    npvs = np.empty(n)
+    bes = np.empty(n)
+    for i in range(n):
+        row = sample[i]
+        hp = heating_penalty_eur_per_year
+        update = {}
+        for name, val in zip(names, row, strict=True):
+            if name == HEATING_PENALTY_KEY:
+                hp = float(val)
+            else:
+                update[name] = float(val)
+        pp = p.model_copy(update=update) if update else p
+        r = compute_roi(pp, heating_penalty_eur_per_year=hp)
+        npvs[i] = r.npv_delta_eur
+        bes[i] = r.break_even_year if r.break_even_year is not None else horizon_plus
+    return {
+        "npv_p10": float(np.percentile(npvs, 10)),
+        "npv_p50": float(np.percentile(npvs, 50)),
+        "npv_p90": float(np.percentile(npvs, 90)),
+        "be_p10": float(np.percentile(bes, 10)),
+        "be_p50": float(np.percentile(bes, 50)),
+        "be_p90": float(np.percentile(bes, 90)),
+        "prob_favorable": float((npvs > 0).mean()),
+    }
+
+
 def sobol_indices(
     params: ROIParameters | None = None,
     *,

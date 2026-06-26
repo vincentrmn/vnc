@@ -39,3 +39,13 @@ def test_sobol_indices_smoke() -> None:
     s1 = sobol_indices(P, heating_penalty_eur_per_year=PENALTY, n_samples=16)
     assert HEATING_PENALTY_KEY in s1
     assert len(s1) == 5
+
+
+def test_monte_carlo_percentiles_ordered() -> None:
+    """Monte-Carlo : P10 ≤ P50 ≤ P90 sur la VAN, proba dans [0,1]."""
+    from zephyr.roi import ROIParameters
+    from zephyr.roi.sensitivity import monte_carlo
+
+    mc = monte_carlo(ROIParameters(), heating_penalty_eur_per_year=4000.0, n=120, seed=1)
+    assert mc["npv_p10"] <= mc["npv_p50"] <= mc["npv_p90"]
+    assert 0.0 <= mc["prob_favorable"] <= 1.0

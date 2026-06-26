@@ -102,11 +102,22 @@ def _site(flags: dict[str, bool]) -> SiteContext:
     )
 
 
-def _compute_page(building: Building, cfg: dict[str, str], flags: dict[str, bool]) -> str:
+def _compute_page(
+    building: Building, cfg: dict[str, str], flags: dict[str, bool], *, from_geometry: bool = False
+) -> str:
+    from zephyr.presets import cost_preset_for, heating_price_for
+
     ptype = ProjectType(cfg["project_type"])
     area = building.total_floor_area_m2 or float(cfg["area"])
+    # P1 — forfaits CAPEX recalés par taille (corrige le défaut "petit projet").
+    preset = cost_preset_for(ptype, area)
     roi_params = ROIParameters(
-        num_logements=0, surface_per_logement_m2=0.0, surface_tertiaire_m2=max(area, 1.0)
+        num_logements=0, surface_per_logement_m2=0.0, surface_tertiaire_m2=max(area, 1.0),
+        **preset,
+    )
+    # P4 — prix de l'énergie de chauffage selon le vecteur capté (PAC/gaz/élec…).
+    penalty = penalty_params_for(
+        ptype, heating_energy_price_eur_kwh=heating_price_for(cfg.get("chauffage", "pac"))
     )
     result = compute_study(
         building,
@@ -115,7 +126,8 @@ def _compute_page(building: Building, cfg: dict[str, str], flags: dict[str, bool
         envelope=_envelope(cfg),
         site=_site(flags),
         project_type=ptype,
-        penalty_params=penalty_params_for(ptype),
+        penalty_params=penalty,
+        size_from_geometry=from_geometry,
     )
     return render_results(result, building=building)
 
@@ -364,10 +376,12 @@ async def submit_geometry(request: Request) -> str:
         }.items()
     }
     flags = {k: bool(d.get(k)) for k in ("noise", "pollution", "security", "occ_incompatible")}
+    from_geometry = bool(d.get("building_json") or d.get("n_rooms"))
     if d.get("building_json"):
         building = Building.model_validate_json(d["building_json"])  # éditeur visuel
     elif d.get("n_rooms"):
         building = building_from_form(d)  # repli formulaire indexé
     else:
         building = _parametric(cfg)
-    return _compute_page(building, cfg, flags)
+    # Dimensionnement des ouvrants depuis la géométrie réellement tracée (pas paramétrique).
+    return _compute_page(building, cfg, flags, from_geometry=from_geometry)

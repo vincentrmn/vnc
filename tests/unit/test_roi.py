@@ -89,6 +89,36 @@ def test_outputs_consistency() -> None:
     assert r.warnings  # avertissements méthodologiques présents
 
 
+def test_optional_posts_neutral_by_default() -> None:
+    """Subvention/carbone/free-cooling/TVA = 0 par défaut → calcul identique (golden)."""
+    r = compute_roi(P, heating_penalty_eur_per_year=0.0)
+    # Aucune ligne carbone/free-cooling parasite quand les prix sont nuls.
+    assert "cout_carbone" not in r.opex_vnc_breakdown
+    assert "benefice_freecooling" not in r.opex_vnc_breakdown
+    assert r.capex_vmc_eur == pytest.approx(135 * 4200 * 1.10)  # part fixe VMC = 0
+
+
+def test_subsidy_and_geometry_override() -> None:
+    """Subvention réduit la VAN VNC (mieux) ; override d'ouvrants depuis la géométrie."""
+    base = compute_roi(P, heating_penalty_eur_per_year=0.0)
+    subsidized = compute_roi(
+        P.model_copy(update={"subsidy_vnc_eur": 50000.0}), heating_penalty_eur_per_year=0.0
+    )
+    assert subsidized.npv_delta_eur > base.npv_delta_eur  # aide VNC → économie VNC ↑
+    # CAPEX affiché reste brut (subvention = flux an 0, pas dans le breakdown).
+    assert subsidized.capex_vnc_eur == pytest.approx(base.capex_vnc_eur)
+    p2 = P.model_copy(update={"num_ouvrants_override": 10})
+    assert p2.num_ouvrants == 10
+
+
+def test_calc_lines_traceable() -> None:
+    """Chaque poste expose une formule (ROI à livre ouvert) et somme au total."""
+    r = compute_roi(P, heating_penalty_eur_per_year=4000.0)
+    assert r.calc_lines and all(line.formula for line in r.calc_lines)
+    capex_vnc_lines = [x for x in r.calc_lines if x.section == "capex_vnc"]
+    assert sum(x.value_eur for x in capex_vnc_lines) == pytest.approx(r.capex_vnc_eur)
+
+
 def test_break_even_later_with_penalty() -> None:
     """La pénalité ne peut que retarder (ou laisser inchangé) le break-even."""
     r0 = compute_roi(P, heating_penalty_eur_per_year=0.0)
