@@ -96,7 +96,7 @@ def test_dxf_without_polygons_routes_to_tracing() -> None:
             files={"dxf": ("messy.dxf", fh, "application/dxf")},
         )
     assert r.status_code == 200
-    assert "Tracer les pièces" in r.text and "window.TRACE" in r.text
+    assert "Tracer le plan" in r.text and "window.TRACE" in r.text
     assert "data:image/png;base64," in r.text  # DXF rendu en image de fond
 
 

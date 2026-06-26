@@ -107,11 +107,12 @@ _CSS = """
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   line-height: 1.55;
 }
 a { color: var(--teal-d); text-decoration: none; }
 .wrap { max-width: 980px; margin: 0 auto; padding: 0 1.2rem; }
+.wrap.wide { max-width: 1500px; }
 nav {
   display: flex; align-items: center; justify-content: space-between;
   padding: 1rem 1.2rem; max-width: 980px; margin: 0 auto;
@@ -234,6 +235,26 @@ input[type=file]::file-selector-button:hover { background: var(--teal); color: #
 .seg label + label { border-left: 1px solid var(--teal); }
 .seg label.on { background: var(--teal); color: #fff; }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
+/* Éditeur de tracé : grand plan collant à gauche, palette + liste à droite */
+.trace-layout { display: grid; grid-template-columns: 1fr 340px; gap: 1rem; align-items: start; }
+.trace-canvas-wrap { position: sticky; top: .6rem; }
+.trace-canvas-wrap svg { width: 100%; height: 84vh; display: block; background: #fff;
+  border: 1px solid var(--line); border-radius: .6rem; touch-action: none; cursor: grab; }
+.palette { position: sticky; top: .6rem; display: flex; flex-direction: column; gap: .45rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: .7rem; padding: .8rem; }
+.palette .btn { width: 100%; text-align: left; padding: .5rem .7rem; }
+.palette .row { display: flex; gap: .35rem; align-items: center; }
+.palette .row .btn { width: auto; flex: 1; text-align: center; }
+.palette .lbl { font-size: .82rem; font-weight: 600; color: var(--muted); }
+.palette hr { border: 0; border-top: 1px solid var(--line); margin: .25rem 0; width: 100%; }
+.palette #hint { color: #e8590c; font-weight: 600; font-size: .85rem; min-height: 1.1rem; }
+.trace-side .card { margin: .4rem 0; }
+.trace-side > #roomlist { margin-top: .8rem; max-height: 60vh; overflow: auto; padding-right: .2rem; }
+@media (max-width: 980px) {
+  .trace-layout { grid-template-columns: 1fr; }
+  .trace-canvas-wrap, .palette { position: static; }
+  .trace-canvas-wrap svg { height: 62vh; }
+}
 """
 
 _DISCLAIMER = (
@@ -250,14 +271,21 @@ _VERDICT = {
 _GRADE_COLOR = {"A": "#1a9d5a", "B": "#0e9aa7", "C": "#d9a400", "D": "#e07b39", "E": "#c0392b"}
 
 
-def _layout(title: str, body: str, *, cta: bool = True) -> str:
-    """Gabarit commun (nav + contenu + footer)."""
+def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> str:
+    """Gabarit commun (nav + contenu + footer). `wide` élargit le conteneur (tracé)."""
     nav_cta = '<a class="btn" href="/etude">Lancer une étude</a>' if cta else ""
+    wrap_cls = "wrap wide" if wide else "wrap"
+    fonts = (
+        '<link rel="preconnect" href="https://fonts.googleapis.com">'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+        'family=Inter:wght@400;500;600;700;800&display=swap">'
+    )
     return f"""<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)}</title><style>{_CSS}</style></head><body>
+<title>{html.escape(title)}</title>{fonts}<style>{_CSS}</style></head><body>
 <nav><div class="brand">Zéphyr<span>.</span></div>{nav_cta}</nav>
-<main class="wrap">{body}</main>
+<main class="{wrap_cls}">{body}</main>
 <footer class="wrap">Zéphyr — pré-étude de faisabilité VNC. {html.escape(_DISCLAIMER)}</footer>
 </body></html>"""
 
@@ -808,6 +836,7 @@ var ORDIR={N:[0,1],NE:[0.7,0.7],E:[1,0],SE:[0.7,-0.7],S:[0,-1],SW:[-0.7,-0.7],W:
 var LABELS=["sejour","chambre","cuisine","sdb","wc","circulation","bureau","technique","autre"];
 var COLORS={sejour:"#cfe8cf",chambre:"#cfe0f5",cuisine:"#f5e6cf",sdb:"#cfeef0",wc:"#e6cff5",circulation:"#eeeeee",bureau:"#f5cfd6",technique:"#dddddd",autre:"#f0f0f0"};
 var sel=-1, mode='idle', draft=[], calib=[], winDrag=null;
+var lastSash=1.5;  // dernière hauteur de châssis saisie → proposée pour les suivants
 // Vue (viewBox) pour zoom/pan ; coordonnées en px-image du niveau courant.
 var view={x:0, y:0, w:floors[0].w, h:floors[0].h};
 function applyView(){ svg().setAttribute('viewBox', view.x+' '+view.y+' '+view.w+' '+view.h); }
@@ -863,7 +892,7 @@ function render(){
     (r.openings||[]).forEach(function(op,k){
       var seg=op._seg; if(!seg) return;
       var ln=el('line',{x1:seg[0][0],y1:seg[0][1],x2:seg[1][0],y2:seg[1][1],
-        stroke:(op.openable?'#1a73e8':'#9aa3ad'),'stroke-width':px(0.18),'stroke-linecap':'round'});
+        stroke:(op.openable?'#1a73e8':'#9aa3ad'),'stroke-width':px(0.09),'stroke-linecap':'round'});
       ln.style.cursor='pointer';
       ln.addEventListener('click',(function(ri,oi){return function(e){ if(mode==='idle'){ e.stopPropagation(); B.rooms[ri].openings.splice(oi,1); render(); } };})(i,k));
       s.appendChild(ln);
@@ -914,7 +943,7 @@ function addWindow(a,b){
   var ox=(ma[0]+mb[0])/2-c[0], oy=(ma[1]+mb[1])/2-c[1];
   if(nx*ox+ny*oy<0){ nx=-nx; ny=-ny; }
   var o=nearestOri(nx,ny);
-  var sashEl=document.querySelector('input[name=sash]'), h=sashEl?(parseFloat(sashEl.value)||1.5):1.5;
+  var h=lastSash;  // reprend la dernière hauteur saisie
   var w=Math.max(lenM,0.1);
   var op={id:r.id+'_w'+r.openings.length, kind:'window', orientation:o,
     area_m2:Math.max(w*h,0.1), sill_height_m:0.9, head_height_m:0.9+h,
@@ -942,7 +971,7 @@ function showHeightPopup(ref, x, y){
     '<button type="button" class="btn" style="padding:.3rem .6rem">OK</button>';
   document.body.appendChild(pop);
   var inp=pop.querySelector('input'), ok=pop.querySelector('button');
-  function commit(){ var v=parseFloat(inp.value); if(v>0){ op._h=v; winRecalc(op); } if(pop.parentNode){ pop.parentNode.removeChild(pop); } render(); }
+  function commit(){ var v=parseFloat(inp.value); if(v>0){ op._h=v; lastSash=v; winRecalc(op); } if(pop.parentNode){ pop.parentNode.removeChild(pop); } render(); }
   ok.onclick=commit;
   inp.onkeydown=function(e){ if(e.key==='Enter'){ commit(); } else if(e.key==='Escape'){ if(pop.parentNode){pop.parentNode.removeChild(pop);} } };
   inp.focus(); inp.select();
@@ -983,7 +1012,7 @@ function roomlist(){
     var rm=B.rooms[parseInt(el.dataset.wi)], op=rm.openings[parseInt(el.dataset.wj)];
     if(el.dataset.wf==='facade'){ op.orientation=el.value; if(rm.exterior_wall_orientations.indexOf(el.value)<0){ rm.exterior_wall_orientations.push(el.value); } render(); return; }
     var v=parseFloat(el.value); if(!(v>0)) return;
-    if(el.dataset.wf==='w'){ setWinWidth(op,v); } else { op._h=v; winRecalc(op); }
+    if(el.dataset.wf==='w'){ setWinWidth(op,v); } else { op._h=v; lastSash=v; winRecalc(op); }
     render();
   };});
   Array.prototype.forEach.call(d.querySelectorAll('[data-wdel]'),function(b){b.onclick=function(){var p=b.dataset.wdel.split('_');B.rooms[parseInt(p[0])].openings.splice(parseInt(p[1]),1);render();};});
@@ -1039,6 +1068,7 @@ document.addEventListener('DOMContentLoaded',function(){
   document.getElementById('t-zreset').onclick=function(){ view={x:0,y:0,w:F().w,h:F().h}; render(); };
   document.getElementById('t-mark').oninput=function(){ render(); };
   if(multi){ var lw=document.getElementById('t-levelwrap'); if(lw){ lw.style.display='none'; } }
+  var se=document.querySelector('input[name=sash]'); if(se){ var sv=parseFloat(se.value); if(sv>0){ lastSash=sv; } }
   applyFloor();
   render();
 });
@@ -1098,44 +1128,47 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
         "avant de tracer ; chaque pièce garde le sien."
     )
     body = f"""
-<h1>Tracer les pièces sur le plan</h1>
-<p class="lead" style="color:var(--muted)">Ton plan est en fond. <b>Trace chaque
-pièce</b> (clique ses coins, puis « Terminer »), nomme-la et coche ses façades —
-la <b>surface réelle</b> est calculée via l'échelle. Sélectionne une pièce puis
-<b>trace ses châssis</b> sur la façade (glisser → largeur de la baie). Calibre en
-cliquant une cote connue si besoin. <b>Molette</b> = zoom, <b>glisser</b> = déplacer
-le plan. {level_help}</p>
-<div class="tracebar">
-  <button type="button" class="btn ghost" id="t-draw">✏️ Tracer une pièce</button>
-  <button type="button" class="btn ghost" id="t-finish">✓ Terminer la pièce</button>
-  <button type="button" class="btn ghost" id="t-win">🪟 Tracer un châssis</button>
-  <label id="t-levelwrap" style="display:inline-flex;align-items:center;gap:.3rem;font-weight:600;margin:0">
-    Niveau<input type="number" id="t-level" value="0" style="width:56px;padding:.3rem"></label>
-  <button type="button" class="btn ghost" id="t-cal">📏 Calibrer l'échelle</button>
-  <span style="display:inline-flex;gap:.3rem">
-    <button type="button" class="btn ghost" id="t-zout" title="Dézoomer">−</button>
-    <button type="button" class="btn ghost" id="t-zin" title="Zoomer">+</button>
-    <button type="button" class="btn ghost" id="t-zreset" title="Vue entière">⤢</button>
-  </span>
-  <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.85rem;color:var(--muted);margin:0"
-    title="Grosseur des ronds et pointillés de tracé">Repères
-    <input type="range" id="t-mark" min="0.5" max="4" step="0.5" value="1" style="width:90px"></label>
-  <span id="scaleinfo" style="color:var(--muted);font-size:.85rem"></span>
-  <span id="hint" style="color:#e8590c;font-weight:600"></span>
-</div>
+<h1 style="margin-bottom:.2rem">Tracer le plan</h1>
+<p class="sub" style="max-width:760px">Trace chaque pièce (clique ses coins puis
+« Terminer »), nomme-la et coche ses façades — la surface est calculée via
+l'échelle. Sélectionne une pièce puis trace ses châssis sur la façade (le glisser
+donne la largeur, une bulle demande la hauteur). Molette = zoom, glisser = déplacer.
+{level_help}</p>
 <div class="levelbar" id="floorbar"></div>
-<div style="position:relative">
-<svg id="plan" viewBox="0 0 100 100"
-  style="width:100%;height:72vh;border:1px solid var(--line);border-radius:.6rem;background:#fff;touch-action:none;cursor:grab">
-  <image id="planimg" x="0" y="0"/>
-</svg>
-{_COMPASS_SVG}
+<div class="trace-layout">
+  <div class="trace-canvas-wrap">
+    <div style="position:relative">
+      <svg id="plan" viewBox="0 0 100 100"><image id="planimg" x="0" y="0"/></svg>
+      {_COMPASS_SVG}
+    </div>
+  </div>
+  <aside class="trace-side">
+    <div class="palette">
+      <button type="button" class="btn" id="t-draw">✏️ Tracer une pièce</button>
+      <button type="button" class="btn ghost" id="t-finish">✓ Terminer la pièce</button>
+      <button type="button" class="btn ghost" id="t-win">🪟 Tracer un châssis</button>
+      <hr>
+      <label class="lbl" id="t-levelwrap">Niveau des nouvelles pièces
+        <input type="number" id="t-level" value="0" style="width:100%;padding:.3rem;margin-top:.2rem"></label>
+      <button type="button" class="btn ghost" id="t-cal">📏 Calibrer l'échelle</button>
+      <hr>
+      <div class="row">
+        <button type="button" class="btn ghost" id="t-zout" title="Dézoomer">−</button>
+        <button type="button" class="btn ghost" id="t-zin" title="Zoomer">+</button>
+        <button type="button" class="btn ghost" id="t-zreset" title="Vue entière">⤢</button>
+      </div>
+      <label class="lbl" title="Grosseur des ronds et pointillés de tracé">Taille des repères
+        <input type="range" id="t-mark" min="0.5" max="4" step="0.5" value="1" style="width:100%"></label>
+      <span id="scaleinfo" style="color:var(--muted);font-size:.8rem"></span>
+      <span id="hint"></span>
+    </div>
+    <div id="roomlist"></div>
+  </aside>
 </div>
-<div id="roomlist" style="margin-top:1rem"></div>
 <form id="valform" method="post" action="/etude/resultat" onsubmit="syncHidden()">
   {hidden_fields}
   <input type="hidden" name="building_json" id="building_json">
-  <p style="margin-top:1rem">
+  <p style="margin-top:1.2rem">
     <a class="btn ghost" href="/etude">← Config</a>
     <button type="button" class="btn ghost" onclick="downloadStudy()">💾 Télécharger l'étude</button>
     <button class="btn" type="submit">Confirmer &amp; calculer →</button>
@@ -1144,7 +1177,7 @@ le plan. {level_help}</p>
 <script>window.TRACE={data};</script>
 <script>{_TRACING_JS}</script>
 <script>{_STUDY_IO_JS}</script>"""
-    return _layout("Zéphyr — tracé du plan", body, cta=False)
+    return _layout("Zéphyr — tracé du plan", body, cta=False, wide=True)
 
 
 def render_validation(building: Building, hidden_fields: str, warnings: list[str]) -> str:
