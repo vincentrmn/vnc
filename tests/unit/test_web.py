@@ -171,6 +171,15 @@ def test_tracing_editor_can_draw_windows() -> None:
     assert '"window"' in h  # mode de tracé de châssis
 
 
+def test_tracing_editor_advanced_tools() -> None:
+    """Konva : rectangle, magnétisme, déplacement de pièce, pinch tactile."""
+    h = render_tracing(_floors(), "")
+    assert 'id="t-rect"' in h and "finishRect" in h  # tracé rectangle
+    assert 'id="t-snap"' in h and "snapPx" in h  # magnétisme
+    assert "onTouchMove" in h  # pinch-to-zoom tactile
+    assert "draggable" in h and "dragend" in h  # déplacer une pièce / coins
+
+
 def test_tracing_editor_window_height_and_table() -> None:
     """Châssis : popup hauteur au relâcher + largeur/hauteur éditables dans le tableau."""
     h = render_tracing(_floors(), "")
