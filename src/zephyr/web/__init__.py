@@ -250,6 +250,8 @@ input[type=file]::file-selector-button:hover { background: var(--teal); color: #
 .ptitle { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
   color: var(--muted); font-weight: 700; }
 .palette .btn { width: 100%; text-align: center; padding: .5rem .7rem; }
+.palette .btn.active { background: var(--teal); color: #fff; border-color: var(--teal);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
 .palette .row { display: flex; gap: .35rem; }
 .palette .row .btn { flex: 1; }
 .palette .lbl { font-size: .82rem; font-weight: 600; color: var(--muted); }
@@ -954,9 +956,11 @@ function render(){
 }
 
 var HINTS={draw:"Cliquez les coins de la piece, puis Terminer.",calibrate:"Cliquez deux points d'une cote connue.",window:"Glissez le long de la facade de la piece selectionnee (longueur = largeur)."};
+var MODEBTN={draw:"t-draw", window:"t-win", calibrate:"t-cal"};
 function setMode(m){ mode=m; draft=[]; calib=[]; winDrag=null;
   if(stage){ stage.draggable(m==="idle"); stage.container().style.cursor=(m==="idle"?"grab":"crosshair"); }
-  var hi=document.getElementById("hint"); if(hi){ hi.textContent=HINTS[m]||""; }
+  Object.keys(MODEBTN).forEach(function(k){ var b=document.getElementById(MODEBTN[k]); if(b){ b.classList.toggle("active", k===m); } });
+  var hi=document.getElementById("hint"); if(hi){ hi.textContent=m==="idle"?"":((HINTS[m]||"")+" — Échap pour quitter."); }
   render();
 }
 function curLevel(){ if(multi){ return F().level; } var e=document.getElementById("t-level"); return e?(parseInt(e.value)||0):0; }
@@ -1095,7 +1099,8 @@ document.addEventListener("DOMContentLoaded",function(){
   initStage();
   document.getElementById("t-draw").onclick=function(){ setMode(mode==="draw"?"idle":"draw"); };
   document.getElementById("t-finish").onclick=finishRoom;
-  document.getElementById("t-cal").onclick=function(){ setMode("calibrate"); };
+  document.getElementById("t-cal").onclick=function(){ setMode(mode==="calibrate"?"idle":"calibrate"); };
+  document.addEventListener("keydown",function(e){ if(e.key==="Escape" && mode!=="idle"){ setMode("idle"); } });
   document.getElementById("t-win").onclick=function(){
     if(sel<0){ var hi=document.getElementById("hint"); if(hi){ hi.textContent="Selectionne une piece (sur le plan ou via + chassis), puis trace sur sa facade."; } return; }
     setMode(mode==="window"?"idle":"window");
@@ -1183,7 +1188,7 @@ donne la largeur, une bulle demande la hauteur). Molette = zoom, glisser = dépl
     <div class="palette">
       <div class="pgroup">
         <div class="ptitle">Pièces</div>
-        <button type="button" class="btn" id="t-draw">✏️ Tracer une pièce</button>
+        <button type="button" class="btn ghost" id="t-draw">✏️ Tracer une pièce</button>
         <button type="button" class="btn ghost" id="t-finish">✓ Terminer la pièce</button>
         <label class="lbl" id="t-levelwrap">Niveau des nouvelles pièces
           <input type="number" id="t-level" value="0" style="width:100%;padding:.3rem;margin-top:.2rem"></label>
