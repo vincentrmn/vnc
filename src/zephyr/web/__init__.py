@@ -348,6 +348,46 @@ input[type=file]::file-selector-button:hover { background: var(--primary); color
   .trace-canvas-wrap, .trace-side { position: static; max-height: none; }
   #stage { height: 62vh; }
 }
+/* Landing & résultats — registre éditorial (moins "SaaS générique") */
+.eyebrow { display: flex; align-items: center; gap: .5rem; font-size: .72rem; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.eyebrow .dot { width: .45rem; height: .45rem; border-radius: 50%; background: var(--primary); }
+.hero-xl { padding: var(--s8) 0 var(--s7); }
+.display { font-size: clamp(2.5rem, 6.5vw, 5rem); line-height: 1.02; letter-spacing: -.045em;
+  font-weight: 700; margin: var(--s4) 0; max-width: 16ch; }
+.display em { font-style: normal; color: var(--primary); }
+.lead-xl { font-size: 1.2rem; color: var(--muted); max-width: 52ch; line-height: 1.5; }
+.cta-row { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: var(--s5); }
+.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+.sec-head { display: flex; align-items: baseline; gap: .8rem; margin: var(--s7) 0 var(--s4); }
+.sec-head .idx { font-size: .8rem; font-weight: 700; color: var(--primary); letter-spacing: .1em; }
+.sec-head h2 { font-size: clamp(1.4rem, 3vw, 2rem); margin: 0; letter-spacing: -.03em; }
+.process { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
+.proc { padding: var(--s5) var(--s4) var(--s5) 0; border-bottom: 1px solid var(--line); }
+.proc + .proc { border-left: 1px solid var(--line); padding-left: var(--s4); }
+.proc .num { font-size: 1.6rem; font-weight: 700; color: var(--primary); letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; }
+.proc h3 { margin: .5rem 0 .3rem; font-size: 1.1rem; }
+.proc p { margin: 0; color: var(--muted); font-size: .95rem; }
+.spec { border-top: 1px solid var(--line); margin-top: var(--s2); }
+.spec-row { display: grid; grid-template-columns: 1fr auto; gap: .4rem 1.5rem;
+  padding: 1rem 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.spec-row .t { font-weight: 600; font-size: 1.05rem; }
+.spec-row .w { font-variant-numeric: tabular-nums; color: var(--primary); font-weight: 700; text-align: right; }
+.spec-row .d { grid-column: 1 / -1; color: var(--muted); font-size: .92rem; margin-top: -.1rem; }
+/* Résultats — score en grand */
+.score-hero { display: grid; grid-template-columns: auto 1fr; gap: var(--s5); align-items: center;
+  padding: var(--s4) 0 var(--s6); border-bottom: 1px solid var(--line); margin-bottom: var(--s5); }
+.score-hero .big { display: flex; align-items: baseline; gap: .3rem; }
+.score-hero .big .n { font-size: clamp(3.5rem, 11vw, 6.5rem); font-weight: 700; line-height: .85;
+  letter-spacing: -.05em; }
+.score-hero .big .slash { font-size: 1.4rem; color: var(--faint); }
+.score-hero h1 { font-size: clamp(1.5rem, 3.4vw, 2.2rem); margin: .3rem 0 .4rem; letter-spacing: -.03em; }
+@media (max-width: 720px) {
+  .process { grid-template-columns: 1fr; }
+  .proc + .proc { border-left: 0; padding-left: 0; }
+  .score-hero { grid-template-columns: 1fr; }
+}
 /* Page styleguide */
 .sg-swatch { display: inline-block; width: 64px; height: 64px; border-radius: var(--r1);
   border: 1px solid var(--line); vertical-align: middle; margin-right: .5rem; }
@@ -466,41 +506,52 @@ Tous les écrans s'appuient sur ces tokens. Bascule clair/sombre en haut à droi
 def render_landing() -> str:
     """Landing page : proposition de valeur + comment ça marche + critères."""
     steps = [
-        ("1", "Déposez vos plans", "Un export DXF + quelques infos du CPE (parois, isolation)."),
-        ("2", "Score d'aptitude VNC", "Traversant, vitrage, inertie, isolation — noté, expliqué."),
-        ("3", "Bilan financier", "VNC vs VMC double-flux : CAPEX, VAN, break-even, sensibilité."),
+        ("01", "Déposez le plan & le CPE", "DXF ou PDF vectoriel ; le passeport "
+         "énergétique pré-remplit l'enveloppe (U, n50, inertie)."),
+        ("02", "Tracez, on mesure", "Pièces, châssis, façades sur le plan en fond. "
+         "Le code calcule surfaces et traversant — pas de vision, pas d'à-peu-près."),
+        ("03", "Score + bilan", "Aptitude VNC notée et expliquée, puis le bilan "
+         "financier face à une VMC double-flux."),
     ]
     steps_html = "".join(
-        f'<div class="card"><span class="n">{n}</span><h3>{html.escape(t)}</h3>'
+        f'<div class="proc"><div class="num">{n}</div><h3>{html.escape(t)}</h3>'
         f"<p>{html.escape(d)}</p></div>"
         for n, t, d in steps
     )
     crits = [
-        ("Ventilation", "Traversant idéal ; sinon châssis ≥ 1,5 m (tirage mono-façade)."),
-        ("Vitrage", "Ratio surface vitrée / surface au sol dans la bonne bande."),
-        ("Inertie", "Masse lue de la composition des parois (free-cooling nocturne)."),
-        ("Isolation", "Niveau d'isolation — moins de pertes, meilleur bilan."),
+        ("Ventilation", "35", "Traversant idéal ; sinon châssis ≥ 1,5 m (tirage mono-façade)."),
+        ("Inertie", "25", "Masse lue de la composition des parois — free-cooling nocturne."),
+        ("Vitrage", "20", "Ratio surface vitrée / surface au sol, dans la bonne bande."),
+        ("Isolation", "20", "Niveau d'isolation : moins de pertes, meilleur bilan."),
     ]
     crit_html = "".join(
-        f'<div class="card"><h3>{html.escape(t)}</h3><p>{html.escape(d)}</p></div>'
-        for t, d in crits
+        f'<div class="spec-row"><div class="t">{html.escape(t)}</div>'
+        f'<div class="w">{w}</div><div class="d">{html.escape(d)}</div></div>'
+        for t, w, d in crits
     )
     body = f"""
-<section class="hero">
-  <span class="kicker">Ventilation Naturelle Contrôlée · pré-étude déterministe</span>
-  <h1>Pré-qualifiez la VNC<br>en quelques minutes.</h1>
-  <p class="lead">Des plans, le CPE, et Zéphyr vous donne un score d'aptitude à la
-  ventilation naturelle, des pistes d'amélioration, et le bilan financier face à
-  une VMC double-flux. Sans simulation lourde — du calcul déterministe.</p>
-  <p style="margin-top:1.4rem">
+<section class="hero-xl">
+  <div class="eyebrow"><span class="dot"></span> Pré-étude déterministe · Ventilation Naturelle Contrôlée</div>
+  <h1 class="display">La VNC, <em>pré-qualifiée</em> en quelques minutes.</h1>
+  <p class="lead-xl">Un plan, le CPE, et Zéphyr rend un score d'aptitude à la
+  ventilation naturelle, des leviers d'amélioration, et le bilan financier face à
+  une VMC double-flux. Du calcul déterministe — aucune simulation boîte noire.</p>
+  <div class="cta-row">
     <a class="btn" href="/etude">Lancer une étude</a>
     <a class="btn ghost" href="#methode">Comment ça marche</a>
-  </p>
+  </div>
 </section>
-<section id="methode"><h2 class="sec">Comment ça marche</h2>
-  <div class="steps">{steps_html}</div></section>
-<section><h2 class="sec">Ce qu'on évalue</h2>
-  <div class="crit-grid">{crit_html}</div></section>
+<hr class="rule">
+<section id="methode">
+  <div class="sec-head"><span class="idx">→</span><h2>Comment ça marche</h2></div>
+  <div class="process">{steps_html}</div>
+</section>
+<section>
+  <div class="sec-head"><span class="idx">→</span><h2>Ce qu'on évalue</h2></div>
+  <p class="lead-xl" style="margin-bottom:var(--s2)">Quatre critères pondérés (poids
+  sur 100), notés en déterministe avec barème et recommandation.</p>
+  <div class="spec">{crit_html}</div>
+</section>
 <div class="disclaimer">⚠️ {html.escape(_DISCLAIMER)}</div>
 """
     return _layout("Zéphyr — pré-étude VNC", body)
@@ -1758,18 +1809,29 @@ def render_results(result: StudyResult, *, building: object | None = None) -> st
         except Exception:  # pragma: no cover - matplotlib absent
             plan = ""
 
+    big = ""
+    if s is not None:
+        big = (
+            '<div class="big"><span class="n">'
+            f'{s.global_score:.0f}</span><span class="slash">/ 100</span>'
+            f'<span class="slash" style="margin-left:.5rem;font-weight:700;color:var(--ink)">'
+            f'{html.escape(s.grade)}</span></div>'
+        )
     body = f"""
-<div class="result-head">
+<div class="score-hero">
   {gauge}
   <div>
+    <div class="eyebrow"><span class="dot"></span> Aptitude VNC</div>
+    {big}
+    <h1>Aptitude à la VNC</h1>
     <span class="badge" style="background:{vcolor}">{html.escape(vlabel)}</span>
-    <h1 style="margin:.5rem 0 0">Aptitude à la VNC</h1>
-    <p style="color:var(--muted);margin:.2rem 0 0">Score déterministe sur 4 critères
-    pondérés. Détail et leviers ci-dessous.</p>
+    <p class="hint" style="margin-top:.6rem;max-width:52ch">Score déterministe sur 4
+    critères pondérés (ventilation, inertie, vitrage, isolation). Détail, leviers et
+    bilan financier ci-dessous.</p>
   </div>
 </div>
 {flags}
-<h2 class="sec">Détail par critère</h2>
+<div class="sec-head"><span class="idx">01</span><h2>Détail par critère</h2></div>
 {_criteria_bars(result)}
 {_score_legend(result)}
 {recos}
