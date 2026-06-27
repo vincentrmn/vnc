@@ -38,21 +38,28 @@ def test_compute_study_full_pipeline() -> None:
     res = compute_study(_building(), synthetic_climate(), envelope=_ENV)
     assert res.verdict in {Verdict.GO, Verdict.CONDITIONNEL, Verdict.NO_GO}
     assert res.score is not None and res.score.criteria
+    # La pénalité reste calculée pour information…
     assert res.heating_penalty is not None and res.heating_penalty.eur_per_year > 0
     assert res.roi is not None and res.roi.sensitivity
-    # La pénalité de chauffage alimente bien l'OPEX VNC du ROI.
-    assert res.roi.opex_vnc_breakdown["penalite_chauffage"] > 0
+    # …mais n'alimente pas le ROI par défaut (simplification produit).
+    assert "penalite_chauffage" not in res.roi.opex_vnc_breakdown
+    # …et n'apparaît donc pas comme driver de sensibilité.
+    assert all("heating_penalty" not in e.parameter for e in res.roi.sensitivity)
 
 
-def test_penalty_degrades_vnc_economics() -> None:
-    res = compute_study(_building(), synthetic_climate(), envelope=_ENV)
+def test_penalty_can_be_reenabled_and_degrades_vnc_economics() -> None:
+    """Le câblage thermal → ROI reste correct quand on active le drapeau."""
     from zephyr.thermal import PenaltyParams
 
+    res = compute_study(
+        _building(), synthetic_climate(), envelope=_ENV, include_heating_penalty=True
+    )
     res0 = compute_study(
-        _building(), synthetic_climate(), envelope=_ENV,
+        _building(), synthetic_climate(), envelope=_ENV, include_heating_penalty=True,
         penalty_params=PenaltyParams(recovery_efficiency=0.0),
     )
     assert res.roi is not None and res0.roi is not None
+    assert res.roi.opex_vnc_breakdown["penalite_chauffage"] > 0
     assert res.roi.npv_delta_eur < res0.roi.npv_delta_eur
 
 

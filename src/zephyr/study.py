@@ -10,7 +10,12 @@ from __future__ import annotations
 
 from zephyr.climate import ClimateData
 from zephyr.roi import ROIParameters, compute_roi
-from zephyr.roi.sensitivity import monte_carlo, tornado
+from zephyr.roi.sensitivity import (
+    HEATING_PENALTY_KEY,
+    default_tornado_specs,
+    monte_carlo,
+    tornado,
+)
 from zephyr.rules import ScoreWeights, evaluate_vnc
 from zephyr.schemas import (
     Building,
@@ -58,11 +63,18 @@ def compute_study(
     penalty_params: PenaltyParams | None = None,
     weights: ScoreWeights | None = None,
     size_from_geometry: bool = False,
+    include_heating_penalty: bool = False,
     with_narrative: bool = False,
 ) -> StudyResult:
     """Pipeline complet → `StudyResult` : score + pénalité chauffage + ROI.
 
     Si ``with_narrative`` et qu'une clé API est disponible, ajoute le narratif Opus.
+
+    ``include_heating_penalty`` est **désactivé par défaut** (simplification produit) :
+    la pénalité de chauffage degrés-jours est calculée et stockée pour information sur
+    ``result.heating_penalty``, mais **n'alimente pas le ROI** tant qu'on ne l'active
+    pas explicitement. Tout le câblage (thermal → ROI, tornado, Monte-Carlo) reste en
+    place pour la réactiver d'un seul drapeau le jour où on veut affiner.
     """
     roi_params = roi_params or ROIParameters()
     envelope = envelope or EnvelopeData()
@@ -74,10 +86,17 @@ def compute_study(
 
     if size_from_geometry:
         roi_params = _size_ouvrants_from_geometry(building, roi_params)
-    penalty_roi = _penalty_for_roi(penalty, building, roi_params)
+    penalty_roi = (
+        _penalty_for_roi(penalty, building, roi_params) if include_heating_penalty else 0.0
+    )
+    # Sans pénalité, on retire son driver de la sensibilité (sinon une ligne « 0 € » parasite).
+    specs = None
+    if not include_heating_penalty:
+        specs = default_tornado_specs(roi_params, penalty_roi)
+        specs.pop(HEATING_PENALTY_KEY, None)
     roi = compute_roi(roi_params, heating_penalty_eur_per_year=penalty_roi)
-    roi.sensitivity = tornado(roi_params, heating_penalty_eur_per_year=penalty_roi)
-    mc = monte_carlo(roi_params, heating_penalty_eur_per_year=penalty_roi)
+    roi.sensitivity = tornado(roi_params, heating_penalty_eur_per_year=penalty_roi, specs=specs)
+    mc = monte_carlo(roi_params, heating_penalty_eur_per_year=penalty_roi, specs=specs)
     roi.npv_delta_range = Range(low=mc["npv_p10"], central=roi.npv_delta_eur, high=mc["npv_p90"])
     roi.break_even_range = Range(low=mc["be_p10"], central=mc["be_p50"], high=mc["be_p90"])
     roi.assumptions["proba_van_favorable"] = f"{mc['prob_favorable']:.0%}"

@@ -83,8 +83,10 @@ def _opex_vnc_year1(p: ROIParameters, heating_penalty: float) -> dict[str, float
         "maintenance_ouvrants_capteurs": p.vnc_maintenance_eur_m2_year * p.total_floor_area_m2,
         "abonnement_bos": p.bos_subscription_eur_per_point_year * p.num_bos_points,
         "extraction_humide": p.wet_extraction_opex_eur_year,
-        "penalite_chauffage": heating_penalty,
     }
+    # Pénalité de chauffage : omise tant qu'elle est nulle (simplification produit).
+    if heating_penalty > 0:
+        b["penalite_chauffage"] = heating_penalty
     if p.carbon_price_eur_t and p.grid_carbon_kg_kwh:
         b["cout_carbone"] = carbon
     if p.freecooling_kwh_year:
