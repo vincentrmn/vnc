@@ -55,6 +55,7 @@ _ICONS: dict[str, str] = {
     "download": '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
     "refresh": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     "maximize": '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+    "bulb": '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
 }
 
 
@@ -282,28 +283,38 @@ footer { color: var(--muted); font-size: .85rem; padding: var(--s6) 0 var(--s7);
   padding: .9rem; box-shadow: var(--shadow-1); }
 .kpi .k { color: var(--muted); font-size: .82rem; }
 .kpi .v { font-size: 1.35rem; font-weight: 700; letter-spacing: -.02em; }
-/* Formulaires */
+/* Formulaires — ciblage par type (les champs des cartes sont liés par form="…", pas imbriqués) */
 form label { display: block; font-weight: 600; font-size: .9rem; margin: .8rem 0 .2rem; }
-form input, form select, form textarea { width: 100%; padding: .5rem .6rem;
+input[type=text], input[type=number], input[type=search], input[type=email], input[type=tel],
+select, textarea { width: 100%; padding: .5rem .6rem; box-sizing: border-box;
   border: 1px solid var(--line); border-radius: var(--r1); font: inherit; font-size: .92rem;
   background: var(--surface-2); color: var(--ink); transition: border-color .12s, box-shadow .12s; }
-form input:hover, form select:hover { border-color: var(--faint); }
+input[type=text]:hover, input[type=number]:hover, select:hover, textarea:hover { border-color: var(--faint); }
 /* Sélecteurs épurés : flèche custom (pas de combo natif « noir et gros ») */
-form select { appearance: none; -webkit-appearance: none; -moz-appearance: none;
+select { appearance: none; -webkit-appearance: none; -moz-appearance: none;
   padding-right: 2rem; cursor: pointer;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235d6c7b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
   background-repeat: no-repeat; background-position: right .6rem center; }
-form input::placeholder { color: var(--faint); }
-form input:focus, form select:focus { border-color: var(--primary); outline: none;
+input::placeholder { color: var(--faint); }
+input:focus, select:focus, textarea:focus { border-color: var(--primary); outline: none;
   background: var(--surface); box-shadow: 0 0 0 3px var(--ring); }
+/* Cases à cocher / radios : teinte de la marque, plus de gros carré système */
+input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1.05em; height: 1.05em;
+  cursor: pointer; }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 var(--s4); }
 /* En-tête de la page config : titre + reprise discrète */
 .form-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
   flex-wrap: wrap; }
+.resume { position: relative; }
 .resume > summary { cursor: pointer; color: var(--muted); font-size: .88rem; list-style: none;
   display: inline-flex; align-items: center; gap: .35rem; }
 .resume > summary::-webkit-details-marker { display: none; }
-.resume-form { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-top: .6rem; }
+.resume > summary:hover { color: var(--ink); }
+/* Panneau flottant : s'ouvre par-dessus, ne décale aucun contenu */
+.resume-form { position: absolute; right: 0; top: 1.8rem; z-index: 30; width: max-content; max-width: 340px;
+  display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r1); padding: .7rem .8rem;
+  box-shadow: 0 10px 28px rgba(0,0,0,.16); }
 /* Ligne d'upload + action séparée du cadre */
 .upload-row { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
 .check { display: flex; align-items: center; gap: .5rem; margin: .5rem 0; }
@@ -358,36 +369,44 @@ input[type=file]::file-selector-button {
   border-radius: var(--r1); padding: .45rem .9rem; font-weight: 600; cursor: pointer; margin-right: .8rem;
 }
 input[type=file]::file-selector-button:hover { background: var(--primary); color: var(--on-primary); }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r1); overflow: hidden; }
-.seg label { padding: .5rem 1rem; cursor: pointer; font-weight: 600; color: var(--muted); user-select: none; }
-.seg label + label { border-left: 1px solid var(--line); }
-.seg label.on { background: var(--primary); color: var(--on-primary); }
+.seg { display: inline-flex; gap: .2rem; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--pill); padding: .2rem; }
+.seg label { padding: .35rem .9rem; cursor: pointer; font-weight: 600; font-size: .88rem;
+  color: var(--muted); border-radius: var(--pill); user-select: none; transition: background .12s, color .12s; }
+.seg label.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
 /* Éditeur de tracé (Konva) : plan + palette fixés à l'écran, liste de pièces qui défile seule */
 .trace-head { margin-bottom: .4rem; }
-.howto { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r1);
-  padding: .4rem .8rem; margin: .4rem 0 .6rem; }
-.howto > summary { cursor: pointer; font-weight: 600; font-size: .92rem; list-style: none;
-  display: inline-flex; align-items: center; gap: .4rem; }
-.howto > summary::-webkit-details-marker { display: none; }
-.howto > summary::before { content: '▸'; color: var(--muted); transition: transform .15s; }
-.howto[open] > summary::before { transform: rotate(90deg); }
-.howto ol { margin: .5rem 0 .3rem; padding-left: 1.2rem; line-height: 1.7; font-size: .9rem; }
-.howto li { margin: .15rem 0; }
-.howto li b { color: var(--ink); }
+/* Menus dépliants d'explication : ampoule + cadre jaune pâle pour ressortir */
+.explain { background: #fdf6e3; border: 1px solid #efdfa6; border-radius: var(--r1);
+  padding: .5rem .9rem; margin: .8rem 0; }
+.explain > summary { cursor: pointer; font-weight: 600; font-size: .92rem; list-style: none;
+  display: inline-flex; align-items: center; gap: .45rem; color: var(--ink); }
+.explain > summary::-webkit-details-marker { display: none; }
+.explain > summary .ic { color: #c79400; flex: none; }
+.explain ol, .explain ul, .explain p, .explain table { margin: .5rem 0 .2rem; }
+.explain ol { padding-left: 1.2rem; line-height: 1.7; font-size: .9rem; }
+.explain li { margin: .15rem 0; }
+.explain li b { color: var(--ink); }
+:root[data-theme="dark"] .explain { background: #29260f; border-color: #4a4320; }
+.howto { margin: .4rem 0 .6rem; }
 kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--surface);
   border: 1px solid var(--line); border-bottom-width: 2px; border-radius: .35rem;
   padding: .12rem .4rem; color: var(--ink); white-space: nowrap; }
 .trace-layout { display: grid; grid-template-columns: 1fr 360px; gap: var(--s4); align-items: start; }
 .trace-canvas-wrap { position: sticky; top: .6rem; }
-.stage-mode { min-height: 1.4rem; margin-bottom: .35rem; font-weight: 600; font-size: .88rem;
-  color: var(--primary-strong); display: flex; align-items: center; gap: .4rem; }
-.stage-mode.empty { color: var(--muted); font-weight: 400; }
-#stage { width: 100%; height: calc(100vh - 6.5rem); min-height: 420px; background: #fff;
+.stage-mode { min-height: 1.6rem; margin-bottom: .4rem; font-weight: 700; font-size: .9rem;
+  display: flex; align-items: center; gap: .45rem; padding: .45rem .7rem; border-radius: var(--r1);
+  background: var(--primary-soft); color: var(--primary-strong); border: 1px solid var(--primary); }
+.stage-mode.empty { background: var(--surface-2); color: var(--muted); font-weight: 400;
+  border-color: var(--line); }
+#stage { width: 100%; height: calc(100vh - 7rem); min-height: 420px; background: #fff;
   border: 1px solid var(--line); border-radius: var(--r2); overflow: hidden; touch-action: none;
   box-shadow: var(--shadow-1); }
-.trace-side { position: sticky; top: .6rem; height: calc(100vh - 4.5rem);
-  display: flex; flex-direction: column; gap: .8rem; }
+.trace-side { position: sticky; top: .6rem; display: flex; flex-direction: column; gap: .8rem; }
+/* Liste des pièces : pleine largeur sous le plan, en grille de cartes */
+.roomlist-section { margin-top: var(--s5); }
+#roomlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .6rem; }
 .palette { flex: none; display: flex; flex-direction: column; gap: .7rem;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r2); padding: .9rem;
   box-shadow: var(--shadow-1); }
@@ -480,6 +499,18 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
   letter-spacing: -.05em; }
 .score-hero .big .slash { font-size: 1.4rem; color: var(--faint); }
 .score-hero h1 { font-size: clamp(1.5rem, 3.4vw, 2.2rem); margin: .3rem 0 .4rem; letter-spacing: -.03em; }
+/* Conclusion : points forts / points de vigilance */
+.concl { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem;
+  margin-top: .8rem; }
+.concl-col { border: 1px solid var(--line); border-radius: var(--r1); padding: .6rem .8rem;
+  font-size: .9rem; background: var(--surface); }
+.concl-col > div { margin: .15rem 0; }
+.concl-h { font-weight: 700; display: flex; align-items: center; gap: .4rem; margin-bottom: .3rem !important; }
+.concl-col.good { border-left: 3px solid var(--ok, #1a9d5a); }
+.concl-col.good .concl-h { color: #1a9d5a; }
+.concl-col.bad { border-left: 3px solid var(--danger); }
+.concl-col.bad .concl-h { color: var(--danger); }
+.result-actions { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin: 0 0 1.2rem; }
 @media (max-width: 720px) {
   .process { grid-template-columns: 1fr; }
   .proc + .proc { border-left: 0; padding-left: 0; }
@@ -514,7 +545,6 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
   z-index: 50; box-shadow: 0 6px 18px rgba(0,0,0,.22); pointer-events: none; }
 .info:hover .tip, .info:focus .tip { opacity: 1; visibility: visible; }
 /* Barre d'actions en tête de résultats + hypothèses éditables */
-.result-actions { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin: .2rem 0 1rem; }
 .hyp { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r1);
   padding: .4rem .9rem; margin: .8rem 0; }
 .hyp > summary { cursor: pointer; font-weight: 600; font-size: .92rem; }
@@ -1199,6 +1229,8 @@ var COLORS={sejour:"#cfe8cf",salle_a_manger:"#d7ecd0",chambre:"#cfe0f5",cuisine:
 var inertiaEl=document.querySelector('input[name=inertia]');
 var B={id:"pdf", name:null, rooms:[], inertia_class:(inertiaEl?inertiaEl.value:"lourde"), num_levels:1, total_height_m:null, location:null, epw_path:null};
 var sel=-1, mode="idle", draft=[], calib=[], winDrag=null, rectDrag=null, lastSash=1.5, curLvl=0;
+// Niveaux créés par l'utilisateur (persistants même sans pièce) — clé = numéro de niveau.
+var availLvls={0:true};
 var stage, bgLayer, shapeLayer, bg=null, lastDist=0;
 function F(){ return floors[fi]; }
 function MPP(){ return F().mpp; }
@@ -1251,7 +1283,8 @@ function levelsel(){
   var lvls;
   if(multi){ lvls=floors.map(function(f){ return f.level; }); }
   else {
-    var s={}; s[0]=1; s[curLvl]=1; B.rooms.forEach(function(r){ s[r.level]=1; });
+    var s={}; s[curLvl]=1; B.rooms.forEach(function(r){ s[r.level]=1; });
+    Object.keys(availLvls).forEach(function(k){ s[parseInt(k)]=1; });  // niveaux créés persistent
     lvls=Object.keys(s).map(Number).sort(function(a,b){ return a-b; });
   }
   var cur=multi?F().level:curLvl;
@@ -1259,7 +1292,7 @@ function levelsel(){
   if(!multi){ var mx=Math.max.apply(null,lvls); h+='<button type="button" data-add="'+(mx+1)+'" title="Ajouter un niveau">+</button>'; }
   el.innerHTML=h;
   Array.prototype.forEach.call(el.querySelectorAll("[data-lv]"),function(b){ b.onclick=function(){ var lv=parseInt(b.dataset.lv); if(multi){ goToLevel(lv); sel=-1; } else { curLvl=lv; } render(); }; });
-  var add=el.querySelector("[data-add]"); if(add){ add.onclick=function(){ curLvl=parseInt(add.dataset.add); levelsel(); }; }
+  var add=el.querySelector("[data-add]"); if(add){ add.onclick=function(){ var nv=parseInt(add.dataset.add); availLvls[nv]=true; curLvl=nv; levelsel(); }; }
 }
 function ptr(){ return stage.getRelativePointerPosition(); }
 
@@ -1336,9 +1369,10 @@ function render(){
 }
 function updateScaleInfo(){
   var si=document.getElementById("scaleinfo"); if(!si){ return; }
-  // Échelle à l'écran : mètres réels par pixel-écran ÷ taille physique d'un pixel CSS (96 dpi).
-  var realPerScreen=MPP()/(stage.scaleX()||1), ratio=realPerScreen/0.0002645833;
-  si.textContent=ratio>0?("À l'écran ≈ 1/"+Math.round(ratio)):"";
+  // Échelle du PLAN (constante, indépendante du zoom) : mètres réels par pixel d'image
+  // rapportés à la taille physique d'un pixel CSS à 96 dpi (≈ 0,2646 mm).
+  var ratio=MPP()/0.0002645833;
+  si.textContent=ratio>0?("Échelle du plan ≈ 1/"+Math.round(ratio)):"";
 }
 
 var MODE_BANNER={
@@ -1440,10 +1474,10 @@ function showHeightPopup(ref, x, y){
 }
 function roomlist(){
   var d=document.getElementById("roomlist"); if(!d){ return; }
-  if(!B.rooms.length){ d.innerHTML='<p style="color:var(--muted);font-size:.9rem">Aucune pièce tracée. Choisissez « Rectangle » ou « Point par point ».</p>'; return; }
+  if(!B.rooms.length){ d.innerHTML='<p style="color:var(--muted);font-size:.9rem">Aucune pièce tracée. Choisissez « Rectangle » ou « Point par point » au-dessus.</p>'; return; }
   // Pièces les plus récentes en haut (on parcourt les index à l'envers).
   var order=[]; for(var qi=B.rooms.length-1;qi>=0;qi--){ order.push(qi); }
-  d.innerHTML='<div class="ptitle" style="margin:.2rem 0 .4rem">Pièces ('+B.rooms.length+')</div>'+order.map(function(i){
+  d.innerHTML=order.map(function(i){
     var r=B.rooms[i];
     var lab=LABELS.map(function(l){ return '<option value="'+l[0]+'"'+(l[0]===r.label?" selected":"")+">"+l[1]+"</option>"; }).join("");
     var chips=ORS.map(function(o){ return '<label class="chip"><input type="checkbox" data-i="'+i+'" data-or="'+o+'"'+(r.exterior_wall_orientations.indexOf(o)>=0?" checked":"")+">"+(ORF[o]||o)+"</label>"; }).join("");
@@ -1627,6 +1661,10 @@ function downloadProject(){
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='projet-zephyr.json'; document.body.appendChild(a); a.click(); a.remove();
 }
+function exportPdf(){
+  var f=document.getElementById('valform'); if(!f){ return; }
+  f.action='/etude/rapport'; f.target='_blank'; f.submit();
+}
 function exportCsv(){
   var el=document.getElementById('calc-data'); if(!el){ return; }
   var rows=JSON.parse(el.textContent), out=[['Section','Poste','Formule','Montant (€)']];
@@ -1652,8 +1690,8 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
     body = f"""
 <div class="trace-head">
   <h1 style="margin-bottom:.2rem">Tracer le plan</h1>
-  <details class="howto" open>
-    <summary>Comment tracer</summary>
+  <details class="howto explain" open>
+    <summary>{_icon("bulb")} Comment tracer</summary>
     <ol>
       <li><b>Objectif</b> : délimiter chaque pièce et poser ses châssis — le code en
       déduit surfaces, façades et espaces traversants.</li>
@@ -1709,9 +1747,12 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
         <span id="scaleinfo" class="lbl" style="font-weight:400"></span>
       </div>
     </div>
-    <div class="roomlist-wrap"><div id="roomlist"></div></div>
   </aside>
 </div>
+<section class="roomlist-section">
+  <h2 class="sec" style="font-size:1.15rem">Pièces tracées</h2>
+  <div id="roomlist"></div>
+</section>
 <form id="valform" method="post" action="/etude/resultat" onsubmit="syncHidden()">
   {hidden_fields}
   <input type="hidden" name="building_json" id="building_json">
@@ -1808,9 +1849,8 @@ def _gauge_svg(score: float, grade: str) -> str:
   <circle cx="70" cy="70" r="{r}" fill="none" stroke="{color}" stroke-width="14"
     stroke-linecap="round" stroke-dasharray="{filled:.1f} {circ:.1f}"
     transform="rotate(-90 70 70)"/>
-  <text x="70" y="66" text-anchor="middle" font-size="30" font-weight="800"
-    fill="#14233a">{score:.0f}</text>
-  <text x="70" y="90" text-anchor="middle" font-size="13" fill="#5b6b80">/ 100 — {grade}</text>
+  <text x="70" y="82" text-anchor="middle" font-size="38" font-weight="800"
+    fill="{color}">{score:.0f}</text>
 </svg>"""
 
 
@@ -1944,8 +1984,8 @@ def _score_legend(result: StudyResult) -> str:
         for c in result.score.criteria
     )
     return (
-        "<details style='margin:.6rem 0'><summary style='cursor:pointer;font-weight:600'>"
-        "Comment le score est calculé (échelle)</summary>"
+        f"<details class='explain'><summary>{_icon('bulb')} Comment le score est calculé (échelle)"
+        "</summary>"
         f"<p style='color:var(--muted);font-size:.88rem'>Note globale = moyenne pondérée des "
         f"critères. Lettres : {_GRADE_LEGEND}.</p>"
         f"<table class='kv'>{items}</table></details>"
@@ -1975,8 +2015,11 @@ def _tornado(result: StudyResult) -> str:
     )
 
 
-def _financial_section(result: StudyResult) -> str:
-    """Bilan financier détaillé (façon comparatif Excel VNC vs VMC)."""
+def _financial_section(result: StudyResult, hyp_html: str = "") -> str:
+    """Bilan financier détaillé (façon comparatif Excel VNC vs VMC).
+
+    ``hyp_html`` (hypothèses éditables) est inséré **juste avant les calculs** (CAPEX/OPEX).
+    """
     r = result.roi
     if r is None:
         return ""
@@ -2060,8 +2103,8 @@ def _financial_section(result: StudyResult) -> str:
     warns = ""
     if r.warnings:
         warns = (
-            "<details style='margin:.6rem 0'><summary style='cursor:pointer;font-weight:600'>"
-            "Avertissements méthodologiques</summary><ul>"
+            f"<details class='explain'><summary>{_icon('bulb')} Avertissements méthodologiques"
+            "</summary><ul>"
             + "".join(f"<li>{html.escape(w)}</li>" for w in r.warnings)
             + "</ul></details>"
         )
@@ -2072,12 +2115,16 @@ def _financial_section(result: StudyResult) -> str:
         "l'économie VNC (coûts VMC − coûts VNC), actualisée, année par année. Le point vert "
         "marque le seuil de rentabilité ; la fourchette P10–P90 (KPI) vient d'un tirage "
         "Monte-Carlo sur les hypothèses sensibles.</p>"
-        f"{capex}{opex}{synth}{_tornado(result)}{warns}"
+        f"{hyp_html}{capex}{opex}{synth}{_tornado(result)}{warns}"
     )
 
 
-def _results_toolbar(result: StudyResult, building: object | None, cfg: Mapping[str, str]) -> str:
-    """Barre d'actions (projet JSON, export CSV/PDF) + hypothèses ROI éditables (recalcul)."""
+def _hypotheses_form(result: StudyResult, building: object | None, cfg: Mapping[str, str]) -> str:
+    """Hypothèses ROI éditables (recalcul serveur) + données pour les exports.
+
+    Le `<form id="valform">` porte aussi `building_json` + la config : les boutons
+    d'action en tête (Enregistrer / Export) le lisent par id même s'il est plus bas.
+    """
     from zephyr.roi import ROIParameters
 
     p = ROIParameters()
@@ -2118,19 +2165,26 @@ def _results_toolbar(result: StudyResult, building: object | None, cfg: Mapping[
         '<form id="valform" method="post" action="/etude/resultat">'
         f"{hidden}"
         f'<input type="hidden" name="building_json" id="building_json" value="{html.escape(bjson)}">'
-        '<div class="result-actions">'
-        f'<button type="button" class="btn ghost sm" onclick="downloadProject()">{_icon("download")} Enregistrer le projet (JSON)</button>'
-        f'<button type="button" class="btn ghost sm" onclick="exportCsv()">{_icon("file")} Export Excel (CSV)</button>'
-        f'<button type="submit" class="btn ghost sm" formaction="/etude/rapport" formtarget="_blank">{_icon("file")} Export PDF</button>'
-        "</div>"
-        '<details class="hyp"><summary>Ajuster les hypothèses et recalculer</summary>'
-        '<p class="hint" style="margin:.4rem 0">Modifiez prix, taux ou quantités, puis '
-        'recalculez : le bilan et le détail des calculs sont régénérés côté serveur.</p>'
+        '<details class="hyp" open><summary>Ajuster les hypothèses (prix, taux, quantités)</summary>'
+        '<p class="hint" style="margin:.4rem 0">Modifiez une valeur puis recalculez : le bilan et '
+        'le détail des calculs sont régénérés côté serveur. « Enregistrer le projet » (en haut) '
+        'sauvegarde aussi vos hypothèses.</p>'
         f'<div class="form-grid">{fields}</div>'
-        f'<button type="submit" class="btn sm" style="margin-top:.6rem">{_icon("refresh")} Recalculer</button>'
+        f'<button type="submit" class="btn sm" style="margin-top:.6rem">{_icon("refresh")} Recalculer le bilan</button>'
         "</details></form>"
         f'<script type="application/json" id="calc-data">{calc}</script>'
         f"<script>{_RESULTS_JS}</script>"
+    )
+
+
+def _results_actions() -> str:
+    """Barre d'actions en tête de résultats (lit le formulaire/hidden par id, plus bas dans la page)."""
+    return (
+        '<div class="result-actions">'
+        f'<button type="button" class="btn ghost sm" onclick="downloadProject()">{_icon("download")} Enregistrer le projet (JSON)</button>'
+        f'<button type="button" class="btn ghost sm" onclick="exportCsv()">{_icon("file")} Export Excel (CSV)</button>'
+        f'<button type="button" class="btn ghost sm" onclick="exportPdf()">{_icon("file")} Export PDF</button>'
+        "</div>"
     )
 
 
@@ -2147,9 +2201,29 @@ def render_results(
         recos = "<h2 class='sec'>Pistes d'amélioration</h2>" + "".join(
             f'<div class="reco">{html.escape(r)}</div>' for r in s.recommendations
         )
-    flags = ""
-    if s and s.flags:
-        flags = "".join(f'<div class="flag">{html.escape(f)}</div>' for f in s.flags)
+
+    # Conclusion : points faibles (drapeaux + critères < 50) et points forts (critères ≥ 75).
+    bad: list[str] = list(s.flags) if s else []
+    good: list[str] = []
+    if s:
+        for c in sorted(s.criteria, key=lambda c: c.score):
+            if c.score < 50:
+                bad.append(f"{c.label} — {c.score:.0f}/100")
+        for c in sorted(s.criteria, key=lambda c: c.score, reverse=True):
+            if c.score >= 75:
+                good.append(f"{c.label} — {c.score:.0f}/100")
+    concl_blocks = ""
+    if good:
+        concl_blocks += (
+            f'<div class="concl-col good"><div class="concl-h">{_icon("check")} Points forts</div>'
+            + "".join(f"<div>{html.escape(g)}</div>" for g in good) + "</div>"
+        )
+    if bad:
+        concl_blocks += (
+            f'<div class="concl-col bad"><div class="concl-h">{_icon("alert")} Points de vigilance</div>'
+            + "".join(f"<div>{html.escape(b)}</div>" for b in bad) + "</div>"
+        )
+    concl = f'<div class="concl">{concl_blocks}</div>' if concl_blocks else ""
 
     plan = ""
     rooms = getattr(building, "rooms", []) if building is not None else []
@@ -2166,35 +2240,23 @@ def render_results(
         except Exception:  # pragma: no cover - matplotlib absent
             plan = ""
 
-    big = ""
-    if s is not None:
-        big = (
-            '<div class="big"><span class="n">'
-            f'{s.global_score:.0f}</span><span class="slash">/ 100</span>'
-            f'<span class="slash" style="margin-left:.5rem;font-weight:700;color:var(--ink)">'
-            f'{html.escape(s.grade)}</span></div>'
-        )
+    hyp = _hypotheses_form(result, building, cfg or {})
     body = f"""
 <div class="score-hero">
   {gauge}
   <div>
-    <div class="eyebrow"><span class="dot"></span> Aptitude VNC</div>
-    {big}
-    <h1>Aptitude à la VNC</h1>
     <span class="badge" style="background:{vcolor}">{html.escape(vlabel)}</span>
-    <p class="hint" style="margin-top:.6rem;max-width:52ch">Score déterministe sur 4
-    critères pondérés (ventilation, inertie, vitrage, isolation). Détail, leviers et
-    bilan financier ci-dessous.</p>
+    <h1>Aptitude à la VNC</h1>
+    {concl}
   </div>
 </div>
-{_results_toolbar(result, building, cfg or {})}
-{flags}
+{_results_actions()}
 <div class="sec-head"><span class="idx">01</span><h2>Détail par critère</h2></div>
 {_criteria_bars(result)}
 {_score_legend(result)}
 {recos}
 {plan}
-{_financial_section(result)}
+{_financial_section(result, hyp)}
 <div class="disclaimer">{_icon("alert")} {html.escape(_DISCLAIMER)}</div>
 <p><a class="btn ghost" href="/etude">{_icon("refresh")} Nouvelle étude</a></p>
 """
