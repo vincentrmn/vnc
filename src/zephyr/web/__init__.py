@@ -300,16 +300,9 @@ select { appearance: none; -webkit-appearance: none; -moz-appearance: none;
 input::placeholder { color: var(--faint); }
 input:focus, select:focus, textarea:focus { border-color: var(--primary); outline: none;
   background: var(--surface); box-shadow: 0 0 0 3px var(--ring); }
-/* Cases à cocher : entièrement stylées (aucun carré système / fond noir) */
-input[type=checkbox] { appearance: none; -webkit-appearance: none; -moz-appearance: none;
-  width: 1.1em; height: 1.1em; border: 1.5px solid var(--faint); border-radius: .28rem;
-  background: var(--surface); cursor: pointer; position: relative; vertical-align: -.18em; flex: none; }
-input[type=checkbox]:hover { border-color: var(--primary); }
-input[type=checkbox]:checked { background: var(--primary); border-color: var(--primary); }
-input[type=checkbox]:checked::after { content: ""; position: absolute; left: .32em; top: .12em;
-  width: .26em; height: .55em; border: solid var(--on-primary); border-width: 0 2px 2px 0;
-  transform: rotate(45deg); }
-input[type=radio] { accent-color: var(--primary); cursor: pointer; }
+/* Cases à cocher / radios : cases standard du navigateur, teintées à la marque */
+input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1.05em; height: 1.05em;
+  cursor: pointer; vertical-align: -.12em; flex: none; }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 var(--s4); }
 /* En-tête de la page config : titre + reprise discrète */
 .form-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
@@ -457,7 +450,8 @@ kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--
 .roomlist-wrap { flex: 1; min-height: 0; overflow-y: auto; padding-right: .3rem; }
 .room-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r1);
   padding: .6rem .7rem; margin: .45rem 0; box-sizing: border-box; max-width: 100%; }
-.room-card.sel { outline: 2px solid var(--primary); }
+/* Sélection : bordure + ombre interne (l'outline était rognée par le conteneur scrollable) */
+.room-card.sel { border-color: var(--primary); box-shadow: inset 0 0 0 2px var(--primary); }
 .room-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; min-width: 0; }
 .room-head select { padding: .2rem; flex: 0 1 auto; min-width: 0; max-width: 100%; }
 /* Bulle de validation au tracé d'une pièce */
@@ -1581,12 +1575,12 @@ function roomlist(){
     return '<div class="room-card'+(i===sel?" sel":"")+'" data-sel="'+i+'">'+
       '<div class="room-head">'+
         '<span class="room-no">'+(i+1)+'</span>'+
+        '<button type="button" data-del="'+i+'" class="iconbtn" title="Supprimer la pièce">'+ICON_X+'</button>'+
         '<select data-lab="'+i+'">'+lab+'</select>'+
         '<b>'+fmt(r.area_m2)+' m²</b>'+
         (through(r)?'<span class="badge-ok">traversant</span>':'')+
         '<span class="grow"></span>'+
         '<label class="nivlbl">Niveau <input data-lvl="'+i+'" type="number" value="'+r.level+'" style="width:42px;padding:.15rem"></label>'+
-        '<button type="button" data-del="'+i+'" class="iconbtn" title="supprimer">'+ICON_X+'</button>'+
       '</div>'+
       '<div class="room-sec"><span class="room-seclbl">Façades</span><div class="chips">'+chips+'</div></div>'+
       '<div class="room-sec"><span class="room-seclbl">Châssis</span>'+wintable+
