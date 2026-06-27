@@ -278,13 +278,28 @@ footer { color: var(--muted); font-size: .85rem; padding: var(--s6) 0 var(--s7);
 .kpi .v { font-size: 1.35rem; font-weight: 700; letter-spacing: -.02em; }
 /* Formulaires */
 form label { display: block; font-weight: 600; font-size: .9rem; margin: .8rem 0 .2rem; }
-form input, form select, form textarea { width: 100%; padding: .55rem .65rem;
-  border: 1px solid var(--line); border-radius: var(--r1); font: inherit;
-  background: var(--surface); color: var(--ink); }
+form input, form select, form textarea { width: 100%; padding: .5rem .6rem;
+  border: 1px solid var(--line); border-radius: var(--r1); font: inherit; font-size: .92rem;
+  background: var(--surface-2); color: var(--ink); transition: border-color .12s, box-shadow .12s; }
+form input:hover, form select:hover { border-color: var(--faint); }
+/* Sélecteurs épurés : flèche custom (pas de combo natif « noir et gros ») */
+form select { appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  padding-right: 2rem; cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235d6c7b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat; background-position: right .6rem center; }
 form input::placeholder { color: var(--faint); }
 form input:focus, form select:focus { border-color: var(--primary); outline: none;
-  box-shadow: 0 0 0 3px var(--ring); }
+  background: var(--surface); box-shadow: 0 0 0 3px var(--ring); }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 var(--s4); }
+/* En-tête de la page config : titre + reprise discrète */
+.form-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+  flex-wrap: wrap; }
+.resume > summary { cursor: pointer; color: var(--muted); font-size: .88rem; list-style: none;
+  display: inline-flex; align-items: center; gap: .35rem; }
+.resume > summary::-webkit-details-marker { display: none; }
+.resume-form { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-top: .6rem; }
+/* Ligne d'upload + action séparée du cadre */
+.upload-row { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
 .check { display: flex; align-items: center; gap: .5rem; margin: .5rem 0; }
 .check input { width: auto; }
 .winrow { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; flex-wrap: wrap; }
@@ -342,14 +357,32 @@ input[type=file]::file-selector-button:hover { background: var(--primary); color
 .seg label + label { border-left: 1px solid var(--line); }
 .seg label.on { background: var(--primary); color: var(--on-primary); }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
-/* Éditeur de tracé (Konva) : grand plan collant à gauche, palette + liste à droite */
+/* Éditeur de tracé (Konva) : plan + palette fixés à l'écran, liste de pièces qui défile seule */
+.trace-head { margin-bottom: .4rem; }
+.howto { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r1);
+  padding: .4rem .8rem; margin: .4rem 0 .6rem; }
+.howto > summary { cursor: pointer; font-weight: 600; font-size: .92rem; list-style: none;
+  display: inline-flex; align-items: center; gap: .4rem; }
+.howto > summary::-webkit-details-marker { display: none; }
+.howto > summary::before { content: '▸'; color: var(--muted); transition: transform .15s; }
+.howto[open] > summary::before { transform: rotate(90deg); }
+.howto ol { margin: .5rem 0 .3rem; padding-left: 1.2rem; line-height: 1.7; font-size: .9rem; }
+.howto li { margin: .15rem 0; }
+.howto li b { color: var(--ink); }
+kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--surface);
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: .35rem;
+  padding: .12rem .4rem; color: var(--ink); white-space: nowrap; }
 .trace-layout { display: grid; grid-template-columns: 1fr 360px; gap: var(--s4); align-items: start; }
 .trace-canvas-wrap { position: sticky; top: .6rem; }
-#stage { width: 100%; height: 84vh; background: #fff; border: 1px solid var(--line);
-  border-radius: var(--r2); overflow: hidden; touch-action: none; box-shadow: var(--shadow-1); }
-.trace-side { position: sticky; top: .6rem; max-height: calc(100vh - 1.2rem);
-  overflow-y: auto; display: flex; flex-direction: column; gap: .8rem; padding-right: .25rem; }
-.palette { display: flex; flex-direction: column; gap: .6rem;
+.stage-mode { min-height: 1.4rem; margin-bottom: .35rem; font-weight: 600; font-size: .88rem;
+  color: var(--primary-strong); display: flex; align-items: center; gap: .4rem; }
+.stage-mode.empty { color: var(--muted); font-weight: 400; }
+#stage { width: 100%; height: calc(100vh - 6.5rem); min-height: 420px; background: #fff;
+  border: 1px solid var(--line); border-radius: var(--r2); overflow: hidden; touch-action: none;
+  box-shadow: var(--shadow-1); }
+.trace-side { position: sticky; top: .6rem; height: calc(100vh - 4.5rem);
+  display: flex; flex-direction: column; gap: .8rem; }
+.palette { flex: none; display: flex; flex-direction: column; gap: .7rem;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r2); padding: .9rem;
   box-shadow: var(--shadow-1); }
 .pgroup { display: flex; flex-direction: column; gap: .4rem; padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
@@ -363,12 +396,26 @@ input[type=file]::file-selector-button:hover { background: var(--primary); color
 .palette .lbl { font-size: .82rem; font-weight: 600; color: var(--muted); }
 .palette .chk { display: flex; align-items: center; gap: .4rem; font-size: .85rem; font-weight: 600; color: var(--ink); cursor: pointer; }
 .palette .chk input { width: auto; }
-.palette #hint { color: var(--warn); font-weight: 600; font-size: .85rem; min-height: 1rem; }
+/* Sélecteur de niveau : petits boutons sur une ligne (RDC / R+1 …) */
+.levelsel { display: flex; gap: .3rem; flex-wrap: nowrap; overflow-x: auto; padding-bottom: .15rem; }
+.levelsel button { flex: none; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); border-radius: var(--r1); padding: .25rem .6rem; cursor: pointer;
+  font: inherit; font-weight: 600; font-size: .82rem; }
+.levelsel button.active { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.roomlist-wrap { flex: 1; min-height: 0; overflow-y: auto; padding-right: .3rem; }
 .room-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r1);
-  padding: .6rem .7rem; margin: .45rem 0; }
+  padding: .6rem .7rem; margin: .45rem 0; box-sizing: border-box; max-width: 100%; }
 .room-card.sel { outline: 2px solid var(--primary); }
-.room-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
-.room-head select { padding: .2rem; }
+.room-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; min-width: 0; }
+.room-head select { padding: .2rem; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+/* Bulle de validation au tracé d'une pièce */
+.trace-pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--primary);
+  border-radius: var(--r1); padding: .6rem .7rem; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  display: flex; flex-direction: column; gap: .5rem; min-width: 200px; }
+.trace-pop .tp-t { font-size: .85rem; font-weight: 700; color: var(--ink); }
+.trace-pop .tp-sel { padding: .4rem .5rem; border: 1px solid var(--line); border-radius: var(--r1);
+  font: inherit; background: var(--surface-2); color: var(--ink); }
+.trace-pop .tp-row { display: flex; gap: .5rem; }
 .room-no { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem;
   background: var(--primary); color: var(--on-primary); border-radius: 50%; font-size: .8rem; font-weight: 700; }
 .room-head .grow { flex: 1; }
@@ -658,11 +705,24 @@ _CONFIG_JS = """
     if(hint){ hint.style.display = (m==='cpe' && !ex)?'':'none'; }
     if(env){ env.style.display = (m==='manual' || (m==='cpe' && ex))?'':'none'; }
   }
+  function hasPlan(){
+    var d=document.getElementById('in-dxf'), f=document.getElementById('in-floors');
+    return (d && d.files && d.files.length) || (f && f.files && f.files.length);
+  }
+  function gate(){
+    var btn=document.getElementById('go-btn'), hint=document.getElementById('go-hint');
+    var ok=hasPlan();
+    if(btn){ btn.disabled=!ok; }
+    if(hint){ hint.style.display=ok?'none':''; }
+  }
   document.addEventListener('DOMContentLoaded', function(){
     Array.prototype.forEach.call(document.querySelectorAll('input[name=cpe_mode]'), function(r){
       r.addEventListener('change', sync);
     });
-    sync();
+    var d=document.getElementById('in-dxf'), f=document.getElementById('in-floors');
+    if(d){ d.addEventListener('change', gate); }
+    if(f){ f.addEventListener('change', gate); }
+    sync(); gate();
   });
 })();
 """
@@ -724,57 +784,47 @@ def render_study_form(
     )
     extracted = bool(p)
     body = f"""
-<h1>Nouvelle étude</h1>
-<p class="lead" style="color:var(--muted);max-width:680px">Importez un plan à
-tracer, renseignez l'enveloppe (depuis un CPE ou à la main) et le projet. On
-calcule ensuite le score d'aptitude VNC et le bilan financier.</p>
+<div class="form-head">
+  <h1>Nouvelle étude</h1>
+  <details class="resume">
+    <summary>{_icon("history")} Reprendre une étude</summary>
+    <form method="post" action="/etude/reprendre" enctype="multipart/form-data" class="resume-form">
+      <input type="file" name="study" accept=".json,application/json">
+      <button class="btn ghost sm" type="submit">Reprendre</button>
+    </form>
+  </details>
+</div>
 
 <!-- Formulaire principal (vide) : les champs des cartes y sont rattachés via form="mainform". -->
 <form id="mainform" method="post" action="/etude" enctype="multipart/form-data"></form>
 
 <div class="card" style="margin:1.2rem 0">
-  <h2>{_icon("ruler", 20)}Plan &amp; tracé</h2>
-  <p class="sub">Le plan sert de fond pour tracer les pièces et les châssis à
-  l'étape suivante. Format vectoriel uniquement (un PDF scanné n'est pas lu).</p>
-  <div class="uploader">
-    <div class="field" style="margin:0">
-      <div class="lab">Plan unique — DXF ou PDF A0 (tous les niveaux sur une planche)</div>
-      <input type="file" name="dxf" accept=".dxf,.pdf" form="mainform">
-    </div>
+  <h2>{_icon("ruler", 20)}Plan</h2>
+  <p class="sub">Plan vectoriel (DXF ou PDF) servant de fond pour tracer les pièces.
+  Un PDF scanné n'est pas lu.</p>
+  <div class="field">
+    <div class="lab">Plan unique (DXF, ou PDF A0 avec tous les niveaux)</div>
+    <input type="file" name="dxf" accept=".dxf,.pdf" form="mainform" id="in-dxf">
   </div>
-  <div class="uploader">
-    <div class="field" style="margin:0">
-      <div class="lab">…ou un PDF par étage</div>
-      <input type="file" name="floor_pdfs" accept=".pdf" multiple form="mainform">
-      <p class="hint">Ordre d'import = niveau (1<sup>er</sup> = RdC). Prioritaire sur
-      le plan unique ; vous basculez de niveau dans l'éditeur.</p>
-    </div>
+  <div class="field" style="margin-bottom:0">
+    <div class="lab">Ou un PDF par niveau, du bas vers le haut (1<sup>er</sup> fichier = RdC)</div>
+    <input type="file" name="floor_pdfs" accept=".pdf" multiple form="mainform" id="in-floors">
   </div>
-  <p class="hint">Sans plan, l'étude reste possible en paramétrique (surface plus bas).</p>
 </div>
 
 <div class="card" style="margin:1.2rem 0">
-  <h2>{_icon("building", 20)}Enveloppe</h2>
-  <p class="sub">D'où viennent les valeurs (U, n50, inertie…) ?</p>
+  <h2>{_icon("file", 20)}Passeport énergétique</h2>
   <div class="seg" role="tablist">
-    <label class="on"><input type="radio" name="cpe_mode" value="cpe" checked> {_icon("file")} J'ai un CPE</label>
-    <label><input type="radio" name="cpe_mode" value="manual"> {_icon("pencil")} Saisie manuelle</label>
+    <label class="on"><input type="radio" name="cpe_mode" value="cpe" checked> Upload du passeport</label>
+    <label><input type="radio" name="cpe_mode" value="manual"> Saisie à la main</label>
   </div>
 
-  <div id="cpe-upload" class="uploader" style="margin-top:1rem">
-    <div class="field" style="margin:0">
-      <div class="lab">Passeport énergétique (PDF vectoriel)</div>
-      <form method="post" action="/etude/cpe" enctype="multipart/form-data"
-        style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
-        <input type="file" name="cpe" accept=".pdf">
-        <button class="btn" type="submit">Extraire</button>
-      </form>
-      <p class="hint">Les valeurs sont vérifiées dans le texte source puis posées
-      ci-dessous — vous validez ou corrigez chacune.</p>
-    </div>
+  <div id="cpe-upload" style="margin-top:1rem">
+    <form method="post" action="/etude/cpe" enctype="multipart/form-data" class="upload-row">
+      <input type="file" name="cpe" accept=".pdf">
+      <button class="btn" type="submit">Extraire</button>
+    </form>
   </div>
-  <p id="cpe-hint" class="hint" style="margin-top:.8rem">Téléchargez votre CPE pour
-  pré-remplir l'enveloppe, ou passez en « Saisie manuelle ».</p>
   {cpe_banner}
 
   <div id="envelope-block" style="margin-top:1rem">
@@ -783,8 +833,8 @@ calcule ensuite le score d'aptitude VNC et le bilan financier.</p>
         <input type="number" name="u_wall" value="{v("u_wall", "0.20")}" step="0.01" form="mainform"></div>
       <div class="field"><div class="lab">Uw vitrage (W/m²K)</div>
         <input type="number" name="u_window" value="{v("u_window", "0.9")}" step="0.1" form="mainform"></div>
-      <div class="field"><div class="lab">Ratio vitrage / surface au sol</div>
-        <input type="number" name="glazing" value="{v("glazing", "0.18")}" step="0.01" form="mainform"></div>
+      <div class="field"><div class="lab">Taux de surface vitrée</div>
+        <input type="number" name="glazing" value="{v("glazing", "0.15")}" step="0.01" form="mainform"></div>
       <div class="field"><div class="lab">Hauteur des châssis par défaut (m)</div>
         <input type="number" name="sash" value="{v("sash", "1.5")}" step="0.1" form="mainform"></div>
       <div class="field"><div class="lab">Perméabilité n50 (vol/h)</div>
@@ -804,38 +854,20 @@ calcule ensuite le score d'aptitude VNC et le bilan financier.</p>
     <div class="field"><div class="lab">Matériau des châssis</div>{chassis_sel}</div>
     <div class="field"><div class="lab">Localisation (climat)</div>
       <input type="text" name="location" value="{v("location", "Luxembourg")}" form="mainform"></div>
-    <div class="field"><div class="lab">Angle du Nord (°, 0 = haut du plan)</div>
-      <input type="number" name="north" value="{v("north", "0")}" step="5" form="mainform"></div>
-    <div class="field"><div class="lab">Surface (m²) — facultatif, recoupée au tracé</div>
-      <input type="number" name="area" value="{v("area", "1200")}" step="10" form="mainform"></div>
-    <div class="field"><div class="lab">Niveaux — si pas de plan</div>
-      <input type="number" name="levels" value="{v("levels", "2")}" min="1" form="mainform"></div>
   </div>
 </div>
 
 <div class="card" style="margin:1.2rem 0">
   <h2>{_icon("pin", 20)}Contexte du site</h2>
   <label class="check"><input type="checkbox" name="noise" form="mainform"> Bruit extérieur excessif</label>
-  <label class="check"><input type="checkbox" name="pollution" form="mainform"> Pollution / pollen élevés</label>
+  <label class="check"><input type="checkbox" name="pollution" form="mainform"> Pollution ou pollen élevés</label>
   <label class="check"><input type="checkbox" name="security" form="mainform"> Risque de sécurité au RdC</label>
-  <label class="check"><input type="checkbox" name="occ_incompatible" form="mainform">
-    Occupation incompatible (hôpital, process…)</label>
 </div>
 
-<p style="margin:1.4rem 0"><button class="btn" type="submit" form="mainform">Continuer {_icon("arrow-right")}</button></p>
-
-<div class="card" style="margin:1.2rem 0;background:#f7faf9">
-  <h2>{_icon("history", 20)}Reprendre une étude</h2>
-  <p class="sub">Vous avez déjà téléchargé une étude (fichier .json) ? Rechargez-la
-  pour repartir de votre géométrie et de votre config.</p>
-  <div class="uploader">
-    <form method="post" action="/etude/reprendre" enctype="multipart/form-data"
-      style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
-      <input type="file" name="study" accept=".json,application/json">
-      <button class="btn ghost" type="submit">Reprendre</button>
-    </form>
-  </div>
-</div>
+<p style="margin:1.4rem 0">
+  <button class="btn" type="submit" form="mainform" id="go-btn" disabled>Continuer {_icon("arrow-right")}</button>
+  <span id="go-hint" class="hint" style="margin-left:.6rem">Importez d'abord un plan pour continuer.</span>
+</p>
 
 <script>window.__CPE_EXTRACTED__={"true" if extracted else "false"};</script>
 <script>{_CONFIG_JS}</script>
@@ -1129,12 +1161,22 @@ _TRACING_JS = """
 var ICON_X='<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 var T=window.TRACE, floors=T.floors, fi=0, multi=floors.length>1;
 var ORS=["N","NE","E","SE","S","SW","W","NW"];
+// Affichage cardinal en français (la valeur stockée reste le code Orientation : W, SW, NW).
+var ORF={N:"N",NE:"NE",E:"E",SE:"SE",S:"S",SW:"SO",W:"O",NW:"NO"};
 var ORDIR={N:[0,1],NE:[0.7,0.7],E:[1,0],SE:[0.7,-0.7],S:[0,-1],SW:[-0.7,-0.7],W:[-1,0],NW:[-0.7,0.7]};
-var LABELS=["sejour","chambre","cuisine","sdb","wc","circulation","bureau","technique","autre"];
-var COLORS={sejour:"#cfe8cf",chambre:"#cfe0f5",cuisine:"#f5e6cf",sdb:"#cfeef0",wc:"#e6cff5",circulation:"#eeeeee",bureau:"#f5cfd6",technique:"#dddddd",autre:"#f0f0f0"};
+// (valeur RoomLabel, libellé affiché avec majuscules + accents)
+var LABELS=[["sejour","Séjour"],["salle_a_manger","Salle à manger"],["chambre","Chambre"],
+  ["cuisine","Cuisine"],["sdb","Salle de bain"],["wc","WC"],["entree","Entrée"],
+  ["circulation","Circulation / couloir"],["bureau","Bureau"],["buanderie","Buanderie"],
+  ["cellier","Cellier"],["dressing","Dressing"],["garage","Garage"],
+  ["technique","Local technique"],["autre","Autre"]];
+var LABMAP={}; LABELS.forEach(function(p){ LABMAP[p[0]]=p[1]; });
+var COLORS={sejour:"#cfe8cf",salle_a_manger:"#d7ecd0",chambre:"#cfe0f5",cuisine:"#f5e6cf",
+  sdb:"#cfeef0",wc:"#e6cff5",entree:"#efe7d6",circulation:"#eeeeee",bureau:"#f5cfd6",
+  buanderie:"#d6eef0",cellier:"#e8e2d2",dressing:"#efd9e8",garage:"#dcdcdc",technique:"#dddddd",autre:"#f0f0f0"};
 var inertiaEl=document.querySelector('input[name=inertia]');
 var B={id:"pdf", name:null, rooms:[], inertia_class:(inertiaEl?inertiaEl.value:"lourde"), num_levels:1, total_height_m:null, location:null, epw_path:null};
-var sel=-1, mode="idle", draft=[], calib=[], winDrag=null, rectDrag=null, lastSash=1.5;
+var sel=-1, mode="idle", draft=[], calib=[], winDrag=null, rectDrag=null, lastSash=1.5, curLvl=0;
 var stage, bgLayer, shapeLayer, bg=null, lastDist=0;
 function F(){ return floors[fi]; }
 function MPP(){ return F().mpp; }
@@ -1181,11 +1223,21 @@ function loadBg(){
 }
 function applyFloor(){ if(bg){bg.destroy();bg=null;} loadBg(); fitStage(); }
 function goToLevel(lv){ for(var k=0;k<floors.length;k++){ if(floors[k].level===lv){ fi=k; applyFloor(); return true; } } return false; }
-function floorbar(){
-  var bar=document.getElementById("floorbar"); if(!bar){ return; }
-  if(!multi){ bar.innerHTML=""; return; }
-  bar.innerHTML=floors.map(function(f,k){ return '<button type="button" class="'+(k===fi?"active":"")+'" data-fi="'+k+'">Niveau '+f.level+"</button>"; }).join("");
-  Array.prototype.forEach.call(bar.querySelectorAll("button"),function(b){ b.onclick=function(){ fi=parseInt(b.dataset.fi); sel=-1; applyFloor(); render(); }; });
+function levelLabel(lv){ return lv===0?"RDC":(lv>0?("R+"+lv):("S"+(-lv))); }
+function levelsel(){
+  var el=document.getElementById("levelsel"); if(!el){ return; }
+  var lvls;
+  if(multi){ lvls=floors.map(function(f){ return f.level; }); }
+  else {
+    var s={}; s[0]=1; s[curLvl]=1; B.rooms.forEach(function(r){ s[r.level]=1; });
+    lvls=Object.keys(s).map(Number).sort(function(a,b){ return a-b; });
+  }
+  var cur=multi?F().level:curLvl;
+  var h=lvls.map(function(lv){ return '<button type="button" class="'+(lv===cur?"active":"")+'" data-lv="'+lv+'">'+levelLabel(lv)+'</button>'; }).join("");
+  if(!multi){ var mx=Math.max.apply(null,lvls); h+='<button type="button" data-add="'+(mx+1)+'" title="Ajouter un niveau">+</button>'; }
+  el.innerHTML=h;
+  Array.prototype.forEach.call(el.querySelectorAll("[data-lv]"),function(b){ b.onclick=function(){ var lv=parseInt(b.dataset.lv); if(multi){ goToLevel(lv); sel=-1; } else { curLvl=lv; } render(); }; });
+  var add=el.querySelector("[data-add]"); if(add){ add.onclick=function(){ curLvl=parseInt(add.dataset.add); levelsel(); }; }
 }
 function ptr(){ return stage.getRelativePointerPosition(); }
 
@@ -1194,7 +1246,7 @@ function polyPxPoints(r){ var a=[]; r.polygon.forEach(function(m){ var p=toPx(m[
 function render(){
   if(!stage){ return; }
   shapeLayer.destroyChildren();
-  floorbar();
+  levelsel();
   B.rooms.forEach(function(r,i){
     if(multi && r.level!==F().level){ return; }
     if(!r.polygon || r.polygon.length<2){ return; }
@@ -1229,15 +1281,15 @@ function render(){
       shapeLayer.add(poly);
     }
     var cx=xs.reduce(function(a,b){return a+b;},0)/xs.length, cy=ys.reduce(function(a,b){return a+b;},0)/ys.length;
-    var t1=new Konva.Text({x:cx,y:cy,text:r.label,fontSize:pm(0.5),fontFamily:"Helvetica Neue, Arial, sans-serif",fontStyle:"600",fill:"#111",listening:false});
+    var t1=new Konva.Text({x:cx,y:cy,text:(LABMAP[r.label]||r.label),fontSize:pm(0.5),fontFamily:"Helvetica Neue, Arial, sans-serif",fontStyle:"600",fill:"#111",listening:false});
     t1.offsetX(t1.width()/2); t1.offsetY(t1.height()/2+pm(0.32)); shapeLayer.add(t1);
-    var t2=new Konva.Text({x:cx,y:cy,text:fmt(r.area_m2)+" m² · N"+r.level,fontSize:pm(0.34),fontFamily:"Helvetica Neue, Arial, sans-serif",fill:"#444",listening:false});
+    var t2=new Konva.Text({x:cx,y:cy,text:fmt(r.area_m2)+" m² · "+levelLabel(r.level),fontSize:pm(0.34),fontFamily:"Helvetica Neue, Arial, sans-serif",fill:"#444",listening:false});
     t2.offsetX(t2.width()/2); t2.offsetY(t2.height()/2-pm(0.32)); shapeLayer.add(t2);
     var minx=Math.min.apply(null,xs),maxx=Math.max.apply(null,xs),miny=Math.min.apply(null,ys),maxy=Math.max.apply(null,ys);
     var dcx=(minx+maxx)/2,dcy=(miny+maxy)/2,rw=maxx-minx,rh=maxy-miny;
     (r.exterior_wall_orientations||[]).forEach(function(o){ var d=ORDIR[o]; if(!d){ return; }
       var mx=dcx+d[0]*0.4*rw, my=dcy-d[1]*0.4*rh;
-      var tt=new Konva.Text({x:mx,y:my,text:o,fontSize:pm(0.42),fontStyle:"700",fontFamily:"Helvetica Neue, Arial, sans-serif",fill:"#0e9aa7",listening:false});
+      var tt=new Konva.Text({x:mx,y:my,text:(ORF[o]||o),fontSize:pm(0.42),fontStyle:"700",fontFamily:"Helvetica Neue, Arial, sans-serif",fill:"#0e9aa7",listening:false});
       tt.offsetX(tt.width()/2); tt.offsetY(tt.height()/2); shapeLayer.add(tt);
     });
     (r.openings||[]).forEach(function(op,k){
@@ -1257,34 +1309,75 @@ function render(){
   if(winDrag){ shapeLayer.add(new Konva.Line({points:[winDrag.a[0],winDrag.a[1],winDrag.b[0],winDrag.b[1]], stroke:"#1a73e8", strokeWidth:pm(0.12), dash:[sc(6),sc(4)], lineCap:"round", listening:false})); }
   if(calib.length===1){ shapeLayer.add(new Konva.Circle({x:calib[0][0],y:calib[0][1],radius:sc(5),fill:"#c0392b",listening:false})); }
   shapeLayer.batchDraw();
-  var si=document.getElementById("scaleinfo"); if(si){ si.textContent="Echelle ~ "+(MPP()*1000).toFixed(1)+" mm/px"; }
+  updateScaleInfo();
   roomlist(); syncHidden();
 }
+function updateScaleInfo(){
+  var si=document.getElementById("scaleinfo"); if(!si){ return; }
+  // Échelle à l'écran : mètres réels par pixel-écran ÷ taille physique d'un pixel CSS (96 dpi).
+  var realPerScreen=MPP()/(stage.scaleX()||1), ratio=realPerScreen/0.0002645833;
+  si.textContent=ratio>0?("À l'écran ≈ 1/"+Math.round(ratio)):"";
+}
 
-var HINTS={draw:"Cliquez les coins de la piece, puis Terminer.",rect:"Glissez pour tracer un rectangle (pièce).",calibrate:"Cliquez deux points d'une cote connue.",window:"Glissez le long de la facade de la piece selectionnee (longueur = largeur)."};
+var MODE_BANNER={
+  rect:"Glissez en diagonale pour tracer un rectangle. Échap pour quitter.",
+  draw:"Cliquez les coins ; re-cliquez le 1er point ou « Terminer la pièce ». Échap pour quitter.",
+  window:"Glissez le long de la façade de la pièce sélectionnée. Échap pour quitter.",
+  calibrate:"Cliquez deux points d'une cote connue. Échap pour quitter."
+};
 var MODEBTN={draw:"t-draw", rect:"t-rect", window:"t-win", calibrate:"t-cal"};
+function setBanner(){
+  var el=document.getElementById("modebanner"); if(!el){ return; }
+  if(mode==="idle"){ el.className="stage-mode empty"; el.textContent="Survolez une pièce pour la sélectionner, ou choisissez un outil."; }
+  else { el.className="stage-mode"; el.textContent=MODE_BANNER[mode]||""; }
+}
+function updateFinishBtn(){ var b=document.getElementById("t-finish"); if(b){ b.style.display=(mode==="draw"&&draft.length>0)?"":"none"; } }
 function setMode(m){ mode=m; draft=[]; calib=[]; winDrag=null; rectDrag=null;
   if(stage){ stage.draggable(m==="idle"); stage.container().style.cursor=(m==="idle"?"grab":"crosshair"); }
   Object.keys(MODEBTN).forEach(function(k){ var b=document.getElementById(MODEBTN[k]); if(b){ b.classList.toggle("active", k===m); } });
-  var hi=document.getElementById("hint"); if(hi){ hi.textContent=m==="idle"?"":((HINTS[m]||"")+" — Échap pour quitter."); }
-  render();
+  setBanner(); updateFinishBtn(); render();
 }
-function curLevel(){ if(multi){ return F().level; } var e=document.getElementById("t-level"); return e?(parseInt(e.value)||0):0; }
+function evClient(e){
+  var ev=e&&e.evt; if(ev){ if(ev.clientX!=null){ return [ev.clientX,ev.clientY]; }
+    if(ev.changedTouches&&ev.changedTouches[0]){ return [ev.changedTouches[0].clientX,ev.changedTouches[0].clientY]; } }
+  var rect=stage.container().getBoundingClientRect(); return [rect.left+rect.width/2, rect.top+90];
+}
+function curLevel(){ return multi?F().level:curLvl; }
 function addRoom(poly){
   B.rooms.push({id:"r"+B.rooms.length, name:null, label:"autre", level:curLevel(), polygon:poly,
     area_m2:Math.max(area(poly),0.01), height_m:2.6, openings:[], exterior_wall_orientations:[], is_occupied:true, is_wet_room:false});
   sel=B.rooms.length-1;
 }
-function finishRoom(){
+function finishRoom(e){
   if(mode!=="draw" || draft.length<3){ setMode("idle"); return; }
-  addRoom(draft.map(function(p){ return toM(p[0],p[1]); })); setMode("idle");
+  addRoom(draft.map(function(p){ return toM(p[0],p[1]); }));
+  var pt=evClient(e); setMode("idle"); showRoomPopup(sel, pt[0], pt[1]);
 }
-function finishRect(){
+function finishRect(e){
   if(!rectDrag){ return; }
   var a=rectDrag.a, b=rectDrag.b;
   if(Math.abs(a[0]-b[0])<4 || Math.abs(a[1]-b[1])<4){ rectDrag=null; render(); return; }
   var corners=[[a[0],a[1]],[b[0],a[1]],[b[0],b[1]],[a[0],b[1]]].map(function(p){ return toM(p[0],p[1]); });
   rectDrag=null; addRoom(corners); render();   // on reste en mode rect (tracer plusieurs pièces)
+  var pt=evClient(e); showRoomPopup(sel, pt[0], pt[1]);
+}
+// Bulle de validation d'une pièce qui vient d'être tracée (nommer / valider / supprimer).
+function showRoomPopup(i, x, y){
+  var r=B.rooms[i]; if(!r){ return; }
+  var pop=document.createElement("div"); pop.className="trace-pop";
+  pop.style.left=Math.min(x, window.innerWidth-230)+"px"; pop.style.top=(y+8)+"px";
+  var opts=LABELS.map(function(p){ return '<option value="'+p[0]+'"'+(p[0]===r.label?" selected":"")+">"+p[1]+"</option>"; }).join("");
+  pop.innerHTML='<div class="tp-t">Pièce tracée — '+fmt(r.area_m2)+' m²</div>'+
+    '<select class="tp-sel">'+opts+'</select>'+
+    '<div class="tp-row"><button type="button" class="btn sm tp-ok">Valider</button>'+
+    '<button type="button" class="btn ghost sm tp-del">Supprimer</button></div>';
+  document.body.appendChild(pop);
+  var selEl=pop.querySelector(".tp-sel");
+  function close(){ if(pop.parentNode){ pop.parentNode.removeChild(pop); } }
+  selEl.onchange=function(){ r.label=selEl.value; render(); };
+  pop.querySelector(".tp-ok").onclick=function(){ r.label=selEl.value; close(); render(); };
+  pop.querySelector(".tp-del").onclick=function(){ var idx=B.rooms.indexOf(r); if(idx>=0){ B.rooms.splice(idx,1); } sel=-1; close(); render(); };
+  selEl.focus();
 }
 function addWindow(a,b){
   if(Math.hypot(a[0]-b[0],a[1]-b[1])<3){ return null; }
@@ -1325,19 +1418,22 @@ function showHeightPopup(ref, x, y){
 }
 function roomlist(){
   var d=document.getElementById("roomlist"); if(!d){ return; }
-  if(!B.rooms.length){ d.innerHTML='<p style="color:var(--muted);font-size:.9rem">Aucune piece tracee. Choisis "Rectangle" ou "Tracer une piece".</p>'; return; }
-  d.innerHTML='<div class="ptitle" style="margin:.2rem 0 .4rem">Pieces ('+B.rooms.length+')</div>'+B.rooms.map(function(r,i){
-    var lab=LABELS.map(function(l){ return '<option value="'+l+'"'+(l===r.label?" selected":"")+">"+l+"</option>"; }).join("");
-    var chips=ORS.map(function(o){ return '<label class="chip"><input type="checkbox" data-i="'+i+'" data-or="'+o+'"'+(r.exterior_wall_orientations.indexOf(o)>=0?" checked":"")+">"+o+"</label>"; }).join("");
+  if(!B.rooms.length){ d.innerHTML='<p style="color:var(--muted);font-size:.9rem">Aucune pièce tracée. Choisissez « Rectangle » ou « Point par point ».</p>'; return; }
+  // Pièces les plus récentes en haut (on parcourt les index à l'envers).
+  var order=[]; for(var qi=B.rooms.length-1;qi>=0;qi--){ order.push(qi); }
+  d.innerHTML='<div class="ptitle" style="margin:.2rem 0 .4rem">Pièces ('+B.rooms.length+')</div>'+order.map(function(i){
+    var r=B.rooms[i];
+    var lab=LABELS.map(function(l){ return '<option value="'+l[0]+'"'+(l[0]===r.label?" selected":"")+">"+l[1]+"</option>"; }).join("");
+    var chips=ORS.map(function(o){ return '<label class="chip"><input type="checkbox" data-i="'+i+'" data-or="'+o+'"'+(r.exterior_wall_orientations.indexOf(o)>=0?" checked":"")+">"+(ORF[o]||o)+"</label>"; }).join("");
     var wins=(r.openings||[]).map(function(op,j){
-      var fopts=ORS.map(function(o){ return '<option value="'+o+'"'+(o===op.orientation?" selected":"")+">"+o+"</option>"; }).join("");
+      var fopts=ORS.map(function(o){ return '<option value="'+o+'"'+(o===op.orientation?" selected":"")+">"+(ORF[o]||o)+"</option>"; }).join("");
       return '<tr><td><select data-wi="'+i+'" data-wj="'+j+'" data-wf="facade">'+fopts+'</select></td>'+
         '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="w" type="number" step="0.1" value="'+fmt(op._w!=null?op._w:0)+'" style="width:54px;padding:.15rem"></td>'+
         '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="h" type="number" step="0.1" value="'+fmt(op._h!=null?op._h:0)+'" style="width:54px;padding:.15rem"></td>'+
         '<td style="color:var(--muted)">'+fmt(op.area_m2)+'</td>'+
         '<td><button type="button" data-wdel="'+i+"_"+j+'" class="iconbtn" title="supprimer">'+ICON_X+'</button></td></tr>';
     }).join("");
-    var wintable=wins?('<table class="wintab"><tr><th>facade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">aucun chassis</div>';
+    var wintable=wins?('<table class="wintab"><tr><th>façade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">aucun châssis</div>';
     return '<div class="room-card'+(i===sel?" sel":"")+'" data-sel="'+i+'">'+
       '<div class="room-head">'+
         '<span class="room-no">'+(i+1)+'</span>'+
@@ -1348,9 +1444,9 @@ function roomlist(){
         '<label class="nivlbl">niv.<input data-lvl="'+i+'" type="number" value="'+r.level+'" style="width:42px;padding:.15rem"></label>'+
         '<button type="button" data-del="'+i+'" class="iconbtn" title="supprimer">'+ICON_X+'</button>'+
       '</div>'+
-      '<div class="room-sec"><span class="room-seclbl">Facades</span><div class="chips">'+chips+'</div></div>'+
-      '<div class="room-sec"><span class="room-seclbl">Chassis</span>'+wintable+
-        '<button type="button" data-pick="'+i+'" class="btn ghost mini">+ chassis</button></div>'+
+      '<div class="room-sec"><span class="room-seclbl">Façades</span><div class="chips">'+chips+'</div></div>'+
+      '<div class="room-sec"><span class="room-seclbl">Châssis</span>'+wintable+
+        '<button type="button" data-pick="'+i+'" class="btn ghost mini">+ châssis</button></div>'+
     "</div>";
   }).join("");
   Array.prototype.forEach.call(d.querySelectorAll("[data-sel]"),function(c){ c.onclick=function(e){ if(e.target.closest("select,input,button,label")){ return; } sel=parseInt(c.dataset.sel); if(multi){ goToLevel(B.rooms[sel].level); } render(); }; });
@@ -1400,11 +1496,15 @@ function onUp(e){
     if(ref){ var ev=e.evt, cx=ev.clientX!=null?ev.clientX:(ev.changedTouches?ev.changedTouches[0].clientX:200), cy=ev.clientY!=null?ev.clientY:(ev.changedTouches?ev.changedTouches[0].clientY:200); showHeightPopup(ref,cx,cy); }
     return;
   }
-  if(rectDrag){ finishRect(); }
+  if(rectDrag){ finishRect(e); }
 }
 function onClick(e){
-  if(mode==="draw"){ var p=ptr(); draft.push(snapPx([p.x,p.y])); render(); }
-  else if(mode==="calibrate"){ var q=ptr(); calib.push([q.x,q.y]);
+  if(mode==="draw"){ var p=ptr(), q=snapPx([p.x,p.y]);
+    // Re-cliquer près du 1er point ferme automatiquement la pièce.
+    if(draft.length>=3){ var f0=draft[0]; if(Math.hypot(q[0]-f0[0],q[1]-f0[1])<sc(10*markF())){ finishRoom(e); return; } }
+    draft.push(q); updateFinishBtn(); render();
+  }
+  else if(mode==="calibrate"){ var qc=ptr(); calib.push([qc.x,qc.y]);
     if(calib.length===2){ var dpx=Math.hypot(calib[0][0]-calib[1][0],calib[0][1]-calib[1][1]); var real=parseFloat(prompt("Longueur reelle de ce segment, en metres ?","5")); if(real>0 && dpx>0){ F().mpp=real/dpx; } setMode("idle"); }
     else { render(); }
   }
@@ -1439,10 +1539,10 @@ document.addEventListener("DOMContentLoaded",function(){
   initStage();
   document.getElementById("t-draw").onclick=function(){ setMode(mode==="draw"?"idle":"draw"); };
   document.getElementById("t-rect").onclick=function(){ setMode(mode==="rect"?"idle":"rect"); };
-  document.getElementById("t-finish").onclick=finishRoom;
+  document.getElementById("t-finish").onclick=function(){ finishRoom(); };
   document.getElementById("t-cal").onclick=function(){ setMode(mode==="calibrate"?"idle":"calibrate"); };
   document.getElementById("t-win").onclick=function(){
-    if(sel<0){ var hi=document.getElementById("hint"); if(hi){ hi.textContent="Selectionne une piece (sur le plan ou via + chassis), puis trace sur sa facade."; } return; }
+    if(sel<0){ var el=document.getElementById("modebanner"); if(el){ el.className="stage-mode"; el.textContent="Sélectionnez d'abord une pièce (sur le plan ou via « + châssis »), puis tracez sur sa façade."; } return; }
     setMode(mode==="window"?"idle":"window");
   };
   document.getElementById("t-zin").onclick=function(){ zoomBy(1.25); };
@@ -1450,10 +1550,9 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("t-zreset").onclick=function(){ fitStage(); render(); };
   document.getElementById("t-mark").oninput=function(){ render(); };
   document.addEventListener("keydown",function(e){ if(e.key==="Escape" && mode!=="idle"){ setMode("idle"); } });
-  if(multi){ var lw=document.getElementById("t-levelwrap"); if(lw){ lw.style.display="none"; } }
   var se=document.querySelector('input[name=sash]'); if(se){ var sv=parseFloat(se.value); if(sv>0){ lastSash=sv; } }
   window.addEventListener("resize",function(){ fitStage(); render(); });
-  applyFloor(); render();
+  setBanner(); applyFloor(); render();
 });
 """
 
@@ -1502,25 +1601,27 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
     Produit un `building_json` (polygones en mètres) → mêmes résultats.
     """
     data = json.dumps({"floors": floors})
-    multi = len(floors) > 1
-    level_help = (
-        "Plusieurs niveaux : bascule de plan avec les boutons « Niveau » ; "
-        "les pièces tracées prennent le niveau affiché."
-        if multi
-        else "Plusieurs plans sur la planche (RdC, étage…) ? Règle le <b>niveau</b> "
-        "avant de tracer ; chaque pièce garde le sien."
-    )
     body = f"""
-<h1 style="margin-bottom:.2rem">Tracer le plan</h1>
-<p class="sub" style="max-width:820px"><b>Rectangle</b> : glisse en diagonale pour
-créer une pièce. <b>Point par point</b> : clique les coins puis « Terminer ».
-Sélectionne une pièce pour <b>déplacer</b> son corps ou <b>tirer ses coins</b> ;
-trace ses châssis sur la façade (glisser = largeur, une bulle demande la hauteur).
-Le <b>magnétisme</b> accroche aux coins voisins. Molette / pincer = zoom, glisser =
-déplacer le plan, <b>Échap</b> quitte l'outil. {level_help}</p>
-<div class="levelbar" id="floorbar"></div>
+<div class="trace-head">
+  <h1 style="margin-bottom:.2rem">Tracer le plan</h1>
+  <details class="howto" open>
+    <summary>Comment tracer</summary>
+    <ol>
+      <li><b>Objectif</b> : délimiter chaque pièce et poser ses châssis — le code en
+      déduit surfaces, façades et espaces traversants.</li>
+      <li><b>Tracer une pièce</b> : bouton <b>Rectangle</b> puis glisser en diagonale,
+      ou <b>Point par point</b> puis cliquer les coins (re-cliquer le 1<sup>er</sup>
+      point ferme la pièce). Une bulle s'ouvre pour valider et nommer la pièce.</li>
+      <li><b>Façades &amp; châssis</b> : sélectionner une pièce, bouton <b>Châssis</b>,
+      puis glisser le long d'une façade (longueur = largeur ; une bulle demande la hauteur).</li>
+      <li><b>Naviguer</b> : <kbd>molette</kbd> zoom, glisser = déplacer le plan,
+      <kbd>Échap</kbd> quitte l'outil en cours.</li>
+    </ol>
+  </details>
+</div>
 <div class="trace-layout">
   <div class="trace-canvas-wrap">
+    <div class="stage-mode empty" id="modebanner">Sélectionnez un outil pour commencer.</div>
     <div style="position:relative">
       <div id="stage"></div>
       {_COMPASS_SVG}
@@ -1529,22 +1630,23 @@ déplacer le plan, <b>Échap</b> quitte l'outil. {level_help}</p>
   <aside class="trace-side">
     <div class="palette">
       <div class="pgroup">
+        <div class="ptitle">Niveau des nouvelles pièces</div>
+        <div class="levelsel" id="levelsel"></div>
+      </div>
+      <div class="pgroup">
         <div class="ptitle">Pièces</div>
-        <button type="button" class="btn ghost" id="t-rect">{_icon("rect")} Tracer un rectangle</button>
-        <button type="button" class="btn ghost" id="t-draw">{_icon("spline")} Tracer (point par point)</button>
-        <button type="button" class="btn ghost" id="t-finish">{_icon("check")} Terminer la pièce</button>
+        <button type="button" class="btn ghost" id="t-rect">{_icon("rect")} Rectangle</button>
+        <button type="button" class="btn ghost" id="t-draw">{_icon("spline")} Point par point</button>
+        <button type="button" class="btn ghost" id="t-finish" style="display:none">{_icon("check")} Terminer la pièce</button>
         <label class="chk"><input type="checkbox" id="t-snap" checked> {_icon("magnet")} Magnétisme</label>
-        <label class="lbl" id="t-levelwrap">Niveau des nouvelles pièces
-          <input type="number" id="t-level" value="0" style="width:100%;padding:.3rem;margin-top:.2rem"></label>
       </div>
       <div class="pgroup">
         <div class="ptitle">Châssis</div>
         <button type="button" class="btn ghost" id="t-win">{_icon("window")} Tracer un châssis</button>
-        <span class="lbl" style="font-weight:400">Sélectionne une pièce, puis glisse sur sa façade.</span>
+        <span class="lbl" style="font-weight:400">Sélectionnez une pièce, puis glissez sur sa façade.</span>
       </div>
       <div class="pgroup">
-        <div class="ptitle">Échelle &amp; vue</div>
-        <button type="button" class="btn ghost" id="t-cal">{_icon("ruler")} Calibrer l'échelle</button>
+        <div class="ptitle">Vue</div>
         <div class="row">
           <button type="button" class="btn ghost" id="t-zout" title="Dézoomer">−</button>
           <button type="button" class="btn ghost" id="t-zin" title="Zoomer">+</button>
@@ -1552,11 +1654,14 @@ déplacer le plan, <b>Échap</b> quitte l'outil. {level_help}</p>
         </div>
         <label class="lbl" title="Grosseur des repères de tracé">Taille des repères
           <input type="range" id="t-mark" min="0.5" max="4" step="0.5" value="1" style="width:100%"></label>
-        <span id="scaleinfo" style="color:var(--muted);font-size:.8rem"></span>
       </div>
-      <span id="hint"></span>
+      <div class="pgroup">
+        <div class="ptitle">Échelle</div>
+        <button type="button" class="btn ghost" id="t-cal">{_icon("ruler")} Calibrer l'échelle</button>
+        <span id="scaleinfo" class="lbl" style="font-weight:400"></span>
+      </div>
     </div>
-    <div id="roomlist"></div>
+    <div class="roomlist-wrap"><div id="roomlist"></div></div>
   </aside>
 </div>
 <form id="valform" method="post" action="/etude/resultat" onsubmit="syncHidden()">

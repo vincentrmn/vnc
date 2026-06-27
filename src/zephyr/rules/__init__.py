@@ -39,9 +39,11 @@ DEPTH_RATIO_CROSS = 5.0
 # Hauteur de châssis à partir de laquelle le tirage mono-façade est exploitable.
 TALL_SASH_M = 1.5
 
-# Bande optimale de ratio vitrage / surface au sol.
-GLAZING_LOW = 0.15
-GLAZING_HIGH = 0.25
+# Vitrage : « plus c'est bas, mieux c'est » (moins de surchauffe / déperditions).
+# 100 jusqu'à 1/8 (12,5 %), décroissance linéaire jusqu'au maximum 20 %, plancher 20 au-delà.
+GLAZING_OPTIMAL = 0.125  # 1/8 du ratio surface vitrée / surface de la pièce
+GLAZING_MAX = 0.20  # au-delà : trop vitré
+GLAZING_FLOOR_SCORE = 20.0
 
 # Notes d'inertie par classe (free-cooling nocturne + amortissement).
 _INERTIA_SCORE: dict[InertiaClass, float] = {
@@ -115,7 +117,7 @@ def _ventilation_criterion(
             credit = 0.6
         else:
             single_low_area += a
-            credit = 0.3
+            credit = 0.2  # plancher : exposé mais ni traversant ni châssis haut
         # Pénalité de plan trop profond (la VNC ne balaie plus le fond).
         ratio = room.depth_to_height_ratio
         if ratio is not None:
@@ -125,21 +127,23 @@ def _ventilation_criterion(
         credited += a * credit
 
     score = 100.0 * credited / total_area
+    through_pct = 100.0 * through_area / total_area
 
     def pct(x: float) -> str:
         return f"{100.0 * x / total_area:.0f}%"
 
     detail = (
-        f"{pct(through_area)} traversant, {pct(single_tall_area)} mono-façade châssis hauts, "
+        f"{through_pct:.0f}% de la surface traversante, "
+        f"{pct(single_tall_area)} mono-façade châssis ≥ {TALL_SASH_M:g} m, "
         f"{pct(single_low_area)} mono-façade bas, {pct(interior_area)} aveugle"
     )
     reco: str | None = None
     if score < 70:
         if not tall:
             reco = (
-                "Hauteur de châssis non confirmée / < 1,5 m : viser des ouvrants ≥ 1,5 m "
+                "Hauteur de châssis non confirmée ou < 1,5 m : viser des ouvrants ≥ 1,5 m "
                 "pour activer le tirage mono-façade, et créer des transferts d'air vers "
-                "les pièces aveugles/profondes."
+                "les pièces aveugles ou profondes."
             )
         else:
             reco = (
@@ -153,53 +157,69 @@ def _ventilation_criterion(
         weight=weight,
         detail=detail,
         scale=(
-            f"Par surface : traversant = 100, mono-façade châssis ≥ {TALL_SASH_M} m = 60, "
-            "mono-façade bas = 30, pièce aveugle = 0 ; × 0,5 si plan trop profond "
-            f"(> {DEPTH_RATIO_SINGLE_SIDED}× HSP simple-face, > {DEPTH_RATIO_CROSS}× traversant)."
+            "Échelle au prorata de la surface : pièce traversante = 100, mono-façade à "
+            f"châssis ≥ {TALL_SASH_M:g} m = 60, mono-façade basse = 20, pièce aveugle = 0 ; "
+            f"× 0,5 si plan trop profond (> {DEPTH_RATIO_SINGLE_SIDED:g}× HSP simple-face, "
+            f"> {DEPTH_RATIO_CROSS:g}× traversant)."
         ),
         recommendation=reco,
     )
 
 
 def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float) -> ScoreCriterion:
-    """Note le ratio surface vitrée / surface au sol (bande optimale)."""
+    """Note le taux de surface vitrée : plus il est bas, mieux c'est (surchauffe/déperditions)."""
     area = building.total_floor_area_m2 or 1.0
+    has_openings = any(r.openings for r in building.rooms)
+    scale_txt = (
+        f"Plus le taux est bas, mieux c'est : ≤ {GLAZING_OPTIMAL:.1%} (1/8) = 100, "
+        f"décroissance linéaire jusqu'au maximum {GLAZING_MAX:.0%}, "
+        f"plancher {GLAZING_FLOOR_SCORE:.0f} au-delà. Sans châssis tracé : 0."
+    )
+
     if envelope.glazing_to_floor_ratio is not None:
         ratio = envelope.glazing_to_floor_ratio
-        src = "CPE/saisie"
+        src = "CPE ou saisie"
+    elif not has_openings:
+        # Aucun châssis tracé → pas de vitrage exploitable : note nulle.
+        return ScoreCriterion(
+            key="vitrage",
+            label="Vitrage (taux de surface vitrée)",
+            score=0.0,
+            weight=weight,
+            detail="aucun châssis tracé (taux de vitrage = 0)",
+            scale=scale_txt,
+            recommendation=(
+                "Aucun châssis n'a été tracé : ajouter les ouvrants sur les façades pour "
+                "permettre la ventilation naturelle et l'éclairage."
+            ),
+        )
     else:
         glazing = sum(op.area_m2 for r in building.rooms for op in r.openings)
         ratio = glazing / area
         src = "baies du plan (hauteur supposée)"
 
-    if GLAZING_LOW <= ratio <= GLAZING_HIGH:
+    if ratio <= GLAZING_OPTIMAL:
         score = 100.0
-    elif ratio < GLAZING_LOW:
-        score = max(0.0, 100.0 * ratio / GLAZING_LOW)
-    else:  # trop vitré
-        score = max(0.0, 100.0 - 250.0 * (ratio - GLAZING_HIGH))
+    elif ratio >= GLAZING_MAX:
+        score = GLAZING_FLOOR_SCORE
+    else:
+        frac = (ratio - GLAZING_OPTIMAL) / (GLAZING_MAX - GLAZING_OPTIMAL)
+        score = 100.0 - (100.0 - GLAZING_FLOOR_SCORE) * frac
 
     reco: str | None = None
-    if ratio > GLAZING_HIGH:
+    if ratio > GLAZING_MAX:
         reco = (
-            f"Vitrage élevé ({ratio:.0%} > {GLAZING_HIGH:.0%}) : risque de surchauffe et de "
-            "déperditions → protections solaires (sud/ouest), voire réduction des surfaces vitrées."
-        )
-    elif ratio < GLAZING_LOW:
-        reco = (
-            f"Vitrage faible ({ratio:.0%} < {GLAZING_LOW:.0%}) : peu d'apports/lumière → "
-            "augmenter les surfaces ouvrantes utiles au tirage et à l'éclairage naturel."
+            f"Taux de vitrage élevé ({ratio:.0%} > {GLAZING_MAX:.0%}) : risque de surchauffe et "
+            "de déperditions ; prévoir des protections solaires (sud/ouest) ou réduire les "
+            "surfaces vitrées."
         )
     return ScoreCriterion(
         key="vitrage",
-        label="Vitrage (surface vitrée / surface au sol)",
+        label="Vitrage (taux de surface vitrée)",
         score=round(score, 1),
         weight=weight,
-        detail=f"ratio vitrage/plancher = {ratio:.0%} (source : {src})",
-        scale=(
-            f"Bande optimale {GLAZING_LOW:.0%}–{GLAZING_HIGH:.0%} = 100 ; "
-            "décroît sous la bande (peu d'apports) et au-dessus (surchauffe/déperditions)."
-        ),
+        detail=f"taux de vitrage / plancher = {ratio:.0%} (source : {src})",
+        scale=scale_txt,
         recommendation=reco,
     )
 

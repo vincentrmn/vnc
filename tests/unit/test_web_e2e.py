@@ -140,7 +140,7 @@ def test_multi_pdf_per_floor_tracing() -> None:
     r = client.post("/etude", files=files, data={"project_type": "logement"})
     assert r.status_code == 200
     assert "window.TRACE" in r.text and '"floors"' in r.text
-    assert 'id="floorbar"' in r.text and r.text.count('"level":') >= 2
+    assert 'id="levelsel"' in r.text and r.text.count('"level":') >= 2
 
 
 def test_resume_study_from_file() -> None:

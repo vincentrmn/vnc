@@ -33,7 +33,8 @@ def _good_building() -> Building:
     return Building(id="b1", rooms=rooms, inertia_class=InertiaClass.LOURDE)
 
 
-_ENV = EnvelopeData(u_wall_w_m2k=0.18, u_window_w_m2k=0.9, glazing_to_floor_ratio=0.18)
+# Vitrage bas (≤ 1/8) = bon (moins de surchauffe/déperditions) sous la nouvelle échelle.
+_ENV = EnvelopeData(u_wall_w_m2k=0.18, u_window_w_m2k=0.9, glazing_to_floor_ratio=0.10)
 
 
 def test_good_building_scores_high_and_go() -> None:

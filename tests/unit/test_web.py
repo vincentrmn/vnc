@@ -61,7 +61,8 @@ def test_study_form_blocks_and_new_fields() -> None:
     assert 'id="mainform"' in h  # formulaire unique, champs rattachés via form=
     for field in ("chauffage", "ecs", "chassis_material"):
         assert f'name="{field}"' in h
-    assert "Plan &amp; tracé" in h and ">Projet</h2>" in h  # blocs en cartes (icônes Lucide)
+    assert ">Plan</h2>" in h and ">Projet</h2>" in h  # blocs en cartes (icônes Lucide)
+    assert "Passeport énergétique" in h  # carte enveloppe renommée + simplifiée
     assert 'class="ic"' in h  # icônes vectorielles inline (plus d'emoji)
 
 
@@ -77,10 +78,10 @@ def test_study_form_cpe_or_manual_toggle() -> None:
 
 
 def test_study_form_prefills_envelope() -> None:
-    h = render_study_form({"u_wall": "0.18", "n50": "0.6", "inertia": "lourde", "area": "739.3"})
+    h = render_study_form({"u_wall": "0.18", "n50": "0.6", "inertia": "lourde", "glazing": "0.12"})
     assert 'name="u_wall" value="0.18"' in h
     assert 'name="n50" value="0.6"' in h
-    assert 'name="area" value="739.3"' in h
+    assert 'name="glazing" value="0.12"' in h
 
 
 def test_cpe_banner_shows_values_and_provenance() -> None:
@@ -219,7 +220,7 @@ def test_tracing_editor_multi_floor() -> None:
     ]
     h = render_tracing(floors, "")
     assert '"floors"' in h and '"level": 1' in h  # niveaux embarqués
-    assert 'id="floorbar"' in h and 'id="stage"' in h  # barre de niveaux + canvas Konva
+    assert 'id="levelsel"' in h and 'id="stage"' in h  # sélecteur de niveaux + canvas Konva
     # Le JS doit lire la bonne clé d'image (régression : f.uri ≠ image_uri).
     assert "f.image_uri" in h and "f.uri" not in h
 
@@ -227,7 +228,7 @@ def test_tracing_editor_multi_floor() -> None:
 def test_tracing_editor_has_levels() -> None:
     """§10.5 — multi-niveaux : niveau courant + niveau par pièce (plans/planche)."""
     h = render_tracing(_floors(), "")
-    assert 'id="t-level"' in h  # niveau courant des nouvelles pièces
+    assert 'id="levelsel"' in h  # sélecteur de niveau courant (RDC / R+1…)
     assert "curLevel()" in h  # appliqué au tracé
     assert "data-lvl=" in h  # réaffectation du niveau par pièce
     assert "num_levels" in h  # recalculé pour le bâtiment

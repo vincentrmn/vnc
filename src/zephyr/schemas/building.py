@@ -53,12 +53,18 @@ class RoomLabel(StrEnum):
     """Étiquette sémantique d'une pièce (sortie du labelling LLM)."""
 
     SEJOUR = "sejour"
+    SALLE_A_MANGER = "salle_a_manger"
     CHAMBRE = "chambre"
     CUISINE = "cuisine"
     SDB = "sdb"  # salle de bain / pièce humide
     WC = "wc"
+    ENTREE = "entree"
     CIRCULATION = "circulation"
     BUREAU = "bureau"
+    BUANDERIE = "buanderie"
+    CELLIER = "cellier"
+    DRESSING = "dressing"
+    GARAGE = "garage"
     TECHNIQUE = "technique"
     AUTRE = "autre"
 
