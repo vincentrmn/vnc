@@ -61,7 +61,8 @@ def test_study_form_blocks_and_new_fields() -> None:
     assert 'id="mainform"' in h  # formulaire unique, champs rattachés via form=
     for field in ("chauffage", "ecs", "chassis_material"):
         assert f'name="{field}"' in h
-    assert "Plan &amp; tracé" in h and "🏗️ Projet" in h  # blocs en cartes
+    assert "Plan &amp; tracé" in h and ">Projet</h2>" in h  # blocs en cartes (icônes Lucide)
+    assert 'class="ic"' in h  # icônes vectorielles inline (plus d'emoji)
 
 
 def test_study_form_cpe_or_manual_toggle() -> None:

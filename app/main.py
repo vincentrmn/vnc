@@ -34,7 +34,8 @@ from zephyr.schemas import (
 from zephyr.study import compute_study
 from zephyr.viz import render_plan_png
 
-_VERDICT_COLOR = {Verdict.GO: "🟢", Verdict.CONDITIONNEL: "🟠", Verdict.NO_GO: "🔴"}
+# Marqueur mono-couleur (le label texte porte le sens ; couleur via st.success/error).
+_VERDICT_COLOR = {Verdict.GO: "●", Verdict.CONDITIONNEL: "◐", Verdict.NO_GO: "○"}
 
 
 def main() -> None:
@@ -101,7 +102,7 @@ def main() -> None:
         )
         for w in geo.warnings:
             st.warning(w)
-        st.info("⚠️ Validez/corrigez orientations, labels et ouvrants avant de conclure (§2.8).")
+        st.info("Validez/corrigez orientations, labels et ouvrants avant de conclure (§2.8).")
     else:
         building = parametric_building(
             total_area,

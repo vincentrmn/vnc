@@ -28,6 +28,45 @@ from zephyr.schemas import (
 
 _SILL_M = 0.9  # allège par défaut (m) ; hauteur de châssis = head − sill
 
+# --- Jeu d'icônes (Lucide, ISC) -------------------------------------------------
+# Icônes vectorielles minimalistes mono-couleur (trait), inlinées (pas de dépendance
+# runtime : rendu instantané + thème via `currentColor` + fonctionne dans le PDF
+# WeasyPrint où aucun JS ne tourne). Cf. CLAUDE.md §5 (toujours la meilleure lib
+# spécialisée). Contenu interne SVG repris verbatim de lucide-static.
+_ICONS: dict[str, str] = {
+    "moon": '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
+    "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+    "alert": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    "arrow-left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    "arrow-right": '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    "ruler": '<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>',
+    "building": '<path d="M10 12h4"/><path d="M10 8h4"/><path d="M14 21v-3a2 2 0 0 0-4 0v3"/><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/>',
+    "file": '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+    "pencil": '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+    "hardhat": '<path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M14 6a6 6 0 0 1 6 6v3"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><rect x="2" y="15" width="20" height="4" rx="1"/>',
+    "pin": '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+    "history": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+    "check": '<path d="M20 6 9 17l-5-5"/>',
+    "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    "rect": '<path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M21 19a2 2 0 0 1-2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h1"/><path d="M14 3h1"/><path d="M14 21h1"/><path d="M3 9v1"/><path d="M21 9v1"/><path d="M3 14v1"/><path d="M21 14v1"/>',
+    "spline": '<circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><path d="M5 17A12 12 0 0 1 17 5"/>',
+    "magnet": '<path d="m12 15 4 4"/><path d="M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z"/><path d="m5 8 4 4"/>',
+    "window": '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/>',
+    "download": '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+    "refresh": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    "maximize": '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+}
+
+
+def _icon(name: str, size: int = 16) -> str:
+    """SVG inline d'une icône Lucide (trait `currentColor`, donc thème-aware)."""
+    inner = _ICONS[name]
+    return (
+        f'<svg class="ic" width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+        f'aria-hidden="true">{inner}</svg>'
+    )
+
 
 def _parse_orientations(text: str) -> list[Orientation]:
     """Parse une liste d'orientations « S, W » → [S, W] (valeurs inconnues ignorées)."""
@@ -341,8 +380,12 @@ input[type=file]::file-selector-button:hover { background: var(--primary); color
 .wintab th { text-align: left; font-weight: 600; color: var(--muted); font-size: .72rem; padding: .1rem .2rem; }
 .wintab td { padding: .12rem .2rem; }
 .iconbtn { border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer;
-  border-radius: .35rem; padding: .1rem .4rem; font-size: .8rem; }
+  border-radius: .35rem; padding: .15rem .35rem; font-size: .8rem; line-height: 0; }
 .iconbtn:hover { color: var(--danger); border-color: var(--danger); }
+/* Icônes Lucide inline : trait currentColor, alignées au texte */
+.ic { display: inline-block; vertical-align: -.15em; }
+h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-strong); }
+.sec-head .ic { vertical-align: -.1em; }
 .btn.mini { padding: .25rem .6rem; font-size: .82rem; margin-top: .4rem; }
 @media (max-width: 980px) {
   .trace-layout { grid-template-columns: 1fr; }
@@ -411,6 +454,11 @@ input[type=file]::file-selector-button:hover { background: var(--primary); color
 .sg-swatch { display: inline-block; width: 64px; height: 64px; border-radius: var(--r1);
   border: 1px solid var(--line); vertical-align: middle; margin-right: .5rem; }
 .sg-row { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: .5rem 0; }
+.sg-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .5rem; }
+.sg-icon { display: flex; flex-direction: column; align-items: center; gap: .4rem;
+  padding: .8rem .4rem; border: 1px solid var(--line); border-radius: var(--r1);
+  background: var(--surface); color: var(--ink); }
+.sg-icon code { font-size: .72rem; color: var(--muted); }
 """
 
 _DISCLAIMER = (
@@ -433,12 +481,13 @@ _THEME_INIT = (
     "document.documentElement.setAttribute('data-theme',t);}catch(e){}})();"
 )
 _THEME_TOGGLE_JS = (
+    "var ICON_SUN='" + _icon("sun", 18) + "',ICON_MOON='" + _icon("moon", 18) + "';"
+    "function paintTheme(){var b=document.getElementById('themebtn');if(!b){return;}"
+    "b.innerHTML=document.documentElement.getAttribute('data-theme')==='dark'?ICON_SUN:ICON_MOON;}"
     "function toggleTheme(){var r=document.documentElement,"
     "n=r.getAttribute('data-theme')==='dark'?'light':'dark';"
-    "r.setAttribute('data-theme',n);try{localStorage.setItem('zephyr-theme',n);}catch(e){}"
-    "var b=document.getElementById('themebtn');if(b){b.textContent=n==='dark'?'☀️':'🌙';}}"
-    "document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('themebtn');"
-    "if(b){b.textContent=document.documentElement.getAttribute('data-theme')==='dark'?'☀️':'🌙';}});"
+    "r.setAttribute('data-theme',n);try{localStorage.setItem('zephyr-theme',n);}catch(e){}paintTheme();}"
+    "document.addEventListener('DOMContentLoaded',paintTheme);"
 )
 
 
@@ -448,7 +497,7 @@ def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> s
     wrap_cls = "wrap wide" if wide else "wrap"
     toggle = (
         '<button type="button" class="theme-toggle" id="themebtn" onclick="toggleTheme()" '
-        'title="Thème clair / sombre" aria-label="Basculer le thème">🌙</button>'
+        f'title="Thème clair / sombre" aria-label="Basculer le thème">{_icon("moon", 18)}</button>'
     )
     return f"""<!DOCTYPE html><html lang="fr" data-theme="light"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -480,6 +529,10 @@ def render_styleguide() -> str:
         f'<span class="badge" style="background:var(--{g.lower()})">{g}</span> '
         for g in ["a", "b", "c", "d", "e"]
     )
+    icons = "".join(
+        f'<div class="sg-icon">{_icon(name, 22)}<code>{name}</code></div>'
+        for name in _ICONS
+    )
     body = f"""
 <h1>Charte Zéphyr</h1>
 <p class="sub">Système de design (DA KORR : vert #3a5b42, Helvetica Neue, 8pt).
@@ -508,6 +561,11 @@ Tous les écrans s'appuient sur ces tokens. Bascule clair/sombre en haut à droi
   <span class="badge-ok">badge</span>
   <label class="chip"><input type="checkbox"> chip</label>
 </div>
+
+<h2 class="sec">Icônes — Lucide (trait, mono-couleur)</h2>
+<p class="hint">Jeu minimaliste inliné (couleur héritée via <code>currentColor</code>, donc
+thème-aware et rendu dans le PDF). <code>_icon("nom")</code> dans les pages.</p>
+<div class="sg-icons">{icons}</div>
 
 <h2 class="sec">Cartes & champs</h2>
 <div class="crit-grid">
@@ -562,16 +620,16 @@ def render_landing() -> str:
 </section>
 <hr class="rule">
 <section id="methode">
-  <div class="sec-head"><span class="idx">→</span><h2>Comment ça marche</h2></div>
+  <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Comment ça marche</h2></div>
   <div class="process">{steps_html}</div>
 </section>
 <section>
-  <div class="sec-head"><span class="idx">→</span><h2>Ce qu'on évalue</h2></div>
+  <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Ce qu'on évalue</h2></div>
   <p class="lead-xl" style="margin-bottom:var(--s2)">Quatre critères pondérés (poids
   sur 100), notés en déterministe avec barème et recommandation.</p>
   <div class="spec">{crit_html}</div>
 </section>
-<div class="disclaimer">⚠️ {html.escape(_DISCLAIMER)}</div>
+<div class="disclaimer">{_icon("alert")} {html.escape(_DISCLAIMER)}</div>
 """
     return _layout("Zéphyr — pré-étude VNC", body)
 
@@ -580,8 +638,8 @@ def render_error(message: str) -> str:
     """Page d'erreur simple (ex. PDF scanné refusé, fichier illisible)."""
     body = (
         '<h1>Fichier non exploitable</h1>'
-        f'<div class="disclaimer">⚠️ {html.escape(message)}</div>'
-        '<p><a class="btn" href="/etude">← Revenir à la configuration</a></p>'
+        f'<div class="disclaimer">{_icon("alert")} {html.escape(message)}</div>'
+        f'<p><a class="btn" href="/etude">{_icon("arrow-left")} Revenir à la configuration</a></p>'
     )
     return _layout("Zéphyr — erreur", body, cta=False)
 
@@ -675,7 +733,7 @@ calcule ensuite le score d'aptitude VNC et le bilan financier.</p>
 <form id="mainform" method="post" action="/etude" enctype="multipart/form-data"></form>
 
 <div class="card" style="margin:1.2rem 0">
-  <h2>📐 Plan &amp; tracé</h2>
+  <h2>{_icon("ruler", 20)}Plan &amp; tracé</h2>
   <p class="sub">Le plan sert de fond pour tracer les pièces et les châssis à
   l'étape suivante. Format vectoriel uniquement (un PDF scanné n'est pas lu).</p>
   <div class="uploader">
@@ -696,11 +754,11 @@ calcule ensuite le score d'aptitude VNC et le bilan financier.</p>
 </div>
 
 <div class="card" style="margin:1.2rem 0">
-  <h2>🏢 Enveloppe</h2>
+  <h2>{_icon("building", 20)}Enveloppe</h2>
   <p class="sub">D'où viennent les valeurs (U, n50, inertie…) ?</p>
   <div class="seg" role="tablist">
-    <label class="on"><input type="radio" name="cpe_mode" value="cpe" checked> 📄 J'ai un CPE</label>
-    <label><input type="radio" name="cpe_mode" value="manual"> ✍️ Saisie manuelle</label>
+    <label class="on"><input type="radio" name="cpe_mode" value="cpe" checked> {_icon("file")} J'ai un CPE</label>
+    <label><input type="radio" name="cpe_mode" value="manual"> {_icon("pencil")} Saisie manuelle</label>
   </div>
 
   <div id="cpe-upload" class="uploader" style="margin-top:1rem">
@@ -737,7 +795,7 @@ calcule ensuite le score d'aptitude VNC et le bilan financier.</p>
 </div>
 
 <div class="card" style="margin:1.2rem 0">
-  <h2>🏗️ Projet</h2>
+  <h2>{_icon("hardhat", 20)}Projet</h2>
   <div class="form-grid">
     <div class="field"><div class="lab">Nature</div>{nature_sel}</div>
     <div class="field"><div class="lab">Type de projet</div>{ptype_sel}</div>
@@ -756,7 +814,7 @@ calcule ensuite le score d'aptitude VNC et le bilan financier.</p>
 </div>
 
 <div class="card" style="margin:1.2rem 0">
-  <h2>📍 Contexte du site</h2>
+  <h2>{_icon("pin", 20)}Contexte du site</h2>
   <label class="check"><input type="checkbox" name="noise" form="mainform"> Bruit extérieur excessif</label>
   <label class="check"><input type="checkbox" name="pollution" form="mainform"> Pollution / pollen élevés</label>
   <label class="check"><input type="checkbox" name="security" form="mainform"> Risque de sécurité au RdC</label>
@@ -764,10 +822,10 @@ calcule ensuite le score d'aptitude VNC et le bilan financier.</p>
     Occupation incompatible (hôpital, process…)</label>
 </div>
 
-<p style="margin:1.4rem 0"><button class="btn" type="submit" form="mainform">Continuer →</button></p>
+<p style="margin:1.4rem 0"><button class="btn" type="submit" form="mainform">Continuer {_icon("arrow-right")}</button></p>
 
 <div class="card" style="margin:1.2rem 0;background:#f7faf9">
-  <h2>↩️ Reprendre une étude</h2>
+  <h2>{_icon("history", 20)}Reprendre une étude</h2>
   <p class="sub">Vous avez déjà téléchargé une étude (fichier .json) ? Rechargez-la
   pour repartir de votre géométrie et de votre config.</p>
   <div class="uploader">
@@ -904,7 +962,7 @@ def _rooms_table(building: object) -> str:
         orients = ", ".join(o.value for o in r.exterior_wall_orientations) or "—"
         wins = ", ".join(o.orientation.value for o in r.openings) or "—"
         label = getattr(r.label, "value", str(r.label))
-        through = "✅ oui" if r.is_through else "— non"
+        through = f'{_icon("check")} oui' if r.is_through else "— non"
         rows.append(
             "<tr>"
             f"<td style='text-align:left'>{html.escape(r.id)}</td>"
@@ -1068,6 +1126,7 @@ document.addEventListener('DOMContentLoaded', function(){ render(); panel(); });
 
 # Éditeur de TRACÉ : plan en fond + tracé des pièces au clic (vanilla JS).
 _TRACING_JS = """
+var ICON_X='<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 var T=window.TRACE, floors=T.floors, fi=0, multi=floors.length>1;
 var ORS=["N","NE","E","SE","S","SW","W","NW"];
 var ORDIR={N:[0,1],NE:[0.7,0.7],E:[1,0],SE:[0.7,-0.7],S:[0,-1],SW:[-0.7,-0.7],W:[-1,0],NW:[-0.7,0.7]};
@@ -1276,7 +1335,7 @@ function roomlist(){
         '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="w" type="number" step="0.1" value="'+fmt(op._w!=null?op._w:0)+'" style="width:54px;padding:.15rem"></td>'+
         '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="h" type="number" step="0.1" value="'+fmt(op._h!=null?op._h:0)+'" style="width:54px;padding:.15rem"></td>'+
         '<td style="color:var(--muted)">'+fmt(op.area_m2)+'</td>'+
-        '<td><button type="button" data-wdel="'+i+"_"+j+'" class="iconbtn">✕</button></td></tr>';
+        '<td><button type="button" data-wdel="'+i+"_"+j+'" class="iconbtn" title="supprimer">'+ICON_X+'</button></td></tr>';
     }).join("");
     var wintable=wins?('<table class="wintab"><tr><th>facade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">aucun chassis</div>';
     return '<div class="room-card'+(i===sel?" sel":"")+'" data-sel="'+i+'">'+
@@ -1287,7 +1346,7 @@ function roomlist(){
         (through(r)?'<span class="badge-ok">traversant</span>':'')+
         '<span class="grow"></span>'+
         '<label class="nivlbl">niv.<input data-lvl="'+i+'" type="number" value="'+r.level+'" style="width:42px;padding:.15rem"></label>'+
-        '<button type="button" data-del="'+i+'" class="iconbtn" title="supprimer">✕</button>'+
+        '<button type="button" data-del="'+i+'" class="iconbtn" title="supprimer">'+ICON_X+'</button>'+
       '</div>'+
       '<div class="room-sec"><span class="room-seclbl">Facades</span><div class="chips">'+chips+'</div></div>'+
       '<div class="room-sec"><span class="room-seclbl">Chassis</span>'+wintable+
@@ -1471,25 +1530,25 @@ déplacer le plan, <b>Échap</b> quitte l'outil. {level_help}</p>
     <div class="palette">
       <div class="pgroup">
         <div class="ptitle">Pièces</div>
-        <button type="button" class="btn ghost" id="t-rect">▭ Tracer un rectangle</button>
-        <button type="button" class="btn ghost" id="t-draw">✏️ Tracer (point par point)</button>
-        <button type="button" class="btn ghost" id="t-finish">✓ Terminer la pièce</button>
-        <label class="chk"><input type="checkbox" id="t-snap" checked> 🧲 Magnétisme</label>
+        <button type="button" class="btn ghost" id="t-rect">{_icon("rect")} Tracer un rectangle</button>
+        <button type="button" class="btn ghost" id="t-draw">{_icon("spline")} Tracer (point par point)</button>
+        <button type="button" class="btn ghost" id="t-finish">{_icon("check")} Terminer la pièce</button>
+        <label class="chk"><input type="checkbox" id="t-snap" checked> {_icon("magnet")} Magnétisme</label>
         <label class="lbl" id="t-levelwrap">Niveau des nouvelles pièces
           <input type="number" id="t-level" value="0" style="width:100%;padding:.3rem;margin-top:.2rem"></label>
       </div>
       <div class="pgroup">
         <div class="ptitle">Châssis</div>
-        <button type="button" class="btn ghost" id="t-win">🪟 Tracer un châssis</button>
+        <button type="button" class="btn ghost" id="t-win">{_icon("window")} Tracer un châssis</button>
         <span class="lbl" style="font-weight:400">Sélectionne une pièce, puis glisse sur sa façade.</span>
       </div>
       <div class="pgroup">
         <div class="ptitle">Échelle &amp; vue</div>
-        <button type="button" class="btn ghost" id="t-cal">📏 Calibrer l'échelle</button>
+        <button type="button" class="btn ghost" id="t-cal">{_icon("ruler")} Calibrer l'échelle</button>
         <div class="row">
           <button type="button" class="btn ghost" id="t-zout" title="Dézoomer">−</button>
           <button type="button" class="btn ghost" id="t-zin" title="Zoomer">+</button>
-          <button type="button" class="btn ghost" id="t-zreset" title="Vue entière">⤢</button>
+          <button type="button" class="btn ghost" id="t-zreset" title="Vue entière">{_icon("maximize")}</button>
         </div>
         <label class="lbl" title="Grosseur des repères de tracé">Taille des repères
           <input type="range" id="t-mark" min="0.5" max="4" step="0.5" value="1" style="width:100%"></label>
@@ -1504,9 +1563,9 @@ déplacer le plan, <b>Échap</b> quitte l'outil. {level_help}</p>
   {hidden_fields}
   <input type="hidden" name="building_json" id="building_json">
   <p style="margin-top:1.2rem">
-    <a class="btn ghost" href="/etude">← Config</a>
-    <button type="button" class="btn ghost" onclick="downloadStudy()">💾 Télécharger l'étude</button>
-    <button class="btn" type="submit">Confirmer &amp; calculer →</button>
+    <a class="btn ghost" href="/etude">{_icon("arrow-left")} Config</a>
+    <button type="button" class="btn ghost" onclick="downloadStudy()">{_icon("download")} Télécharger l'étude</button>
+    <button class="btn" type="submit">Confirmer &amp; calculer {_icon("arrow-right")}</button>
   </p>
 </form>
 <script src="https://unpkg.com/konva@9/konva.min.js"></script>
@@ -1557,9 +1616,9 @@ corriger son <b>label</b>, ses <b>façades</b> et ses <b>châssis</b>. Le
     <div id="panel"></div>
   </div>
   <p style="margin-top:1.2rem">
-    <a class="btn ghost" href="/etude">← Config</a>
-    <button type="button" class="btn ghost" onclick="downloadStudy()">💾 Télécharger l'étude</button>
-    <button class="btn" type="submit">Confirmer &amp; calculer →</button>
+    <a class="btn ghost" href="/etude">{_icon("arrow-left")} Config</a>
+    <button type="button" class="btn ghost" onclick="downloadStudy()">{_icon("download")} Télécharger l'étude</button>
+    <button class="btn" type="submit">Confirmer &amp; calculer {_icon("arrow-right")}</button>
   </p>
 </form>
 <script>window.BUILDING={data};window.LABEL_COLORS={colors};</script>
@@ -1576,8 +1635,8 @@ sans polygones — saisissez/validez façades et châssis pièce par pièce (§2
   <input type="hidden" name="n_rooms" value="{len(rooms)}">
   {edit_blocks}
   <p style="margin-top:1.4rem">
-    <a class="btn ghost" href="/etude">← Config</a>
-    <button class="btn" type="submit">Confirmer &amp; calculer →</button>
+    <a class="btn ghost" href="/etude">{_icon("arrow-left")} Config</a>
+    <button class="btn" type="submit">Confirmer &amp; calculer {_icon("arrow-right")}</button>
   </p>
 </form>"""
 
@@ -1903,7 +1962,7 @@ def render_results(result: StudyResult, *, building: object | None = None) -> st
 {recos}
 {plan}
 {_financial_section(result)}
-<div class="disclaimer">⚠️ {html.escape(_DISCLAIMER)}</div>
-<p><a class="btn ghost" href="/etude">↺ Nouvelle étude</a></p>
+<div class="disclaimer">{_icon("alert")} {html.escape(_DISCLAIMER)}</div>
+<p><a class="btn ghost" href="/etude">{_icon("refresh")} Nouvelle étude</a></p>
 """
     return _layout("Zéphyr — résultats", body, cta=False)

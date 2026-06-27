@@ -28,6 +28,16 @@ _DISCLAIMER = (
     "leurs hypothèses et leur incertitude."
 )
 
+# Icône d'alerte (Lucide « triangle-alert », ISC) inlinée — le PDF (WeasyPrint)
+# n'exécute aucun JS, donc l'icône doit être présente dans le HTML rendu.
+_ALERT_SVG = (
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+    'style="vertical-align:-.12em" aria-hidden="true">'
+    '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
+    '<path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
+)
+
 
 def _li(items: list[str]) -> str:
     if not items:
@@ -164,7 +174,7 @@ def render_report_html(
 </style></head><body>
 <h1>{html.escape(title)}</h1>
 <p class="verdict">VERDICT&nbsp;: {label}</p>
-<p class="disclaimer">⚠️ {html.escape(_DISCLAIMER)}</p>
+<p class="disclaimer">{_ALERT_SVG} {html.escape(_DISCLAIMER)}</p>
 {narrative}
 {plan_html}
 <h2>Aptitude à la VNC (score)</h2>{score_html}
