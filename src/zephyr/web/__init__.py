@@ -16,10 +16,10 @@ from collections.abc import Mapping
 
 from zephyr.schemas import (
     Building,
+    CalcLine,
     InertiaClass,
     Opening,
     Orientation,
-    ROIResult,
     Room,
     RoomLabel,
     StudyResult,
@@ -389,13 +389,24 @@ input[type=file]::file-selector-button:hover { background: var(--primary); color
   .proc + .proc { border-left: 0; padding-left: 0; }
   .score-hero { grid-template-columns: 1fr; }
 }
-/* ROI à livre ouvert : table des formules */
-table.calc { border-collapse: collapse; width: 100%; font-size: .85rem; margin: .2rem 0 .8rem; }
-table.calc th { text-align: left; color: var(--muted); font-size: .72rem; text-transform: uppercase;
-  letter-spacing: .04em; border-bottom: 1px solid var(--line); padding: .3rem .3rem; }
-table.calc td { border-bottom: 1px solid var(--line); padding: .35rem .3rem; vertical-align: top; }
-table.calc td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
-table.calc td.formula { color: var(--muted); font-family: 'Helvetica Neue', Arial, sans-serif; }
+/* ROI à livre ouvert : chaque poste = ligne dépliable (formule + montant dessous) */
+.costlist { margin: .2rem 0 .6rem; }
+.costrow { border-bottom: 1px solid var(--line); }
+.costrow > summary { display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1rem; padding: .42rem .2rem; cursor: pointer; list-style: none; }
+.costrow > summary::-webkit-details-marker { display: none; }
+.costrow > summary::before { content: '▸'; color: var(--muted); font-size: .7rem;
+  margin-right: .4rem; display: inline-block; transition: transform .15s; }
+.costrow[open] > summary::before { transform: rotate(90deg); }
+.costrow .lbl { flex: 1; }
+.costrow .amt { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.costrow .formula { color: var(--muted); font-size: .82rem; line-height: 1.45;
+  padding: 0 .2rem .5rem 1.25rem; font-family: 'Helvetica Neue', Arial, sans-serif; }
+.costrow.total { display: flex; justify-content: space-between; padding: .5rem .2rem;
+  font-weight: 700; border-bottom: none; border-top: 2px solid var(--line); }
+/* Graphe VAN (Chart.js) : conteneur à hauteur fixe (maintainAspectRatio:false) */
+.vanchart { position: relative; height: 300px; margin: .6rem 0 .2rem; background: var(--surface);
+  border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .6rem .2rem; }
 /* Page styleguide */
 .sg-swatch { display: inline-block; width: 64px; height: 64px; border-radius: var(--r1);
   border: 1px solid var(--line); vertical-align: middle; margin-right: .5rem; }
@@ -1609,85 +1620,106 @@ def _criteria_bars(result: StudyResult) -> str:
     return '<div class="bars">' + "".join(rows) + "</div>"
 
 
-def _van_svg(cumulative: list[float]) -> str:
-    """Mini-graphe SVG de la VAN cumulée (économie VNC) année par année."""
+_VAN_CHART_JS = """
+(function(){
+  if(!window.Chart){
+    var el=document.getElementById('vanchart');
+    if(el){ el.outerHTML='<p style="color:#c0392b;padding:1rem">Graphe indisponible '+
+      '(Chart.js non chargé — vérifie le réseau).</p>'; }
+    return;
+  }
+  var src=document.getElementById('van-data');
+  if(!src){ return; }
+  var cfg=JSON.parse(src.textContent);
+  var data=cfg.cumulative, be=cfg.break_even;
+  var labels=data.map(function(_,i){ return 'An '+i; });
+  var fmt=function(v){ return Math.round(v).toLocaleString('fr-FR')+' \\u20ac'; };
+  // Ligne de zéro (seuil de rentabilité) en pointillés.
+  var zeroLine={ id:'zeroLine', afterDatasetsDraw:function(c){
+    var ya=c.scales.y; if(!ya){ return; }
+    var y=ya.getPixelForValue(0); var a=c.chartArea; var ctx=c.ctx;
+    ctx.save(); ctx.strokeStyle='#94a3b8'; ctx.setLineDash([5,4]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(a.left,y); ctx.lineTo(a.right,y); ctx.stroke(); ctx.restore();
+  }};
+  new Chart(document.getElementById('vanchart'),{
+    type:'line',
+    data:{ labels:labels, datasets:[{
+      label:'VAN cumulée (économie VNC)', data:data,
+      borderColor:'#0e9aa7', backgroundColor:'rgba(14,154,167,.12)',
+      borderWidth:2.5, fill:true, tension:.15,
+      pointRadius:data.map(function(_,i){ return i===be?5:2.5; }),
+      pointHoverRadius:6,
+      pointBackgroundColor:data.map(function(_,i){ return i===be?'#1a9d5a':'#0e9aa7'; })
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{
+          title:function(it){ return it[0].label+(it[0].dataIndex===be?' · seuil de rentabilité':''); },
+          label:function(c){ return 'VAN cumulée : '+fmt(c.parsed.y); }
+        }}
+      },
+      scales:{
+        x:{ title:{ display:true, text:'Année' }, grid:{ display:false } },
+        y:{ title:{ display:true, text:'VAN cumulée (\\u20ac)' },
+            ticks:{ callback:function(v){ return fmt(v); } },
+            grid:{ color:'rgba(148,163,184,.18)' } }
+      }
+    },
+    plugins:[zeroLine]
+  });
+})();
+"""
+
+
+def _van_chart(cumulative: list[float], break_even: int | None) -> str:
+    """Graphe VAN cumulée via Chart.js (axes, échelle, ligne de zéro, break-even).
+
+    Lib spécialisée chargée par CDN (même approche que Konva pour le tracé, cf.
+    CLAUDE.md §5). Les données transitent par un bloc JSON ; le JS reste statique
+    (validable par ``node --check``).
+    """
     if not cumulative:
         return ""
-    w, h, pad = 640, 180, 28
-    n = len(cumulative)
-    lo, hi = min(cumulative), max(cumulative)
-    span = (hi - lo) or 1.0
-
-    def x(i: int) -> float:
-        return pad + (w - 2 * pad) * i / max(n - 1, 1)
-
-    def y(v: float) -> float:
-        return pad + (h - 2 * pad) * (1 - (v - lo) / span)
-
-    pts = " ".join(f"{x(i):.1f},{y(v):.1f}" for i, v in enumerate(cumulative))
-    zero = y(0.0) if lo < 0 < hi else None
-    zero_line = (
-        f'<line x1="{pad}" y1="{zero:.1f}" x2="{w - pad}" y2="{zero:.1f}" '
-        'stroke="#cbd5e1" stroke-dasharray="4 4"/>'
-        if zero is not None
-        else ""
+    payload = json.dumps(
+        {"cumulative": [round(v, 2) for v in cumulative], "break_even": break_even}
     )
-    return f"""<svg width="100%" viewBox="0 0 {w} {h}" preserveAspectRatio="none"
-  style="background:#fff;border:1px solid var(--line);border-radius:.6rem">
-  {zero_line}
-  <polyline fill="none" stroke="#0e9aa7" stroke-width="2.5" points="{pts}"/>
-</svg>"""
+    return (
+        '<div class="vanchart"><canvas id="vanchart"></canvas></div>'
+        f'<script type="application/json" id="van-data">{payload}</script>'
+        '<script src="https://unpkg.com/chart.js@4/dist/chart.umd.min.js"></script>'
+        f"<script>{_VAN_CHART_JS}</script>"
+    )
 
 
 _GRADE_LEGEND = "A ≥ 80 · B ≥ 65 · C ≥ 50 · D ≥ 35 · E < 35"
-
-_CAPEX_VMC_LABELS = {
-    "centrales_recuperateurs": "Centrales + récupérateurs",
-    "reseau_gaines": "Réseau de gaines",
-    "pose_cvc": "Pose CVC",
-    "regulation": "Régulation",
-    "etancheite": "Étanchéité",
-    "etudes": "Études",
-    "commissioning": "Commissioning",
-}
-_CAPEX_VNC_LABELS = {
-    "ouvrants_motorises": "Ouvrants motorisés",
-    "capteurs_4en1": "Capteurs 4-en-1",
-    "station_meteo": "Station météo",
-    "plateforme_bos": "Plateforme BOS",
-    "cablage": "Câblage",
-    "extraction_humide": "Extraction pièces humides",
-    "std_ingenierie": "STD + ingénierie",
-    "commissioning_hypercare": "Commissioning + hypercare",
-}
-_OPEX_VMC_LABELS = {
-    "energie_ventilateurs": "Énergie ventilateurs",
-    "maintenance_filtres": "Maintenance (filtres)",
-    "extraction_humide": "Extraction pièces humides",
-}
-_OPEX_VNC_LABELS = {
-    "energie_actionneurs": "Énergie actionneurs",
-    "maintenance_ouvrants_capteurs": "Maintenance ouvrants/capteurs",
-    "abonnement_bos": "Abonnement BOS",
-    "extraction_humide": "Extraction pièces humides",
-    "penalite_chauffage": "Pénalité de chauffage (vs récup VMC)",
-}
 
 
 def _eur(x: float) -> str:
     return f"{x:,.0f} €".replace(",", " ")
 
 
-def _cost_table(title: str, breakdown: dict[str, float], labels: dict[str, str]) -> str:
-    rows = "".join(
-        f"<tr><td>{html.escape(labels.get(k, k))}</td><td>{_eur(v)}</td></tr>"
-        for k, v in breakdown.items()
+def _cost_block(title: str, lines: list[CalcLine]) -> str:
+    """Bloc de coûts : un poste par ligne **dépliable** (clic → formule + nombres dessous)."""
+    rows = []
+    for ln in lines:
+        rows.append(
+            '<details class="costrow">'
+            f'<summary><span class="lbl">{html.escape(ln.label)}</span>'
+            f'<span class="amt">{_eur(ln.value_eur)}</span></summary>'
+            f'<div class="formula">{html.escape(ln.formula)}'
+            f'{(" — " + html.escape(ln.note)) if ln.note else ""}</div></details>'
+        )
+    total = sum(ln.value_eur for ln in lines)
+    rows.append(
+        '<div class="costrow total"><span class="lbl">Total</span>'
+        f'<span class="amt">{_eur(total)}</span></div>'
     )
-    total = sum(breakdown.values())
     return (
         f"<h4 style='margin:.6rem 0 .2rem'>{html.escape(title)}</h4>"
-        f"<table class='kv'>{rows}"
-        f"<tr><td><b>Total</b></td><td><b>{_eur(total)}</b></td></tr></table>"
+        f"<div class='costlist'>{''.join(rows)}</div>"
     )
 
 
@@ -1763,18 +1795,27 @@ def _financial_section(result: StudyResult) -> str:
         ]
     ) + "</div>"
 
+    def _sec(name: str) -> list[CalcLine]:
+        return [ln for ln in r.calc_lines if ln.section == name]
+
+    openbook = (
+        "<p style='color:var(--muted);font-size:.85rem;margin:.2rem 0 .6rem'>Chaque poste est "
+        "<b>dépliable</b> : clic → la formule et les nombres du calcul. Montants aléas inclus "
+        "(+10 %). OPEX an 1 avant inflation.</p>"
+    )
     capex = (
         "<h3>CAPEX (investissement, aléas inclus)</h3>"
+        f"{openbook}"
         '<div class="crit-grid">'
-        f"<div>{_cost_table('VMC double-flux', r.capex_vmc_breakdown, _CAPEX_VMC_LABELS)}</div>"
-        f"<div>{_cost_table('VNC', r.capex_vnc_breakdown, _CAPEX_VNC_LABELS)}</div>"
+        f"<div>{_cost_block('VMC double-flux', _sec('capex_vmc'))}</div>"
+        f"<div>{_cost_block('VNC', _sec('capex_vnc'))}</div>"
         "</div>"
     )
     opex = (
         "<h3>OPEX annuel (an 1, avant inflation)</h3>"
         '<div class="crit-grid">'
-        f"<div>{_cost_table('VMC double-flux', r.opex_vmc_breakdown, _OPEX_VMC_LABELS)}</div>"
-        f"<div>{_cost_table('VNC', r.opex_vnc_breakdown, _OPEX_VNC_LABELS)}</div>"
+        f"<div>{_cost_block('VMC double-flux', _sec('opex_vmc'))}</div>"
+        f"<div>{_cost_block('VNC', _sec('opex_vnc'))}</div>"
         "</div>"
     )
     synth = (
@@ -1795,43 +1836,12 @@ def _financial_section(result: StudyResult) -> str:
         )
     return (
         "<h2 class='sec'>Bilan financier — VNC vs VMC double-flux</h2>"
-        f"{kpis}{_van_svg(r.npv_delta_cumulative_eur)}"
+        f"{kpis}{_van_chart(r.npv_delta_cumulative_eur, r.break_even_year)}"
         "<p style='color:var(--muted);font-size:.85rem;margin:.4rem 0 1rem'>VAN cumulée de "
-        "l'économie VNC (coûts VMC − coûts VNC), actualisée, année par année. La fourchette "
-        "P10–P90 vient d'un tirage Monte-Carlo sur les hypothèses sensibles.</p>"
-        f"{capex}{opex}{synth}{_calc_detail(r)}{_tornado(result)}{warns}"
-    )
-
-
-def _calc_detail(r: ROIResult) -> str:
-    """ROI « à livre ouvert » : chaque poste avec sa formule (valeurs substituées) et son montant."""
-    if not r.calc_lines:
-        return ""
-    sections = [
-        ("capex_vmc", "CAPEX VMC double-flux"), ("capex_vnc", "CAPEX VNC"),
-        ("opex_vmc", "OPEX VMC — an 1"), ("opex_vnc", "OPEX VNC — an 1"),
-    ]
-    blocks = []
-    for key, title in sections:
-        rows = "".join(
-            f"<tr><td>{html.escape(line.label)}</td>"
-            f"<td class='formula'>{html.escape(line.formula)}</td>"
-            f"<td>{_eur(line.value_eur)}</td></tr>"
-            for line in r.calc_lines
-            if line.section == key
-        )
-        if rows:
-            blocks.append(
-                f"<h4 style='margin:.8rem 0 .2rem'>{title}</h4>"
-                "<table class='calc'><tr><th>poste</th><th>formule</th><th>montant</th></tr>"
-                f"{rows}</table>"
-            )
-    return (
-        "<details style='margin:.8rem 0'><summary style='cursor:pointer;font-weight:600'>"
-        "Calcul détaillé (à livre ouvert) — chaque poste, sa formule, son montant</summary>"
-        "<p style='color:var(--muted);font-size:.85rem;margin:.4rem 0'>Montants aléas inclus "
-        "(+10 %). OPEX an 1 avant inflation ; les flux sont ensuite inflatés et actualisés.</p>"
-        + "".join(blocks) + "</details>"
+        "l'économie VNC (coûts VMC − coûts VNC), actualisée, année par année. Le point vert "
+        "marque le seuil de rentabilité ; la fourchette P10–P90 (KPI) vient d'un tirage "
+        "Monte-Carlo sur les hypothèses sensibles.</p>"
+        f"{capex}{opex}{synth}{_tornado(result)}{warns}"
     )
 
 

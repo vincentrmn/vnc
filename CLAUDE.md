@@ -101,6 +101,7 @@ Deux usages : **interne** (priorité, tolérance à l'approximation si honnête 
 - **Web** : `FastAPI` + `uvicorn` + `python-multipart` (formulaires/upload). Pages rendues en **fonctions pures** retournant du HTML (testables sans serveur, comme `report`). `httpx` en dev pour le TestClient.
 - **Principe lib (NON négociable)** : pour tout besoin non trivial, **on s'appuie sur la meilleure lib spécialisée** plutôt que de réécrire à la main. Ne PAS bricoler en vanilla ce qu'une lib éprouvée fait mieux. Choisir la lib la plus adaptée au besoin précis (et la noter ici). Le JS « vanilla » reste pour le collage/glue ; le cœur métier d'un composant s'appuie sur du solide.
 - **Éditeur de tracé** : **Konva.js** (canvas 2D scene-graph, chargé via CDN `unpkg`) — zoom/pan, formes/poignées draggables, hit-testing natifs. Remplace l'ancien SVG vanilla (zoom/pan/coordonnées codés main, trop fragile).
+- **Graphes (résultats financiers)** : **Chart.js** (chargé via CDN `unpkg`) — axes/échelles/grille/tooltips natifs. Données injectées en bloc JSON, JS statique (validable `node --check`). Remplace les `polyline`/`svg` tracés à la main.
 - **LLM** : SDK Anthropic. Modèles : `claude-opus-4-8` (narratif), `claude-sonnet-4-6` (labelling), `claude-haiku-4-5-20251001` (labelling volume). Prompt caching sur le bloc statique. **Le narratif n'invente AUCUN chiffre.**
 - **Rapport** : HTML → PDF (`weasyprint`, optionnel).
 - **Viz** : `matplotlib` (backend Agg).
@@ -128,7 +129,9 @@ pertes_ventilation_saison ≈ ρc · Q_hyg · DJU · 24        [Wh]
 pénalité_VNC ≈ η_VMC · pertes · f_commande               [Wh]
 ```
 
-avec `f_commande` < 1 l'atténuation par la **commande à la demande**. Branché dans l'OPEX VNC du ROI. Jamais 0, jamais un % posé.
+avec `f_commande` < 1 l'atténuation par la **commande à la demande**. Jamais 0, jamais un % posé.
+
+> ⚠️ **Désactivée par défaut depuis (simplification produit, décision utilisateur).** La pénalité est **toujours calculée** et stockée sur `result.heating_penalty` (info), mais **n'alimente plus le ROI** : `compute_study(..., include_heating_penalty=False)` par défaut. Tout le câblage (thermal → OPEX VNC, tornado, Monte-Carlo) reste en place — on rebranche d'un seul drapeau (`include_heating_penalty=True`) le jour où on veut affiner. Quand le terme est nul, ni la ligne OPEX `penalite_chauffage` ni le driver de sensibilité n'apparaissent (pas de « 0 € » parasite).
 
 ### Évolutions financières (faites)
 - **Presets de coûts par taille** (`presets.cost_preset_for`) : les forfaits VNC (BOS, STD, commissioning, extraction) sont échelonnés maison / petit collectif / gros tertiaire, + une **part fixe VMC** (symétrie de modélisation). Corrige la limite « petite échelle ».
@@ -136,7 +139,8 @@ avec `f_commande` < 1 l'atténuation par la **commande à la demande**. Branché
 - **Dimensionnement des ouvrants depuis la géométrie tracée** (`size_from_geometry`) : sur un vrai plan, nb d'ouvrants = châssis ouvrables réels ; sinon ratio surface/ouvrant (paramétrique).
 - **Fourchette Monte-Carlo P10/P50/P90** sur la VAN + **break-even probabiliste** + **probabilité VNC favorable** (`sensitivity.monte_carlo`) → on n'affiche plus un point unique.
 - **Postes optionnels** exposés et **neutres par défaut** : subvention VNC/VMC, coût carbone, free-cooling, TVA, inflation énergie distincte.
-- **ROI « à livre ouvert »** : chaque poste porte sa **formule avec les nombres** (`CalcLine`), affichée dans un volet dépliable.
+- **ROI « à livre ouvert »** : chaque poste porte sa **formule avec les nombres** (`CalcLine`). Affichage : **une ligne dépliable par poste** (clic → la formule et les nombres s'ouvrent **sous** la ligne, à côté du montant), plus de gros tableau séparé.
+- **Graphe VAN** : courbe de la VAN cumulée rendue par **Chart.js** (CDN `unpkg`, cf. §5) — axes, échelle, grille, ligne de zéro, point vert au seuil de rentabilité, tooltips €. Remplace l'ancien `polyline` SVG sans repères.
 
 ### Avertissements méthodologiques (reportés dans le rapport)
 Ratios €/m² = ordres de grandeur LU/BE (à confronter à ≥ 2 devis), pas de valeur résiduelle, résultats sensibles → toujours fourchette + tornado.

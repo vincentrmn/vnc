@@ -107,7 +107,10 @@ def test_results_have_scale_and_detailed_financials() -> None:
     assert "Comment le score est calculé" in h  # barème/échelle
     # Détail financier façon Excel : CAPEX/OPEX postes + sensibilité.
     assert "Centrales + récupérateurs" in h and "Plateforme BOS" in h
-    assert "Pénalité de chauffage" in h
+    # Pénalité de chauffage désactivée par défaut → pas de poste dans l'OPEX VNC.
+    assert "Pénalité de chauffage" not in h
+    # ROI à livre ouvert : chaque poste est dépliable (formule sous la ligne) + graphe Chart.js.
+    assert 'class="costrow"' in h and 'id="vanchart"' in h
     assert "tornado" in h.lower()
     assert "TCO non actualisé" in h
 
