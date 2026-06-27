@@ -633,8 +633,22 @@ _THEME_TOGGLE_JS = (
 )
 
 
+# Favicon : carré vert KORR avec « Z » (SVG inline, base64).
+_FAVICON_B64 = (
+    "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qg"
+    "d2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzNhNWI0MiIvPjx0ZXh0IHg9IjE2IiB5PSIyMyIg"
+    "Zm9udC1mYW1pbHk9IkhlbHZldGljYSBOZXVlLEhlbHZldGljYSxBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9"
+    "IjIwIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjZmZmZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5aPC90ZXh0"
+    "Pjwvc3ZnPg=="
+)
+
+
 def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> str:
-    """Gabarit commun (nav + contenu + footer). `wide` élargit le conteneur (tracé)."""
+    """Gabarit commun (nav + contenu + footer). `wide` élargit le conteneur (tracé).
+
+    L'onglet navigateur affiche toujours « Zéphyr » ; `title` reste pour la lisibilité
+    des appels (et un éventuel usage futur).
+    """
     nav_cta = '<a class="btn" href="/etude">Lancer une étude</a>' if cta else ""
     wrap_cls = "wrap wide" if wide else "wrap"
     toggle = (
@@ -643,7 +657,8 @@ def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> s
     )
     return f"""<!DOCTYPE html><html lang="fr" data-theme="light"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)}</title>
+<title>Zéphyr</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,{_FAVICON_B64}">
 <script>{_THEME_INIT}</script>
 <style>{_CSS}</style></head><body>
 <nav><div class="brand">Zéphyr<span>.</span></div>
@@ -1571,7 +1586,7 @@ function roomlist(){
         '<td style="color:var(--muted)">'+fmt(op.area_m2)+'</td>'+
         '<td><button type="button" data-wdel="'+i+"_"+j+'" class="iconbtn" title="supprimer">'+ICON_X+'</button></td></tr>';
     }).join("");
-    var wintable=wins?('<table class="wintab"><tr><th>façade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">aucun châssis</div>';
+    var wintable=wins?('<table class="wintab"><tr><th>façade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">Aucun châssis</div>';
     return '<div class="room-card'+(i===sel?" sel":"")+'" data-sel="'+i+'">'+
       '<div class="room-head">'+
         '<span class="room-no">'+(i+1)+'</span>'+
@@ -2390,17 +2405,23 @@ def render_results(
         except Exception:  # pragma: no cover - matplotlib absent
             plan = ""
 
+    # Le titre reflète l'APTITUDE (la note), pas l'éligibilité de site : un bâtiment qui
+    # score 80 est un bon candidat même si un drapeau de site (pollution…) impose une réserve,
+    # laquelle apparaît alors dans « Points de vigilance ».
     title = {
-        Verdict.GO: "Bon candidat à la VNC",
-        Verdict.CONDITIONNEL: "Candidat à la VNC sous conditions",
-        Verdict.NO_GO: "Peu adapté à la VNC",
-    }.get(result.verdict, "Aptitude à la VNC")
+        "A": "Excellent candidat à la VNC",
+        "B": "Bon candidat à la VNC",
+        "C": "Candidat correct à la VNC",
+        "D": "Aptitude à la VNC limitée",
+        "E": "Peu adapté à la VNC",
+    }.get(s.grade, "Aptitude à la VNC") if s else "Aptitude à la VNC"
+    bordc = _GRADE_COLOR.get(s.grade, vcolor) if s else vcolor
 
     hyp = _hypotheses_form(result, building, cfg or {})
     body = f"""
 <div class="score-hero">
   {gauge}
-  <h1 class="verdict-title" style="border-left:4px solid {vcolor};padding-left:.7rem">{html.escape(title)}</h1>
+  <h1 class="verdict-title" style="border-left:4px solid {bordc};padding-left:.7rem">{html.escape(title)}</h1>
 </div>
 {concl}
 {_results_actions()}
