@@ -154,8 +154,8 @@ Ratios €/m² = ordres de grandeur LU/BE (à confronter à ≥ 2 devis), pas de
 
 | Critère | Poids | Mesure | Source |
 |---|---|---|---|
-| **Ventilation** | 35 | par surface : traversant = 100, mono-façade **châssis ≥ 1,5 m** = 60, mono-façade bas = 30, aveugle = 0 ; × 0,5 si plan trop profond (> 2,5× HSP simple-face, > 5× traversant) | plans + hauteurs |
-| **Vitrage** | 20 | ratio **surface vitrée / surface au sol**, bande optimale 15–25 % | CPE / saisie |
+| **Ventilation** | 35 | au prorata de la surface : traversant = 100, mono-façade **châssis ≥ 1,5 m** = 60, mono-façade bas = 20 (plancher), aveugle = 0 ; × 0,5 si plan trop profond (> 2,5× HSP simple-face, > 5× traversant) | plans + hauteurs |
+| **Vitrage** | 20 | **taux de surface vitrée, plus bas = mieux** : ≤ 1/8 (12,5 %) = 100, décroissance linéaire jusqu'au max 20 %, plancher 20 au-delà. **Sans châssis tracé : 0** | CPE / saisie |
 | **Inertie** | 25 | masse : lourde 100 / moyenne 60 / légère 25 | **CPE (composition parois)** |
 | **Isolation** | 20 | U mur 0,15→100 … 1,0→0 (70 %) ; Uw 0,8→100 … 2,5→0 (30 %) | CPE |
 
@@ -222,6 +222,13 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 **Fait depuis (UX / page config)** : page de config repensée en **cartes** (Plan & tracé / CPE / Enveloppe / Projet / Site) ; champs projet ajoutés (**type de chauffage, ECS, matériau des châssis** — captés, pas encore câblés) ; CPE : extraction + **provenance par variable** + champs éditables (validation par variable). **Châssis** : hauteur saisie en **bulle pop-up** au relâcher (largeur = glisser), **tableau éditable** largeur×hauteur sous chaque pièce. **Rose des vents** dans le cadre de tracé. **Sauvegarde/reprise par fichier** (`.json` téléchargé/rechargé, zéro BDD). **Multi-PDF par étage** : un PDF par niveau (échelle propre), bascule de fond par niveau dans l'éditeur (ou plan A0 unique + niveau par pièce).
 
 **Fait depuis (CPE)** : **parsing hybride** du CPE (passeport énergétique LU). `ingestion.parse_cpe` extrait le **texte** (déterministe, refuse les scans) ; `llm.extract_cpe` (Sonnet) **mappe** le texte aux champs d'enveloppe (U murs/toit/plancher, Uw, n50, inertie, surface, année) ; chaque **chiffre est vérifié verbatim** dans le texte source (`verify_cpe_extraction`) — un nombre absent est écarté et signalé (jamais inventé, §11). Le résultat **pré-remplit** le formulaire (`POST /etude/cpe`), l'ingénieur valide. Extra `llm` ajouté au Dockerfile ; actif si `ANTHROPIC_API_KEY` est défini sur Railway, sinon message honnête « indisponible » (le texte est quand même lu). **Validé en live sur le CPE Pommerloch** : 9/9 champs corrects avec provenance (mur « Façade » 0,122, toiture 0,109, plancher « Radier » 0,121, Uw 0,714, n50 0,60, ratio AFe/An 0,19, inertie lourde, surface 739,3 m², année 2026).
+
+**Fait depuis (refonte UX — itération remarques utilisateur)** :
+- **Critères** : ventilation au prorata avec plancher 20 (mono-façade bas) ; vitrage « plus bas = mieux » (≤ 1/8 → 100, max 20 %, plancher 20, **0 sans châssis tracé**) ; inertie lourde = 100.
+- **Page config simplifiée** : carte **« Passeport énergétique »** (toggle simple upload / saisie), plan sans tirets ni « … » ni mention paramétrique, **retrait** des champs surface/angle/occupation incompatible, **reprise d'étude discrète en haut**, boutons d'action (Extraire/Reprendre) **hors du cadre d'upload**, **calcul bloqué tant qu'aucun plan** n'est importé.
+- **Éditeur de tracé** : explication aérée (objectif puis comment, **touches clavier stylées** `<kbd>`) ; **bulle de validation** à la création d'une pièce (rectangle relâché / polygone refermé) ; bouton **« Terminer »** masqué hors traçage ; **pièces récentes en haut** ; **zone de dessin + palette figées** (seule la liste défile, fin du double-scroll) ; **sélecteur de niveaux RDC / R+1** en ligne ; **échelle en 1/xx** (au lieu de mm/px) ; **points cardinaux FR** (N/E/O/S — la valeur stockée reste le code `Orientation`) ; **plus de types de pièces** (majuscules + accents, enum `RoomLabel` étendu).
+- **Bilan financier** : **infobulles « i »** sur chaque terme (VAN, TCO, break-even, CAPEX, proba) ; **hypothèses éditables** (prix élec, WACC, horizon, abonnement BOS, prix/nb d'ouvrants) → **recalcul serveur** (`ovr_*` → `_apply_roi_overrides`) ; **export Excel (CSV)** côté client et **export PDF** (`POST /etude/rapport` → `render_report`).
+- **Design** : champs/sélecteurs épurés (fond `--surface-2`, **flèche custom** sur les `<select>` — fin du « combo noir »), suppression du séparateur « · », **enregistrement du projet (JSON)** en tête de résultats.
 
 **Prochaines étapes (priorité = définition du bâtiment, puis méthode)** — cf. §11 pour les questions ouvertes :
 1. **CPE** : couvrir d'autres mises en page/versions (l'extraction est validée sur le format LuxEEB v6.25) ; affiner le choix Uw quand plusieurs types de fenêtres.

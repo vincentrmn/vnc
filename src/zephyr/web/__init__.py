@@ -68,6 +68,12 @@ def _icon(name: str, size: int = 16) -> str:
     )
 
 
+def _info(text: str) -> str:
+    """Petit « i » souligné qui révèle une explication au survol / focus."""
+    t = html.escape(text)
+    return f'<span class="info" tabindex="0" role="note" aria-label="{t}">i<span class="tip">{t}</span></span>'
+
+
 def _parse_orientations(text: str) -> list[Orientation]:
     """Parse une liste d'orientations « S, W » → [S, W] (valeurs inconnues ignorées)."""
     out: list[Orientation] = []
@@ -497,6 +503,22 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 /* Graphe VAN (Chart.js) : conteneur à hauteur fixe (maintainAspectRatio:false) */
 .vanchart { position: relative; height: 300px; margin: .6rem 0 .2rem; background: var(--surface);
   border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .6rem .2rem; }
+/* Info-bulle « i » : explication d'un terme */
+.info { display: inline-flex; align-items: center; justify-content: center; width: 1.05em; height: 1.05em;
+  font-size: .72rem; font-style: italic; font-weight: 700; text-decoration: underline; color: var(--muted);
+  cursor: help; position: relative; margin-left: .3rem; vertical-align: middle; }
+.info .tip { position: absolute; bottom: 145%; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); padding: .5rem .65rem; border-radius: .45rem; width: 240px;
+  font: 400 .78rem/1.45 'Helvetica Neue', Arial, sans-serif; font-style: normal; text-align: left;
+  text-decoration: none; letter-spacing: 0; opacity: 0; visibility: hidden; transition: opacity .12s;
+  z-index: 50; box-shadow: 0 6px 18px rgba(0,0,0,.22); pointer-events: none; }
+.info:hover .tip, .info:focus .tip { opacity: 1; visibility: visible; }
+/* Barre d'actions en tête de résultats + hypothèses éditables */
+.result-actions { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin: .2rem 0 1rem; }
+.hyp { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r1);
+  padding: .4rem .9rem; margin: .8rem 0; }
+.hyp > summary { cursor: pointer; font-weight: 600; font-size: .92rem; }
+.hyp .form-grid { margin-top: .6rem; }
 /* Page styleguide */
 .sg-swatch { display: inline-block; width: 64px; height: 64px; border-radius: var(--r1);
   border: 1px solid var(--line); vertical-align: middle; margin-right: .5rem; }
@@ -655,7 +677,7 @@ def render_landing() -> str:
     )
     body = f"""
 <section class="hero-xl">
-  <div class="eyebrow"><span class="dot"></span> Pré-étude déterministe · Ventilation Naturelle Contrôlée</div>
+  <div class="eyebrow"><span class="dot"></span> Pré-étude déterministe — Ventilation Naturelle Contrôlée</div>
   <h1 class="display">La VNC, <em>pré-qualifiée</em> en quelques minutes.</h1>
   <p class="lead-xl">Un plan, le CPE, et Zéphyr rend un score d'aptitude à la
   ventilation naturelle, des leviers d'amélioration, et le bilan financier face à
@@ -982,7 +1004,7 @@ def _room_edit_block(idx: int, room: object) -> str:
       <input type="text" name="r{idx}_orient" value="{html.escape(orients)}"
         placeholder="ex. S, W"></div>
   </div>
-  <label style="margin-top:.6rem">Châssis (façade · m² · hauteur châssis m · ouvrable)</label>
+  <label style="margin-top:.6rem">Châssis (façade, m², hauteur châssis m, ouvrable)</label>
   {"".join(win_rows)}
 </div>"""
 
@@ -1283,7 +1305,7 @@ function render(){
     var cx=xs.reduce(function(a,b){return a+b;},0)/xs.length, cy=ys.reduce(function(a,b){return a+b;},0)/ys.length;
     var t1=new Konva.Text({x:cx,y:cy,text:(LABMAP[r.label]||r.label),fontSize:pm(0.5),fontFamily:"Helvetica Neue, Arial, sans-serif",fontStyle:"600",fill:"#111",listening:false});
     t1.offsetX(t1.width()/2); t1.offsetY(t1.height()/2+pm(0.32)); shapeLayer.add(t1);
-    var t2=new Konva.Text({x:cx,y:cy,text:fmt(r.area_m2)+" m² · "+levelLabel(r.level),fontSize:pm(0.34),fontFamily:"Helvetica Neue, Arial, sans-serif",fill:"#444",listening:false});
+    var t2=new Konva.Text({x:cx,y:cy,text:fmt(r.area_m2)+" m² — "+levelLabel(r.level),fontSize:pm(0.34),fontFamily:"Helvetica Neue, Arial, sans-serif",fill:"#444",listening:false});
     t2.offsetX(t2.width()/2); t2.offsetY(t2.height()/2-pm(0.32)); shapeLayer.add(t2);
     var minx=Math.min.apply(null,xs),maxx=Math.max.apply(null,xs),miny=Math.min.apply(null,ys),maxy=Math.max.apply(null,ys);
     var dcx=(minx+maxx)/2,dcy=(miny+maxy)/2,rw=maxx-minx,rh=maxy-miny;
@@ -1592,6 +1614,32 @@ function downloadStudy(){
 """
 
 
+# Page de résultats : enregistrer le projet (JSON) + export Excel (CSV) côté client.
+_RESULTS_JS = """
+function downloadProject(){
+  var form=document.getElementById('valform'), cfg={};
+  if(form){ Array.prototype.forEach.call(form.querySelectorAll('[name]'), function(el){
+    if(el.name!=='building_json'){ cfg[el.name]=(el.type==='checkbox')?(el.checked?'on':''):el.value; }
+  }); }
+  var bj=(document.getElementById('building_json')||{}).value||'';
+  var data={zephyr_study:1, config:cfg, building_json:bj};
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='projet-zephyr.json'; document.body.appendChild(a); a.click(); a.remove();
+}
+function exportCsv(){
+  var el=document.getElementById('calc-data'); if(!el){ return; }
+  var rows=JSON.parse(el.textContent), out=[['Section','Poste','Formule','Montant (€)']];
+  rows.forEach(function(r){ out.push([r.section,r.label,r.formula,r.value]); });
+  var csv=out.map(function(row){ return row.map(function(c){
+    return '"'+(''+c).replace(/"/g,'""')+'"'; }).join(';'); }).join('\\r\\n');
+  var blob=new Blob(['\\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='bilan-vnc.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
+"""
+
+
 def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
     """Éditeur de **tracé** : plan(s) en fond, l'ingénieur trace les pièces au clic.
 
@@ -1762,7 +1810,7 @@ def _gauge_svg(score: float, grade: str) -> str:
     transform="rotate(-90 70 70)"/>
   <text x="70" y="66" text-anchor="middle" font-size="30" font-weight="800"
     fill="#14233a">{score:.0f}</text>
-  <text x="70" y="90" text-anchor="middle" font-size="13" fill="#5b6b80">/ 100 · {grade}</text>
+  <text x="70" y="90" text-anchor="middle" font-size="13" fill="#5b6b80">/ 100 — {grade}</text>
 </svg>"""
 
 
@@ -1821,7 +1869,7 @@ _VAN_CHART_JS = """
       plugins:{
         legend:{ display:false },
         tooltip:{ callbacks:{
-          title:function(it){ return it[0].label+(it[0].dataIndex===be?' · seuil de rentabilité':''); },
+          title:function(it){ return it[0].label+(it[0].dataIndex===be?' — seuil de rentabilité':''); },
           label:function(c){ return 'VAN cumulée : '+fmt(c.parsed.y); }
         }}
       },
@@ -1858,7 +1906,7 @@ def _van_chart(cumulative: list[float], break_even: int | None) -> str:
     )
 
 
-_GRADE_LEGEND = "A ≥ 80 · B ≥ 65 · C ≥ 50 · D ≥ 35 · E < 35"
+_GRADE_LEGEND = "A ≥ 80, B ≥ 65, C ≥ 50, D ≥ 35, E < 35"
 
 
 def _eur(x: float) -> str:
@@ -1950,12 +1998,21 @@ def _financial_section(result: StudyResult) -> str:
     proba = r.assumptions.get("proba_van_favorable", "")
     proba_sub = _sub("probabilité VNC gagnante") if proba else ""
     kpis = '<div class="kpis">' + "".join(
-        f'<div class="kpi"><div class="k">{html.escape(k)}</div><div class="v">{v}</div>{sub}</div>'
-        for k, v, sub in [
-            ("CAPEX VNC", _eur(r.capex_vnc_eur), ""),
-            ("VAN économie VNC", _eur(r.npv_delta_eur), van_sub),
-            ("Break-even", be, be_sub),
-            ("VNC favorable", proba or "—", proba_sub),
+        f'<div class="kpi"><div class="k">{html.escape(k)}{_info(tip)}</div>'
+        f'<div class="v">{v}</div>{sub}</div>'
+        for k, v, sub, tip in [
+            ("CAPEX VNC", _eur(r.capex_vnc_eur), "",
+             "Investissement initial de la solution VNC (ouvrants motorisés, capteurs, "
+             "plateforme BOS, câblage, mise en service), aléas +10 % inclus."),
+            ("VAN économie VNC", _eur(r.npv_delta_eur), van_sub,
+             "Valeur Actuelle Nette de l'économie VNC = coûts VMC − coûts VNC, actualisée au "
+             "coût du capital (WACC) sur l'horizon. Positive ⇒ la VNC est l'option la moins chère."),
+            ("Break-even", be, be_sub,
+             "Année où l'économie VNC cumulée et actualisée devient positive "
+             "(retour sur investissement)."),
+            ("VNC favorable", proba or "—", proba_sub,
+             "Probabilité, sur un tirage Monte-Carlo des hypothèses sensibles, que la VAN "
+             "soit positive."),
         ]
     ) + "</div>"
 
@@ -1982,13 +2039,23 @@ def _financial_section(result: StudyResult) -> str:
         f"<div>{_cost_block('VNC', _sec('opex_vnc'))}</div>"
         "</div>"
     )
+    tco_tip = (
+        "TCO (Total Cost of Ownership) : somme NON actualisée de tous les coûts sur l'horizon "
+        "(CAPEX initial + OPEX annuels inflatés + renouvellements), par solution. "
+        "Contrairement à la VAN, il n'actualise pas et ne pondère pas le temps."
+    )
     synth = (
         "<h3>Synthèse sur "
         f"{r.horizon_years} ans</h3><table class='kv'>"
-        f"<tr><td>TCO non actualisé VMC</td><td>{_eur(r.tco_vmc_undiscounted_eur)}</td></tr>"
-        f"<tr><td>TCO non actualisé VNC</td><td>{_eur(r.tco_vnc_undiscounted_eur)}</td></tr>"
-        f"<tr><td>VAN cumulée économie VNC (actualisée)</td><td>{_eur(r.npv_delta_eur)}</td></tr>"
-        f"<tr><td>Break-even</td><td>{be}</td></tr></table>"
+        f"<tr><td>TCO non actualisé VMC{_info(tco_tip)}</td>"
+        f"<td>{_eur(r.tco_vmc_undiscounted_eur)}</td></tr>"
+        f"<tr><td>TCO non actualisé VNC{_info(tco_tip)}</td>"
+        f"<td>{_eur(r.tco_vnc_undiscounted_eur)}</td></tr>"
+        f"<tr><td>VAN cumulée économie VNC (actualisée)"
+        f"{_info('Économie VNC actualisée au WACC : coûts VMC − coûts VNC. Positive ⇒ VNC gagnante.')}"
+        f"</td><td>{_eur(r.npv_delta_eur)}</td></tr>"
+        f"<tr><td>Break-even{_info('Année du retour sur investissement (économie cumulée actualisée ≥ 0).')}"
+        f"</td><td>{be}</td></tr></table>"
     )
     warns = ""
     if r.warnings:
@@ -2009,7 +2076,67 @@ def _financial_section(result: StudyResult) -> str:
     )
 
 
-def render_results(result: StudyResult, *, building: object | None = None) -> str:
+def _results_toolbar(result: StudyResult, building: object | None, cfg: Mapping[str, str]) -> str:
+    """Barre d'actions (projet JSON, export CSV/PDF) + hypothèses ROI éditables (recalcul)."""
+    from zephyr.roi import ROIParameters
+
+    p = ROIParameters()
+    c = dict(cfg or {})
+    bjson = building.model_dump_json() if isinstance(building, Building) else ""
+    hidden = "".join(
+        f'<input type="hidden" name="{html.escape(k)}" value="{html.escape(str(v))}">'
+        for k, v in c.items()
+        if not k.startswith("ovr_") and k != "building_json"
+    )
+
+    def ov(name: str, default: object) -> str:
+        return html.escape(str(c.get("ovr_" + name, default)))
+
+    lines = result.roi.calc_lines if result.roi else []
+    calc = json.dumps(
+        [
+            {"section": ln.section, "label": ln.label, "formula": ln.formula,
+             "value": round(ln.value_eur)}
+            for ln in lines
+        ]
+    )
+    fields = (
+        f'<div class="field"><div class="lab">Prix électricité (€/kWh)</div>'
+        f'<input type="number" step="0.01" name="ovr_price_elec" value="{ov("price_elec", p.price_elec_eur_kwh)}"></div>'
+        f'<div class="field"><div class="lab">WACC (fraction, ex. 0.06)</div>'
+        f'<input type="number" step="0.005" name="ovr_wacc" value="{ov("wacc", p.wacc)}"></div>'
+        f'<div class="field"><div class="lab">Horizon (ans)</div>'
+        f'<input type="number" step="1" name="ovr_horizon" value="{ov("horizon", p.horizon_years)}"></div>'
+        f'<div class="field"><div class="lab">Abonnement BOS (€/pt/an)</div>'
+        f'<input type="number" step="1" name="ovr_bos" value="{ov("bos", p.bos_subscription_eur_per_point_year)}"></div>'
+        f'<div class="field"><div class="lab">Prix par ouvrant (€)</div>'
+        f'<input type="number" step="10" name="ovr_ouvrant_price" value="{ov("ouvrant_price", p.vnc_price_per_ouvrant_eur)}"></div>'
+        f'<div class="field"><div class="lab">Nombre d\'ouvrants</div>'
+        f'<input type="number" step="1" name="ovr_num_ouvrants" value="{ov("num_ouvrants", "")}" placeholder="auto"></div>'
+    )
+    return (
+        '<form id="valform" method="post" action="/etude/resultat">'
+        f"{hidden}"
+        f'<input type="hidden" name="building_json" id="building_json" value="{html.escape(bjson)}">'
+        '<div class="result-actions">'
+        f'<button type="button" class="btn ghost sm" onclick="downloadProject()">{_icon("download")} Enregistrer le projet (JSON)</button>'
+        f'<button type="button" class="btn ghost sm" onclick="exportCsv()">{_icon("file")} Export Excel (CSV)</button>'
+        f'<button type="submit" class="btn ghost sm" formaction="/etude/rapport" formtarget="_blank">{_icon("file")} Export PDF</button>'
+        "</div>"
+        '<details class="hyp"><summary>Ajuster les hypothèses et recalculer</summary>'
+        '<p class="hint" style="margin:.4rem 0">Modifiez prix, taux ou quantités, puis '
+        'recalculez : le bilan et le détail des calculs sont régénérés côté serveur.</p>'
+        f'<div class="form-grid">{fields}</div>'
+        f'<button type="submit" class="btn sm" style="margin-top:.6rem">{_icon("refresh")} Recalculer</button>'
+        "</details></form>"
+        f'<script type="application/json" id="calc-data">{calc}</script>'
+        f"<script>{_RESULTS_JS}</script>"
+    )
+
+
+def render_results(
+    result: StudyResult, *, building: object | None = None, cfg: Mapping[str, str] | None = None
+) -> str:
     """Page de résultats : score + critères + recos + bilan financier."""
     vlabel, vcolor = _VERDICT[result.verdict]
     s = result.score
@@ -2060,6 +2187,7 @@ def render_results(result: StudyResult, *, building: object | None = None) -> st
     bilan financier ci-dessous.</p>
   </div>
 </div>
+{_results_toolbar(result, building, cfg or {})}
 {flags}
 <div class="sec-head"><span class="idx">01</span><h2>Détail par critère</h2></div>
 {_criteria_bars(result)}

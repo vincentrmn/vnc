@@ -17,12 +17,13 @@ import html
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, File, Form, Request, Response, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
 
 from zephyr.builders import parametric_building
 from zephyr.climate import synthetic_climate
 from zephyr.presets import penalty_params_for
+from zephyr.report import render_report
 from zephyr.roi import ROIParameters
 from zephyr.schemas import (
     Building,
@@ -31,6 +32,7 @@ from zephyr.schemas import (
     Orientation,
     ProjectType,
     SiteContext,
+    StudyResult,
 )
 from zephyr.study import compute_study
 from zephyr.web import (
@@ -102,9 +104,30 @@ def _site(flags: dict[str, bool]) -> SiteContext:
     )
 
 
-def _compute_page(
+def _apply_roi_overrides(roi_params: ROIParameters, cfg: dict[str, str]) -> ROIParameters:
+    """Applique les hypothèses ajustées par l'utilisateur (champs ``ovr_*``) au ROI."""
+    upd: dict[str, object] = {}
+
+    def put(key: str, attr: str, cast: type) -> None:
+        v = cfg.get("ovr_" + key, "")
+        if v not in ("", None):
+            try:
+                upd[attr] = cast(float(v)) if cast is int else cast(v)
+            except (TypeError, ValueError):
+                pass
+
+    put("price_elec", "price_elec_eur_kwh", float)
+    put("wacc", "wacc", float)
+    put("horizon", "horizon_years", int)
+    put("bos", "bos_subscription_eur_per_point_year", float)
+    put("ouvrant_price", "vnc_price_per_ouvrant_eur", float)
+    put("num_ouvrants", "num_ouvrants_override", int)
+    return roi_params.model_copy(update=upd) if upd else roi_params
+
+
+def _study_for_report(
     building: Building, cfg: dict[str, str], flags: dict[str, bool], *, from_geometry: bool = False
-) -> str:
+) -> StudyResult:
     from zephyr.presets import cost_preset_for, heating_price_for
 
     ptype = ProjectType(cfg["project_type"])
@@ -115,11 +138,15 @@ def _compute_page(
         num_logements=0, surface_per_logement_m2=0.0, surface_tertiaire_m2=max(area, 1.0),
         **preset,
     )
+    roi_params = _apply_roi_overrides(roi_params, cfg)
+    # Si l'utilisateur force un nombre d'ouvrants, il prime sur le comptage géométrique.
+    if cfg.get("ovr_num_ouvrants", ""):
+        from_geometry = False
     # P4 — prix de l'énergie de chauffage selon le vecteur capté (PAC/gaz/élec…).
     penalty = penalty_params_for(
         ptype, heating_energy_price_eur_kwh=heating_price_for(cfg.get("chauffage", "pac"))
     )
-    result = compute_study(
+    return compute_study(
         building,
         synthetic_climate(),
         roi_params=roi_params,
@@ -129,7 +156,13 @@ def _compute_page(
         penalty_params=penalty,
         size_from_geometry=from_geometry,
     )
-    return render_results(result, building=building)
+
+
+def _compute_page(
+    building: Building, cfg: dict[str, str], flags: dict[str, bool], *, from_geometry: bool = False
+) -> str:
+    result = _study_for_report(building, cfg, flags, from_geometry=from_geometry)
+    return render_results(result, building=building, cfg=cfg)
 
 
 def _dxf_tracing_page(raw: object, hidden: str) -> str:
@@ -375,6 +408,8 @@ async def submit_geometry(request: Request) -> str:
             "chauffage": "pac", "ecs": "thermodynamique", "chassis_material": "pvc",
         }.items()
     }
+    # Hypothèses ROI ajustées par l'utilisateur (recalcul depuis la page de résultats).
+    cfg.update({k: v for k, v in d.items() if k.startswith("ovr_")})
     flags = {k: bool(d.get(k)) for k in ("noise", "pollution", "security", "occ_incompatible")}
     from_geometry = bool(d.get("building_json") or d.get("n_rooms"))
     if d.get("building_json"):
@@ -385,3 +420,37 @@ async def submit_geometry(request: Request) -> str:
         building = _parametric(cfg)
     # Dimensionnement des ouvrants depuis la géométrie réellement tracée (pas paramétrique).
     return _compute_page(building, cfg, flags, from_geometry=from_geometry)
+
+
+@app.post("/etude/rapport")
+async def export_report(request: Request) -> Response:
+    """Rapport PDF (ou HTML si WeasyPrint absent) à partir de la géométrie + hypothèses."""
+    form = await request.form()
+    d = {k: str(v) for k, v in form.items()}
+    cfg = {
+        k: d.get(k, default)
+        for k, default in {
+            "nature": "neuf", "project_type": "mixte", "location": "Luxembourg",
+            "inertia": "lourde", "area": "1200", "levels": "2",
+            "u_wall": "0.20", "u_window": "0.9", "glazing": "0.15",
+            "sash": "1.6", "n50": "1.5",
+            "chauffage": "pac", "ecs": "thermodynamique", "chassis_material": "pvc",
+        }.items()
+    }
+    cfg.update({k: v for k, v in d.items() if k.startswith("ovr_")})
+    flags = {k: bool(d.get(k)) for k in ("noise", "pollution", "security", "occ_incompatible")}
+    from_geometry = bool(d.get("building_json"))
+    building = (
+        Building.model_validate_json(d["building_json"])
+        if d.get("building_json")
+        else _parametric(cfg)
+    )
+    if cfg.get("ovr_num_ouvrants", ""):
+        from_geometry = False
+    result = _study_for_report(building, cfg, flags, from_geometry=from_geometry)
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        out = Path(tmp.name)
+    written = render_report(result, out, building=building)
+    media = "application/pdf" if written.suffix == ".pdf" else "text/html"
+    fname = "rapport-vnc" + written.suffix
+    return FileResponse(str(written), media_type=media, filename=fname)
