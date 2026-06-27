@@ -105,23 +105,21 @@ def _site(flags: dict[str, bool]) -> SiteContext:
 
 
 def _apply_roi_overrides(roi_params: ROIParameters, cfg: dict[str, str]) -> ROIParameters:
-    """Applique les hypothèses ajustées par l'utilisateur (champs ``ovr_*``) au ROI."""
+    """Applique les hypothèses ajustées par l'utilisateur (champs ``ovr_*``) au ROI.
+
+    Source unique des champs : ``zephyr.web.ROI_OVERRIDE_FIELDS`` (formulaire ↔ calcul).
+    """
+    from zephyr.web import ROI_OVERRIDE_FIELDS
+
     upd: dict[str, object] = {}
-
-    def put(key: str, attr: str, cast: type) -> None:
-        v = cfg.get("ovr_" + key, "")
-        if v not in ("", None):
-            try:
-                upd[attr] = cast(float(v)) if cast is int else cast(v)
-            except (TypeError, ValueError):
-                pass
-
-    put("price_elec", "price_elec_eur_kwh", float)
-    put("wacc", "wacc", float)
-    put("horizon", "horizon_years", int)
-    put("bos", "bos_subscription_eur_per_point_year", float)
-    put("ouvrant_price", "vnc_price_per_ouvrant_eur", float)
-    put("num_ouvrants", "num_ouvrants_override", int)
+    for _group, attr, _label, _step, is_int in ROI_OVERRIDE_FIELDS:
+        v = cfg.get("ovr_" + attr, "")
+        if v in ("", None):
+            continue
+        try:
+            upd[attr] = int(float(v)) if is_int else float(v)
+        except (TypeError, ValueError):
+            pass
     return roi_params.model_copy(update=upd) if upd else roi_params
 
 
@@ -140,7 +138,7 @@ def _study_for_report(
     )
     roi_params = _apply_roi_overrides(roi_params, cfg)
     # Si l'utilisateur force un nombre d'ouvrants, il prime sur le comptage géométrique.
-    if cfg.get("ovr_num_ouvrants", ""):
+    if cfg.get("ovr_num_ouvrants_override", ""):
         from_geometry = False
     # P4 — prix de l'énergie de chauffage selon le vecteur capté (PAC/gaz/élec…).
     penalty = penalty_params_for(
@@ -445,7 +443,7 @@ async def export_report(request: Request) -> Response:
         if d.get("building_json")
         else _parametric(cfg)
     )
-    if cfg.get("ovr_num_ouvrants", ""):
+    if cfg.get("ovr_num_ouvrants_override", ""):
         from_geometry = False
     result = _study_for_report(building, cfg, flags, from_geometry=from_geometry)
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:

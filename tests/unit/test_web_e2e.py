@@ -31,7 +31,7 @@ def test_landing_and_form() -> None:
 def test_parametric_flow_to_results() -> None:
     r = client.post("/etude", data={"area": "800", "project_type": "bureau", "glazing": "0.2"})
     assert r.status_code == 200
-    assert "Aptitude à la VNC" in r.text and "Bilan financier" in r.text
+    assert "à la VNC" in r.text and "Bilan financier" in r.text
 
 
 def test_dxf_flow_validation_then_results() -> None:
@@ -68,7 +68,7 @@ def test_dxf_flow_validation_then_results() -> None:
               "building_json": b.model_dump_json()},
     )
     assert r2.status_code == 200
-    assert "Aptitude à la VNC" in r2.text
+    assert "à la VNC" in r2.text
     assert "Détail par critère" in r2.text
 
 

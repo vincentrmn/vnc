@@ -157,10 +157,8 @@ def _ventilation_criterion(
         weight=weight,
         detail=detail,
         scale=(
-            "Échelle au prorata de la surface : pièce traversante = 100, mono-façade à "
-            f"châssis ≥ {TALL_SASH_M:g} m = 60, mono-façade basse = 20, pièce aveugle = 0 ; "
-            f"× 0,5 si plan trop profond (> {DEPTH_RATIO_SINGLE_SIDED:g}× HSP simple-face, "
-            f"> {DEPTH_RATIO_CROSS:g}× traversant)."
+            f"Au prorata des surfaces : traversante 100, châssis ≥ {TALL_SASH_M:g} m 60, "
+            "mono-façade basse 20, aveugle 0 (note divisée par 2 si la pièce est trop profonde)."
         ),
         recommendation=reco,
     )

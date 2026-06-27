@@ -56,6 +56,8 @@ _ICONS: dict[str, str] = {
     "refresh": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     "maximize": '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
     "bulb": '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+    "sheet": '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/>',
+    "save": '<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/>',
 }
 
 
@@ -317,6 +319,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
   box-shadow: 0 10px 28px rgba(0,0,0,.16); }
 /* Ligne d'upload + action séparée du cadre */
 .upload-row { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
+.filefield { display: inline-flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.filefield .filename { color: var(--muted); font-size: .88rem; }
 .check { display: flex; align-items: center; gap: .5rem; margin: .5rem 0; }
 .check input { width: auto; }
 .winrow { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; flex-wrap: wrap; }
@@ -403,10 +407,21 @@ kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--
 #stage { width: 100%; height: calc(100vh - 7rem); min-height: 420px; background: #fff;
   border: 1px solid var(--line); border-radius: var(--r2); overflow: hidden; touch-action: none;
   box-shadow: var(--shadow-1); }
-.trace-side { position: sticky; top: .6rem; display: flex; flex-direction: column; gap: .8rem; }
-/* Liste des pièces : pleine largeur sous le plan, en grille de cartes */
-.roomlist-section { margin-top: var(--s5); }
-#roomlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .6rem; }
+.trace-side { position: sticky; top: .6rem; height: calc(100vh - 4.5rem);
+  display: flex; flex-direction: column; gap: .6rem; }
+/* Onglets Outils / Pièces : on bascule sans scroller */
+.side-tabs { display: flex; gap: .3rem; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--pill); padding: .2rem; flex: none; }
+.side-tabs button { flex: 1; border: 0; background: none; cursor: pointer; font: inherit;
+  font-weight: 600; font-size: .88rem; color: var(--muted); padding: .35rem .6rem; border-radius: var(--pill); }
+.side-tabs button.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
+.side-tabs .cnt { display: inline-grid; place-items: center; min-width: 1.2rem; height: 1.2rem;
+  padding: 0 .3rem; margin-left: .2rem; background: var(--primary); color: var(--on-primary);
+  border-radius: var(--pill); font-size: .72rem; }
+.palette { flex: 1; min-height: 0; overflow-y: auto; }
+.roomlist-wrap { flex: 1; min-height: 0; overflow-y: auto; }
+#roomlist { display: flex; flex-direction: column; gap: .5rem; }
+#roomlist .empty { color: var(--muted); font-size: .9rem; }
 .palette { flex: none; display: flex; flex-direction: column; gap: .7rem;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r2); padding: .9rem;
   box-shadow: var(--shadow-1); }
@@ -441,6 +456,14 @@ kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--
 .trace-pop .tp-sel { padding: .4rem .5rem; border: 1px solid var(--line); border-radius: var(--r1);
   font: inherit; background: var(--surface-2); color: var(--ink); }
 .trace-pop .tp-row { display: flex; gap: .5rem; }
+/* Toast tutoriel (1re pièce) + pulsation de l'onglet Pièces */
+.trace-toast { position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 70; max-width: 320px;
+  background: var(--ink); color: var(--bg); padding: .7rem .9rem; border-radius: var(--r1);
+  box-shadow: 0 10px 30px rgba(0,0,0,.25); font-size: .88rem; line-height: 1.4; }
+.trace-toast b { color: #fff; }
+.side-tabs button.pulse { animation: pulseTab 1s ease-in-out 0s 4; }
+@keyframes pulseTab { 0%,100% { box-shadow: 0 0 0 0 var(--ring); }
+  50% { box-shadow: 0 0 0 4px var(--ring); background: var(--surface); color: var(--ink); } }
 .room-no { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem;
   background: var(--primary); color: var(--on-primary); border-radius: 50%; font-size: .8rem; font-weight: 700; }
 .room-head .grow { flex: 1; }
@@ -510,7 +533,13 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 .concl-col.good .concl-h { color: #1a9d5a; }
 .concl-col.bad { border-left: 3px solid var(--danger); }
 .concl-col.bad .concl-h { color: var(--danger); }
-.result-actions { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin: 0 0 1.2rem; }
+.result-actions { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin: 0 0 1.4rem;
+  padding: .6rem .8rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r1); }
+.result-actions .ra-lbl { font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); margin-right: .2rem; }
+.hyp-grp { margin: .9rem 0 .2rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); font-weight: 700; }
+.explain table.kv td { font-size: .85rem; }
 @media (max-width: 720px) {
   .process { grid-template-columns: 1fr; }
   .proc + .proc { border-left: 0; padding-left: 0; }
@@ -534,10 +563,12 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 /* Graphe VAN (Chart.js) : conteneur à hauteur fixe (maintainAspectRatio:false) */
 .vanchart { position: relative; height: 300px; margin: .6rem 0 .2rem; background: var(--surface);
   border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .6rem .2rem; }
-/* Info-bulle « i » : explication d'un terme */
-.info { display: inline-flex; align-items: center; justify-content: center; width: 1.05em; height: 1.05em;
-  font-size: .72rem; font-style: italic; font-weight: 700; text-decoration: underline; color: var(--muted);
-  cursor: help; position: relative; margin-left: .3rem; vertical-align: middle; }
+/* Info-bulle : petit rond avec un « i » dedans */
+.info { display: inline-flex; align-items: center; justify-content: center; width: 1.15em; height: 1.15em;
+  font-size: .7rem; font-style: normal; font-weight: 700; line-height: 1; text-decoration: none;
+  color: var(--muted); border: 1.5px solid var(--muted); border-radius: 50%;
+  cursor: help; position: relative; margin-left: .35rem; vertical-align: middle; }
+.info:hover { color: var(--primary-strong); border-color: var(--primary-strong); }
 .info .tip { position: absolute; bottom: 145%; left: 50%; transform: translateX(-50%);
   background: var(--ink); color: var(--bg); padding: .5rem .65rem; border-radius: .45rem; width: 240px;
   font: 400 .78rem/1.45 'Helvetica Neue', Arial, sans-serif; font-style: normal; text-align: left;
@@ -606,7 +637,7 @@ def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> s
 <nav><div class="brand">Zéphyr<span>.</span></div>
 <div class="nav-right">{toggle}{nav_cta}</div></nav>
 <main class="{wrap_cls}">{body}</main>
-<footer class="wrap">Zéphyr — pré-étude de faisabilité VNC. {html.escape(_DISCLAIMER)}</footer>
+<footer class="wrap">Zéphyr, pré-étude de faisabilité VNC. {html.escape(_DISCLAIMER)}</footer>
 <script>{_THEME_TOGGLE_JS}</script>
 </body></html>"""
 
@@ -685,7 +716,7 @@ def render_landing() -> str:
         ("01", "Déposez le plan & le CPE", "DXF ou PDF vectoriel ; le passeport "
          "énergétique pré-remplit l'enveloppe (U, n50, inertie)."),
         ("02", "Tracez, on mesure", "Pièces, châssis, façades sur le plan en fond. "
-         "Le code calcule surfaces et traversant — pas de vision, pas d'à-peu-près."),
+         "Le code calcule surfaces et traversant ; pas de vision, pas d'à-peu-près."),
         ("03", "Score + bilan", "Aptitude VNC notée et expliquée, puis le bilan "
          "financier face à une VMC double-flux."),
     ]
@@ -696,7 +727,7 @@ def render_landing() -> str:
     )
     crits = [
         ("Ventilation", "35", "Traversant idéal ; sinon châssis ≥ 1,5 m (tirage mono-façade)."),
-        ("Inertie", "25", "Masse lue de la composition des parois — free-cooling nocturne."),
+        ("Inertie", "25", "Masse lue de la composition des parois ; free-cooling nocturne."),
         ("Vitrage", "20", "Ratio surface vitrée / surface au sol, dans la bonne bande."),
         ("Isolation", "20", "Niveau d'isolation : moins de pertes, meilleur bilan."),
     ]
@@ -707,11 +738,11 @@ def render_landing() -> str:
     )
     body = f"""
 <section class="hero-xl">
-  <div class="eyebrow"><span class="dot"></span> Pré-étude déterministe — Ventilation Naturelle Contrôlée</div>
+  <div class="eyebrow"><span class="dot"></span> Pré-étude déterministe, Ventilation Naturelle Contrôlée</div>
   <h1 class="display">La VNC, <em>pré-qualifiée</em> en quelques minutes.</h1>
   <p class="lead-xl">Un plan, le CPE, et Zéphyr rend un score d'aptitude à la
   ventilation naturelle, des leviers d'amélioration, et le bilan financier face à
-  une VMC double-flux. Du calcul déterministe — aucune simulation boîte noire.</p>
+  une VMC double-flux. Du calcul déterministe, aucune simulation boîte noire.</p>
   <div class="cta-row">
     <a class="btn" href="/etude">Lancer une étude</a>
     <a class="btn ghost" href="#methode">Comment ça marche</a>
@@ -767,6 +798,22 @@ _CONFIG_JS = """
     if(btn){ btn.disabled=!ok; }
     if(hint){ hint.style.display=ok?'none':''; }
   }
+  // Remplace le bouton natif (texte abrégé selon l'OS) par un libellé clair en français.
+  function enhanceFiles(){
+    Array.prototype.forEach.call(document.querySelectorAll('input[type=file]'), function(inp){
+      if(inp.dataset.enh){ return; } inp.dataset.enh='1';
+      var wrap=document.createElement('span'); wrap.className='filefield';
+      var btn=document.createElement('button'); btn.type='button'; btn.className='btn ghost sm';
+      btn.textContent=inp.multiple?'Sélectionner des fichiers':'Sélectionner un fichier';
+      var nm=document.createElement('span'); nm.className='filename'; nm.textContent='Aucun fichier choisi';
+      inp.parentNode.insertBefore(wrap, inp); wrap.appendChild(btn); wrap.appendChild(nm); wrap.appendChild(inp);
+      inp.style.display='none';
+      btn.addEventListener('click', function(){ inp.click(); });
+      inp.addEventListener('change', function(){
+        nm.textContent = inp.files.length ? (inp.files.length>1 ? (inp.files.length+' fichiers') : inp.files[0].name) : 'Aucun fichier choisi';
+      });
+    });
+  }
   document.addEventListener('DOMContentLoaded', function(){
     Array.prototype.forEach.call(document.querySelectorAll('input[name=cpe_mode]'), function(r){
       r.addEventListener('change', sync);
@@ -774,7 +821,7 @@ _CONFIG_JS = """
     var d=document.getElementById('in-dxf'), f=document.getElementById('in-floors');
     if(d){ d.addEventListener('change', gate); }
     if(f){ f.addEventListener('change', gate); }
-    sync(); gate();
+    enhanceFiles(); sync(); gate();
   });
 })();
 """
@@ -947,7 +994,7 @@ def render_cpe_banner(extraction: object | None, *, message: str = "") -> str:
         shown = val.value if hasattr(val, "value") else val
         src = sources.get(key, "")
         src_html = (
-            f'<small style="color:var(--muted)"> — « {html.escape(str(src)[:80])} »</small>'
+            f'<small style="color:var(--muted)"> : « {html.escape(str(src)[:80])} »</small>'
             if src else ""
         )
         rows.append(f"<li><b>{lab}</b> : {html.escape(str(shown))}{src_html}</li>")
@@ -963,14 +1010,14 @@ def render_cpe_banner(extraction: object | None, *, message: str = "") -> str:
         + "</p>"
     ) if notes else ""
     return (
-        '<div class="reco"><b>CPE extrait</b> — valeurs posées dans le formulaire '
+        '<div class="reco"><b>CPE extrait</b> : valeurs posées dans le formulaire '
         "(vérifiées dans le texte source ; à valider) :"
         f'<ul style="margin:.4rem 0">{"".join(rows)}</ul>{notes_html}</div>'
     )
 
 
 def _orient_select(name: str, selected: str, *, empty: bool = False) -> str:
-    opts = ['<option value="">—</option>'] if empty else []
+    opts = ['<option value="">(non précisé)</option>'] if empty else []
     for o in Orientation:
         sel = " selected" if o.value == selected else ""
         opts.append(f'<option value="{o.value}"{sel}>{o.value}</option>')
@@ -1043,10 +1090,10 @@ def _rooms_table(building: object) -> str:
     rooms = getattr(building, "rooms", [])
     rows = []
     for r in rooms:
-        orients = ", ".join(o.value for o in r.exterior_wall_orientations) or "—"
-        wins = ", ".join(o.orientation.value for o in r.openings) or "—"
+        orients = ", ".join(o.value for o in r.exterior_wall_orientations) or "aucune"
+        wins = ", ".join(o.orientation.value for o in r.openings) or "aucun"
         label = getattr(r.label, "value", str(r.label))
-        through = f'{_icon("check")} oui' if r.is_through else "— non"
+        through = f'{_icon("check")} oui' if r.is_through else "non"
         rows.append(
             "<tr>"
             f"<td style='text-align:left'>{html.escape(r.id)}</td>"
@@ -1338,7 +1385,7 @@ function render(){
     var cx=xs.reduce(function(a,b){return a+b;},0)/xs.length, cy=ys.reduce(function(a,b){return a+b;},0)/ys.length;
     var t1=new Konva.Text({x:cx,y:cy,text:(LABMAP[r.label]||r.label),fontSize:pm(0.5),fontFamily:"Helvetica Neue, Arial, sans-serif",fontStyle:"600",fill:"#111",listening:false});
     t1.offsetX(t1.width()/2); t1.offsetY(t1.height()/2+pm(0.32)); shapeLayer.add(t1);
-    var t2=new Konva.Text({x:cx,y:cy,text:fmt(r.area_m2)+" m² — "+levelLabel(r.level),fontSize:pm(0.34),fontFamily:"Helvetica Neue, Arial, sans-serif",fill:"#444",listening:false});
+    var t2=new Konva.Text({x:cx,y:cy,text:fmt(r.area_m2)+" m², "+levelLabel(r.level),fontSize:pm(0.34),fontFamily:"Helvetica Neue, Arial, sans-serif",fill:"#444",listening:false});
     t2.offsetX(t2.width()/2); t2.offsetY(t2.height()/2-pm(0.32)); shapeLayer.add(t2);
     var minx=Math.min.apply(null,xs),maxx=Math.max.apply(null,xs),miny=Math.min.apply(null,ys),maxy=Math.max.apply(null,ys);
     var dcx=(minx+maxx)/2,dcy=(miny+maxy)/2,rw=maxx-minx,rh=maxy-miny;
@@ -1399,10 +1446,28 @@ function evClient(e){
   var rect=stage.container().getBoundingClientRect(); return [rect.left+rect.width/2, rect.top+90];
 }
 function curLevel(){ return multi?F().level:curLvl; }
+var firstRoomNotified=false;
+function updateRoomsCount(){ var c=document.getElementById("rooms-count"); if(c){ c.textContent=B.rooms.length; } }
+function showSide(which){
+  var tools=document.getElementById("panel-tools"), rooms=document.getElementById("panel-rooms");
+  var bt=document.getElementById("tab-tools"), br=document.getElementById("tab-rooms");
+  var r=(which==="rooms");
+  if(tools){ tools.style.display=r?"none":""; } if(rooms){ rooms.style.display=r?"":"none"; }
+  if(bt){ bt.classList.toggle("active",!r); } if(br){ br.classList.toggle("active",r); }
+}
+function notifyFirstRoom(){
+  if(firstRoomNotified){ return; } firstRoomNotified=true;
+  var br=document.getElementById("tab-rooms"); if(br){ br.classList.add("pulse"); }
+  var t=document.createElement("div"); t.className="trace-toast";
+  t.innerHTML='Première pièce ajoutée. Retrouvez et modifiez vos pièces dans l\\'onglet <b>Pièces</b> (à droite).';
+  document.body.appendChild(t);
+  setTimeout(function(){ if(t.parentNode){ t.parentNode.removeChild(t); } if(br){ br.classList.remove("pulse"); } }, 6000);
+}
 function addRoom(poly){
   B.rooms.push({id:"r"+B.rooms.length, name:null, label:"autre", level:curLevel(), polygon:poly,
     area_m2:Math.max(area(poly),0.01), height_m:2.6, openings:[], exterior_wall_orientations:[], is_occupied:true, is_wet_room:false});
   sel=B.rooms.length-1;
+  notifyFirstRoom();
 }
 function finishRoom(e){
   if(mode!=="draw" || draft.length<3){ setMode("idle"); return; }
@@ -1423,7 +1488,7 @@ function showRoomPopup(i, x, y){
   var pop=document.createElement("div"); pop.className="trace-pop";
   pop.style.left=Math.min(x, window.innerWidth-230)+"px"; pop.style.top=(y+8)+"px";
   var opts=LABELS.map(function(p){ return '<option value="'+p[0]+'"'+(p[0]===r.label?" selected":"")+">"+p[1]+"</option>"; }).join("");
-  pop.innerHTML='<div class="tp-t">Pièce tracée — '+fmt(r.area_m2)+' m²</div>'+
+  pop.innerHTML='<div class="tp-t">Pièce tracée : '+fmt(r.area_m2)+' m²</div>'+
     '<select class="tp-sel">'+opts+'</select>'+
     '<div class="tp-row"><button type="button" class="btn sm tp-ok">Valider</button>'+
     '<button type="button" class="btn ghost sm tp-del">Supprimer</button></div>';
@@ -1474,7 +1539,7 @@ function showHeightPopup(ref, x, y){
 }
 function roomlist(){
   var d=document.getElementById("roomlist"); if(!d){ return; }
-  if(!B.rooms.length){ d.innerHTML='<p style="color:var(--muted);font-size:.9rem">Aucune pièce tracée. Choisissez « Rectangle » ou « Point par point » au-dessus.</p>'; return; }
+  if(!B.rooms.length){ d.innerHTML='<p class="empty">Aucune pièce tracée pour l\\'instant.</p>'; updateRoomsCount(); return; }
   // Pièces les plus récentes en haut (on parcourt les index à l'envers).
   var order=[]; for(var qi=B.rooms.length-1;qi>=0;qi--){ order.push(qi); }
   d.innerHTML=order.map(function(i){
@@ -1519,6 +1584,7 @@ function roomlist(){
     render();
   }; });
   Array.prototype.forEach.call(d.querySelectorAll("[data-wdel]"),function(b){ b.onclick=function(){ var p=b.dataset.wdel.split("_"); B.rooms[parseInt(p[0])].openings.splice(parseInt(p[1]),1); render(); }; });
+  updateRoomsCount();
 }
 function syncHidden(){
   var ls=B.rooms.map(function(r){ return r.level; });
@@ -1601,6 +1667,9 @@ document.addEventListener("DOMContentLoaded",function(){
     if(sel<0){ var el=document.getElementById("modebanner"); if(el){ el.className="stage-mode"; el.textContent="Sélectionnez d'abord une pièce (sur le plan ou via « + châssis »), puis tracez sur sa façade."; } return; }
     setMode(mode==="window"?"idle":"window");
   };
+  var tt=document.getElementById("tab-tools"), tr=document.getElementById("tab-rooms");
+  if(tt){ tt.onclick=function(){ showSide("tools"); }; }
+  if(tr){ tr.onclick=function(){ showSide("rooms"); }; }
   document.getElementById("t-zin").onclick=function(){ zoomBy(1.25); };
   document.getElementById("t-zout").onclick=function(){ zoomBy(0.8); };
   document.getElementById("t-zreset").onclick=function(){ fitStage(); render(); };
@@ -1693,7 +1762,7 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
   <details class="howto explain" open>
     <summary>{_icon("bulb")} Comment tracer</summary>
     <ol>
-      <li><b>Objectif</b> : délimiter chaque pièce et poser ses châssis — le code en
+      <li><b>Objectif</b> : délimiter chaque pièce et poser ses châssis ; le code en
       déduit surfaces, façades et espaces traversants.</li>
       <li><b>Tracer une pièce</b> : bouton <b>Rectangle</b> puis glisser en diagonale,
       ou <b>Point par point</b> puis cliquer les coins (re-cliquer le 1<sup>er</sup>
@@ -1714,7 +1783,11 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
     </div>
   </div>
   <aside class="trace-side">
-    <div class="palette">
+    <div class="side-tabs">
+      <button type="button" id="tab-tools" class="active">Outils</button>
+      <button type="button" id="tab-rooms">Pièces <span id="rooms-count" class="cnt">0</span></button>
+    </div>
+    <div class="palette" id="panel-tools">
       <div class="pgroup">
         <div class="ptitle">Niveau des nouvelles pièces</div>
         <div class="levelsel" id="levelsel"></div>
@@ -1747,12 +1820,9 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
         <span id="scaleinfo" class="lbl" style="font-weight:400"></span>
       </div>
     </div>
+    <div class="roomlist-wrap" id="panel-rooms" style="display:none"><div id="roomlist"></div></div>
   </aside>
 </div>
-<section class="roomlist-section">
-  <h2 class="sec" style="font-size:1.15rem">Pièces tracées</h2>
-  <div id="roomlist"></div>
-</section>
 <form id="valform" method="post" action="/etude/resultat" onsubmit="syncHidden()">
   {hidden_fields}
   <input type="hidden" name="building_json" id="building_json">
@@ -1822,7 +1892,7 @@ corriger son <b>label</b>, ses <b>façades</b> et ses <b>châssis</b>. Le
         edit_blocks = "".join(_room_edit_block(i, r) for i, r in enumerate(rooms))
         core = f"""
 <p class="lead" style="color:var(--muted)">Pièces lues ({len(rooms)}, {total:.0f} m²)
-sans polygones — saisissez/validez façades et châssis pièce par pièce (§2.8).</p>
+sans polygones ; saisissez/validez façades et châssis pièce par pièce (§2.8).</p>
 {chips}{warn_html}
 <form method="post" action="/etude/resultat">
   {hidden_fields}
@@ -1877,7 +1947,7 @@ _VAN_CHART_JS = """
   if(!window.Chart){
     var el=document.getElementById('vanchart');
     if(el){ el.outerHTML='<p style="color:#c0392b;padding:1rem">Graphe indisponible '+
-      '(Chart.js non chargé — vérifie le réseau).</p>'; }
+      '(Chart.js non chargé, vérifie le réseau).</p>'; }
     return;
   }
   var src=document.getElementById('van-data');
@@ -1898,7 +1968,7 @@ _VAN_CHART_JS = """
     data:{ labels:labels, datasets:[{
       label:'VAN cumulée (économie VNC)', data:data,
       borderColor:'#0e9aa7', backgroundColor:'rgba(14,154,167,.12)',
-      borderWidth:2.5, fill:true, tension:.15,
+      borderWidth:2.5, fill:false, tension:.15,
       pointRadius:data.map(function(_,i){ return i===be?5:2.5; }),
       pointHoverRadius:6,
       pointBackgroundColor:data.map(function(_,i){ return i===be?'#1a9d5a':'#0e9aa7'; })
@@ -1909,7 +1979,7 @@ _VAN_CHART_JS = """
       plugins:{
         legend:{ display:false },
         tooltip:{ callbacks:{
-          title:function(it){ return it[0].label+(it[0].dataIndex===be?' — seuil de rentabilité':''); },
+          title:function(it){ return it[0].label+(it[0].dataIndex===be?' (seuil de rentabilité)':''); },
           label:function(c){ return 'VAN cumulée : '+fmt(c.parsed.y); }
         }}
       },
@@ -1962,7 +2032,7 @@ def _cost_block(title: str, lines: list[CalcLine]) -> str:
             f'<summary><span class="lbl">{html.escape(ln.label)}</span>'
             f'<span class="amt">{_eur(ln.value_eur)}</span></summary>'
             f'<div class="formula">{html.escape(ln.formula)}'
-            f'{(" — " + html.escape(ln.note)) if ln.note else ""}</div></details>'
+            f'{(" : " + html.escape(ln.note)) if ln.note else ""}</div></details>'
         )
     total = sum(ln.value_eur for ln in lines)
     rows.append(
@@ -1980,16 +2050,27 @@ def _score_legend(result: StudyResult) -> str:
         return ""
     items = "".join(
         f"<tr><td>{html.escape(c.label)}</td>"
-        f"<td style='text-align:left'>{html.escape(c.scale or '—')}</td></tr>"
+        f"<td style='text-align:left'>{html.escape(c.scale or 'n.c.')}</td></tr>"
         for c in result.score.criteria
     )
     return (
-        f"<details class='explain'><summary>{_icon('bulb')} Comment le score est calculé (échelle)"
+        f"<details class='explain'><summary>{_icon('bulb')} Comment le score est-il calculé ?"
         "</summary>"
-        f"<p style='color:var(--muted);font-size:.88rem'>Note globale = moyenne pondérée des "
-        f"critères. Lettres : {_GRADE_LEGEND}.</p>"
+        "<p style='color:var(--muted);font-size:.85rem'>Le score global est la "
+        "<b>moyenne pondérée</b> des quatre critères ci-dessous. Chaque critère est noté de 0 à "
+        f"100 selon une règle simple (colonne de droite). Notes : {_GRADE_LEGEND}.</p>"
         f"<table class='kv'>{items}</table></details>"
     )
+
+
+_SENS_LABELS = {
+    "price_elec_eur_kwh": "Prix de l'électricité",
+    "wacc": "Taux d'actualisation (WACC)",
+    "vnc_m2_per_ouvrant": "Densité d'ouvrants",
+    "bos_subscription_eur_per_point_year": "Abonnement BOS",
+    "heating_penalty_eur_per_year": "Pénalité de chauffage",
+    "inflation": "Inflation",
+}
 
 
 def _tornado(result: StudyResult) -> str:
@@ -2002,16 +2083,18 @@ def _tornado(result: StudyResult) -> str:
         w = 100.0 * e.swing / top
         rows.append(
             '<div class="bar-row">'
-            f'<div class="lab">{html.escape(e.parameter)}</div>'
+            f'<div class="lab">{html.escape(_SENS_LABELS.get(e.parameter, e.parameter))}</div>'
             f'<div class="track"><div class="fill" style="width:{w:.0f}%;'
             'background:#0e9aa7"></div></div>'
-            f'<div class="val">{_eur(e.swing)}</div></div>'
+            f'<div class="val">± {_eur(e.swing)}</div></div>'
         )
     return (
-        "<h2 class='sec'>Sensibilité (tornado)</h2>"
-        "<p style='color:var(--muted);font-size:.88rem'>Effet de chaque paramètre sur la VAN — "
-        "jamais un point unique (CLAUDE.md §6).</p>"
-        '<div class="bars">' + "".join(rows) + "</div>"
+        f"<details class='explain'><summary>{_icon('bulb')} Qu'est-ce qui fait le plus varier le "
+        "résultat ?</summary>"
+        "<p style='color:var(--muted);font-size:.85rem'>Plus la barre est longue, plus ce "
+        "paramètre fait bouger la rentabilité (VAN). C'est là qu'il faut fiabiliser une hypothèse "
+        "avant de décider.</p>"
+        '<div class="bars">' + "".join(rows) + "</div></details>"
     )
 
 
@@ -2053,7 +2136,7 @@ def _financial_section(result: StudyResult, hyp_html: str = "") -> str:
             ("Break-even", be, be_sub,
              "Année où l'économie VNC cumulée et actualisée devient positive "
              "(retour sur investissement)."),
-            ("VNC favorable", proba or "—", proba_sub,
+            ("VNC favorable", proba or "n.c.", proba_sub,
              "Probabilité, sur un tirage Monte-Carlo des hypothèses sensibles, que la VAN "
              "soit positive."),
         ]
@@ -2109,7 +2192,7 @@ def _financial_section(result: StudyResult, hyp_html: str = "") -> str:
             + "</ul></details>"
         )
     return (
-        "<h2 class='sec'>Bilan financier — VNC vs VMC double-flux</h2>"
+        "<h2 class='sec'>Bilan financier : VNC vs VMC double-flux</h2>"
         f"{kpis}{_van_chart(r.npv_delta_cumulative_eur, r.break_even_year)}"
         "<p style='color:var(--muted);font-size:.85rem;margin:.4rem 0 1rem'>VAN cumulée de "
         "l'économie VNC (coûts VMC − coûts VNC), actualisée, année par année. Le point vert "
@@ -2119,11 +2202,48 @@ def _financial_section(result: StudyResult, hyp_html: str = "") -> str:
     )
 
 
+# Hypothèses ROI éditables (source unique : sert au formulaire ET à l'application serveur).
+# (groupe, attribut ROIParameters, libellé, pas, entier ?)
+ROI_OVERRIDE_FIELDS: list[tuple[str, str, str, str, bool]] = [
+    ("Finance", "price_elec_eur_kwh", "Prix électricité (€/kWh)", "0.01", False),
+    ("Finance", "wacc", "Taux d'actualisation WACC (ex. 0,06)", "0.005", False),
+    ("Finance", "inflation", "Inflation OPEX (ex. 0,025)", "0.005", False),
+    ("Finance", "horizon_years", "Horizon (ans)", "1", True),
+    ("Finance", "contingency_rate", "Provision aléas (ex. 0,10)", "0.01", False),
+    ("CAPEX VMC (€/m²)", "vmc_centrales_eur_m2", "Centrales + récupérateurs", "1", False),
+    ("CAPEX VMC (€/m²)", "vmc_reseau_gaines_eur_m2", "Réseau de gaines", "1", False),
+    ("CAPEX VMC (€/m²)", "vmc_pose_cvc_eur_m2", "Pose CVC", "1", False),
+    ("CAPEX VMC (€/m²)", "vmc_regulation_eur_m2", "Régulation", "1", False),
+    ("CAPEX VMC (€/m²)", "vmc_etancheite_eur_m2", "Étanchéité", "1", False),
+    ("CAPEX VMC (€/m²)", "vmc_etudes_eur_m2", "Études", "1", False),
+    ("CAPEX VMC (€/m²)", "vmc_commissioning_eur_m2", "Commissioning", "1", False),
+    ("CAPEX VNC", "vnc_price_per_ouvrant_eur", "Prix par ouvrant (€)", "10", False),
+    ("CAPEX VNC", "vnc_price_per_capteur_eur", "Prix par capteur (€)", "10", False),
+    ("CAPEX VNC", "vnc_price_station_meteo_eur", "Station météo (€)", "50", False),
+    ("CAPEX VNC", "vnc_bos_platform_eur", "Plateforme BOS (€)", "100", False),
+    ("CAPEX VNC", "vnc_cablage_eur_m2", "Câblage (€/m²)", "1", False),
+    ("CAPEX VNC", "vnc_extraction_humide_eur", "Extraction pièces humides (€)", "100", False),
+    ("CAPEX VNC", "vnc_std_engineering_eur", "STD + ingénierie (€)", "100", False),
+    ("CAPEX VNC", "vnc_commissioning_hypercare_eur", "Commissioning + hypercare (€)", "100", False),
+    ("OPEX annuel", "vmc_ach", "VMC : renouvellement d'air (vol/h)", "0.1", False),
+    ("OPEX annuel", "vmc_sfp_wh_m3", "VMC : SFP ventilateurs (Wh/m³)", "0.05", False),
+    ("OPEX annuel", "vmc_operating_hours_year", "VMC : heures de marche / an", "100", False),
+    ("OPEX annuel", "vmc_maintenance_eur_m2_year", "VMC : maintenance (€/m²/an)", "0.1", False),
+    ("OPEX annuel", "vnc_actuator_energy_kwh_year", "VNC : énergie actionneurs (kWh/an)", "10", False),
+    ("OPEX annuel", "vnc_maintenance_eur_m2_year", "VNC : maintenance (€/m²/an)", "0.1", False),
+    ("OPEX annuel", "bos_subscription_eur_per_point_year", "Abonnement BOS (€/pt/an)", "1", False),
+    ("OPEX annuel", "wet_extraction_opex_eur_year", "Extraction humide (€/an)", "100", False),
+    ("Quantités", "vnc_m2_per_ouvrant", "Surface couverte par ouvrant (m²)", "1", False),
+    ("Quantités", "num_ouvrants_override", "Nombre d'ouvrants imposé", "1", True),
+]
+
+
 def _hypotheses_form(result: StudyResult, building: object | None, cfg: Mapping[str, str]) -> str:
     """Hypothèses ROI éditables (recalcul serveur) + données pour les exports.
 
     Le `<form id="valform">` porte aussi `building_json` + la config : les boutons
     d'action en tête (Enregistrer / Export) le lisent par id même s'il est plus bas.
+    Toutes les valeurs des calculs sont modifiables (source `ROI_OVERRIDE_FIELDS`).
     """
     from zephyr.roi import ROIParameters
 
@@ -2136,9 +2256,6 @@ def _hypotheses_form(result: StudyResult, building: object | None, cfg: Mapping[
         if not k.startswith("ovr_") and k != "building_json"
     )
 
-    def ov(name: str, default: object) -> str:
-        return html.escape(str(c.get("ovr_" + name, default)))
-
     lines = result.roi.calc_lines if result.roi else []
     calc = json.dumps(
         [
@@ -2147,30 +2264,31 @@ def _hypotheses_form(result: StudyResult, building: object | None, cfg: Mapping[
             for ln in lines
         ]
     )
-    fields = (
-        f'<div class="field"><div class="lab">Prix électricité (€/kWh)</div>'
-        f'<input type="number" step="0.01" name="ovr_price_elec" value="{ov("price_elec", p.price_elec_eur_kwh)}"></div>'
-        f'<div class="field"><div class="lab">WACC (fraction, ex. 0.06)</div>'
-        f'<input type="number" step="0.005" name="ovr_wacc" value="{ov("wacc", p.wacc)}"></div>'
-        f'<div class="field"><div class="lab">Horizon (ans)</div>'
-        f'<input type="number" step="1" name="ovr_horizon" value="{ov("horizon", p.horizon_years)}"></div>'
-        f'<div class="field"><div class="lab">Abonnement BOS (€/pt/an)</div>'
-        f'<input type="number" step="1" name="ovr_bos" value="{ov("bos", p.bos_subscription_eur_per_point_year)}"></div>'
-        f'<div class="field"><div class="lab">Prix par ouvrant (€)</div>'
-        f'<input type="number" step="10" name="ovr_ouvrant_price" value="{ov("ouvrant_price", p.vnc_price_per_ouvrant_eur)}"></div>'
-        f'<div class="field"><div class="lab">Nombre d\'ouvrants</div>'
-        f'<input type="number" step="1" name="ovr_num_ouvrants" value="{ov("num_ouvrants", "")}" placeholder="auto"></div>'
+    groups: dict[str, list[str]] = {}
+    for group, attr, label, step, _is_int in ROI_OVERRIDE_FIELDS:
+        default = c.get("ovr_" + attr, getattr(p, attr, ""))
+        if default is None:
+            default = ""
+        ph = ' placeholder="auto"' if attr == "num_ouvrants_override" else ""
+        groups.setdefault(group, []).append(
+            f'<div class="field"><div class="lab">{html.escape(label)}</div>'
+            f'<input type="number" step="{step}" name="ovr_{attr}" '
+            f'value="{html.escape(str(default))}"{ph}></div>'
+        )
+    sections = "".join(
+        f'<h5 class="hyp-grp">{html.escape(g)}</h5><div class="form-grid">{"".join(items)}</div>'
+        for g, items in groups.items()
     )
     return (
         '<form id="valform" method="post" action="/etude/resultat">'
         f"{hidden}"
         f'<input type="hidden" name="building_json" id="building_json" value="{html.escape(bjson)}">'
-        '<details class="hyp" open><summary>Ajuster les hypothèses (prix, taux, quantités)</summary>'
-        '<p class="hint" style="margin:.4rem 0">Modifiez une valeur puis recalculez : le bilan et '
-        'le détail des calculs sont régénérés côté serveur. « Enregistrer le projet » (en haut) '
+        '<details class="hyp"><summary>Ajuster les hypothèses du calcul (prix, taux, quantités)</summary>'
+        '<p class="hint" style="margin:.4rem 0">Chaque nombre utilisé dans le bilan est modifiable. '
+        'Recalculez ensuite : tout est régénéré côté serveur. « Enregistrer le projet » (en haut) '
         'sauvegarde aussi vos hypothèses.</p>'
-        f'<div class="form-grid">{fields}</div>'
-        f'<button type="submit" class="btn sm" style="margin-top:.6rem">{_icon("refresh")} Recalculer le bilan</button>'
+        f"{sections}"
+        f'<button type="submit" class="btn" style="margin-top:.8rem">{_icon("refresh")} Recalculer le bilan</button>'
         "</details></form>"
         f'<script type="application/json" id="calc-data">{calc}</script>'
         f"<script>{_RESULTS_JS}</script>"
@@ -2178,12 +2296,13 @@ def _hypotheses_form(result: StudyResult, building: object | None, cfg: Mapping[
 
 
 def _results_actions() -> str:
-    """Barre d'actions en tête de résultats (lit le formulaire/hidden par id, plus bas dans la page)."""
+    """Barre d'actions encadrée en tête de résultats (lit le formulaire par id, plus bas)."""
     return (
         '<div class="result-actions">'
-        f'<button type="button" class="btn ghost sm" onclick="downloadProject()">{_icon("download")} Enregistrer le projet (JSON)</button>'
-        f'<button type="button" class="btn ghost sm" onclick="exportCsv()">{_icon("file")} Export Excel (CSV)</button>'
-        f'<button type="button" class="btn ghost sm" onclick="exportPdf()">{_icon("file")} Export PDF</button>'
+        '<span class="ra-lbl">Exporter</span>'
+        f'<button type="button" class="btn ghost sm" onclick="downloadProject()">{_icon("save")} Projet (JSON)</button>'
+        f'<button type="button" class="btn ghost sm" onclick="exportCsv()">{_icon("sheet")} Excel (CSV)</button>'
+        f'<button type="button" class="btn ghost sm" onclick="exportPdf()">{_icon("file")} PDF</button>'
         "</div>"
     )
 
@@ -2192,7 +2311,7 @@ def render_results(
     result: StudyResult, *, building: object | None = None, cfg: Mapping[str, str] | None = None
 ) -> str:
     """Page de résultats : score + critères + recos + bilan financier."""
-    vlabel, vcolor = _VERDICT[result.verdict]
+    _vlabel, vcolor = _VERDICT[result.verdict]
     s = result.score
     gauge = _gauge_svg(s.global_score, s.grade) if s else ""
 
@@ -2202,16 +2321,29 @@ def render_results(
             f'<div class="reco">{html.escape(r)}</div>' for r in s.recommendations
         )
 
-    # Conclusion : points faibles (drapeaux + critères < 50) et points forts (critères ≥ 75).
+    # Conclusion : points faibles (drapeaux + critères < 50) et points forts (critères ≥ 75),
+    # en phrases courtes (pas de tirets cadratins).
+    good_phrases = {
+        "ventilation": "Bonne capacité de ventilation naturelle",
+        "vitrage": "Taux de vitrage maîtrisé, peu de surchauffe",
+        "inertie": "Forte inertie, bon stockage de fraîcheur",
+        "isolation": "Enveloppe bien isolée",
+    }
+    bad_phrases = {
+        "ventilation": "Ventilation naturelle limitée (peu de traversant)",
+        "vitrage": "Vitrage trop important ou absent",
+        "inertie": "Inertie faible, free-cooling moins efficace",
+        "isolation": "Enveloppe peu isolée, appoint de chauffage notable",
+    }
     bad: list[str] = list(s.flags) if s else []
     good: list[str] = []
     if s:
         for c in sorted(s.criteria, key=lambda c: c.score):
             if c.score < 50:
-                bad.append(f"{c.label} — {c.score:.0f}/100")
+                bad.append(f"{bad_phrases.get(c.key, c.label)} ({c.score:.0f}/100)")
         for c in sorted(s.criteria, key=lambda c: c.score, reverse=True):
             if c.score >= 75:
-                good.append(f"{c.label} — {c.score:.0f}/100")
+                good.append(f"{good_phrases.get(c.key, c.label)} ({c.score:.0f}/100)")
     concl_blocks = ""
     if good:
         concl_blocks += (
@@ -2240,18 +2372,23 @@ def render_results(
         except Exception:  # pragma: no cover - matplotlib absent
             plan = ""
 
+    title = {
+        Verdict.GO: "Bon candidat à la VNC",
+        Verdict.CONDITIONNEL: "Candidat à la VNC sous conditions",
+        Verdict.NO_GO: "Peu adapté à la VNC",
+    }.get(result.verdict, "Aptitude à la VNC")
+
     hyp = _hypotheses_form(result, building, cfg or {})
     body = f"""
 <div class="score-hero">
   {gauge}
   <div>
-    <span class="badge" style="background:{vcolor}">{html.escape(vlabel)}</span>
-    <h1>Aptitude à la VNC</h1>
+    <h1 class="verdict-title" style="border-left:4px solid {vcolor};padding-left:.6rem">{html.escape(title)}</h1>
     {concl}
   </div>
 </div>
 {_results_actions()}
-<div class="sec-head"><span class="idx">01</span><h2>Détail par critère</h2></div>
+<h2 class="sec">Détail par critère</h2>
 {_criteria_bars(result)}
 {_score_legend(result)}
 {recos}

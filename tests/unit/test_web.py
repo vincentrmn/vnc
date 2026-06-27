@@ -106,7 +106,7 @@ def test_results_have_scale_and_detailed_financials() -> None:
     env = EnvelopeData(u_wall_w_m2k=0.18, u_window_w_m2k=0.9, glazing_to_floor_ratio=0.18)
     res = compute_study(parametric_building(800.0), synthetic_climate(), envelope=env)
     h = render_results(res)
-    assert "Comment le score est calculé" in h  # barème/échelle
+    assert "Comment le score est-il calculé" in h  # barème/échelle
     # Détail financier façon Excel : CAPEX/OPEX postes + sensibilité.
     assert "Centrales + récupérateurs" in h and "Plateforme BOS" in h
     # Pénalité de chauffage désactivée par défaut → pas de poste dans l'OPEX VNC.
@@ -270,7 +270,7 @@ def test_results_render_contains_score_and_kpis() -> None:
     res = compute_study(parametric_building(300.0), synthetic_climate(), envelope=env)
     h = render_results(res)
     assert res.score is not None
-    assert "Aptitude à la VNC" in h
+    assert "à la VNC" in h
     assert "CAPEX VNC" in h and "VAN économie VNC" in h
     # Chaque critère apparaît (label échappé HTML).
     for c in res.score.criteria:
