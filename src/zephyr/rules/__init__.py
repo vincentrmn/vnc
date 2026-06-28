@@ -212,6 +212,12 @@ def _ventilation_criterion(
         f"{pct(single_tall_area)} mono-façade châssis ≥ {TALL_SASH_M:g} m, "
         f"{pct(single_low_area)} mono-façade bas, {pct(interior_area)} aveugle"
     )
+    detail_points = [
+        f"Traversantes : {through_pct:.0f}% de la surface",
+        f"Mono-façade châssis ≥ {TALL_SASH_M:g} m : {pct(single_tall_area)}",
+        f"Mono-façade bas : {pct(single_low_area)}",
+        f"Aveugles : {pct(interior_area)}",
+    ]
     reco: str | None = None
     if score < 70:
         if not tall:
@@ -240,11 +246,16 @@ def _ventilation_criterion(
         score=round(score, 1),
         weight=weight,
         detail=detail,
-        scale=(
-            f"Au prorata des surfaces des pièces de vie : traversante 100, châssis ≥ "
-            f"{TALL_SASH_M:g} m 60, mono-façade basse 20, aveugle 0 (note divisée par 2 si la "
-            "pièce est trop profonde). Pièces de service (WC, sdb, circulation…) non comptées."
-        ),
+        detail_points=detail_points,
+        scale="Au prorata des surfaces des pièces de vie :",
+        scale_points=[
+            "Traversante : 100",
+            f"Mono-façade châssis ≥ {TALL_SASH_M:g} m : 60",
+            "Mono-façade basse : 20",
+            "Aveugle : 0",
+            "Pièce trop profonde : note divisée par 2",
+            "Pièces de service (WC, sdb, circulation…) : non comptées",
+        ],
         recommendation=reco,
         breakdown=breakdown,
     )
@@ -271,6 +282,13 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
         f"décroissance linéaire jusqu'au maximum {GLAZING_MAX:.0%}, "
         f"plancher {GLAZING_FLOOR_SCORE:.0f} au-delà. Sans châssis tracé : 0."
     )
+    scale_pts = [
+        "Plus le taux est bas, mieux c'est (moins de surchauffe / déperditions)",
+        f"≤ {GLAZING_OPTIMAL:.1%} (1/8) : 100",
+        f"Décroissance linéaire jusqu'à {GLAZING_MAX:.0%}",
+        f"≥ {GLAZING_MAX:.0%} : plancher {GLAZING_FLOOR_SCORE:.0f}",
+        "Sans châssis tracé : 0",
+    ]
 
     # Priorité au MESURÉ : si des châssis sont tracés, on note CHAQUE pièce de vie
     # (taux de la pièce → note de la pièce), puis on agrège au prorata de la surface.
@@ -309,7 +327,7 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
             key="vitrage", label="Vitrage (taux de surface vitrée)",
             score=round(score, 1), weight=weight,
             detail=f"taux de vitrage moyen (pièces de vie) = {ratio:.0%} (source : {src})",
-            scale=scale_txt, recommendation=reco, breakdown=breakdown,
+            scale=scale_txt, scale_points=scale_pts, recommendation=reco, breakdown=breakdown,
         )
 
     if envelope.glazing_to_floor_ratio is not None:
@@ -323,7 +341,7 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
             key="vitrage", label="Vitrage (taux de surface vitrée)",
             score=round(score, 1), weight=weight,
             detail=f"taux de vitrage / plancher = {ratio:.0%} (source : CPE ou saisie)",
-            scale=scale_txt, recommendation=reco,
+            scale=scale_txt, scale_points=scale_pts, recommendation=reco,
             breakdown=ScoreBreakdown(
                 columns=["Élément", "Valeur"],
                 rows=[["Taux de vitrage", f"{ratio:.1%}"], ["Source", "CPE ou saisie"],
@@ -336,7 +354,7 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
         key="vitrage", label="Vitrage (taux de surface vitrée)",
         score=0.0, weight=weight,
         detail="aucun châssis tracé (taux de vitrage = 0)",
-        scale=scale_txt,
+        scale=scale_txt, scale_points=scale_pts,
         recommendation=(
             "Aucun châssis n'a été tracé : ajouter les ouvrants sur les façades pour "
             "permettre la ventilation naturelle et l'éclairage."
@@ -373,7 +391,8 @@ def _inertia_criterion(building: Building, weight: float) -> ScoreCriterion:
         score=round(score, 1),
         weight=weight,
         detail=f"classe d'inertie : {cls.value} (lue du CPE / composition des parois)",
-        scale="Lourde = 100, moyenne = 60, légère = 25 (stockage de fraîcheur nocturne).",
+        scale="Stockage de fraîcheur nocturne selon la masse :",
+        scale_points=["Lourde : 100", "Moyenne : 60", "Légère : 25"],
         recommendation=reco,
         breakdown=ScoreBreakdown(
             columns=["Classe d'inertie", "Note"],
@@ -394,7 +413,11 @@ def _insulation_criterion(envelope: EnvelopeData, weight: float) -> ScoreCriteri
             score=60.0,
             weight=weight,
             detail="U non renseignés (CPE manquant) : note neutre par défaut",
-            scale="U mur 0,15 → 100 jusqu'à 1,0 → 0 (poids 70 %) ; Uw 0,8 → 100 jusqu'à 2,5 → 0.",
+            scale="Niveau d'isolation (U) :",
+            scale_points=[
+                "Mur : U 0,15 → 100, jusqu'à 1,0 → 0 (poids 70 %)",
+                "Vitrage : Uw 0,8 → 100, jusqu'à 2,5 → 0 (poids 30 %)",
+            ],
             recommendation="Renseigner le CPE (U murs/vitrages) pour fiabiliser le bilan.",
         )
 
@@ -433,7 +456,11 @@ def _insulation_criterion(envelope: EnvelopeData, weight: float) -> ScoreCriteri
         score=round(score, 1),
         weight=weight,
         detail=" ; ".join(bits) + " W/m²K",
-        scale="U mur 0,15→100 jusqu'à 1,0→0 (poids 70 %) ; Uw 0,8→100 jusqu'à 2,5→0 (30 %).",
+        scale="Niveau d'isolation (U) :",
+        scale_points=[
+            "Mur : U 0,15 → 100, jusqu'à 1,0 → 0 (poids 70 %)",
+            "Vitrage : Uw 0,8 → 100, jusqu'à 2,5 → 0 (poids 30 %)",
+        ],
         recommendation=reco,
         breakdown=ScoreBreakdown(
             columns=["Paroi", "Sous-note", "Poids"],
@@ -476,7 +503,11 @@ def _solar_criterion(building: Building, weight: float) -> ScoreCriterion:
             key="protection_solaire", label="Protections solaires (anti-surchauffe)",
             score=100.0, weight=weight,
             detail="aucun châssis tracé (pas de risque de surchauffe à protéger)",
-            scale="Châssis exposés (Sud/Ouest) sans protection = note basse ; protégés = haute.",
+            scale="Risque de surchauffe selon l'exposition et la protection :",
+            scale_points=[
+                "Châssis exposés (Sud/Ouest) sans protection : note basse",
+                "Châssis protégés : note haute",
+            ],
             breakdown=ScoreBreakdown(columns=["Élément", "Valeur"],
                                      rows=[["Châssis", "aucun"], ["Note", "100/100"]],
                                      formula="Aucun châssis : pas de surchauffe à maîtriser."),
@@ -494,11 +525,12 @@ def _solar_criterion(building: Building, weight: float) -> ScoreCriterion:
         key="protection_solaire", label="Protections solaires (anti-surchauffe)",
         score=round(score, 1), weight=weight,
         detail=f"protection moyenne pondérée des châssis = {score:.0f}/100",
-        scale=(
-            "Par châssis : note = 100 − risque(orientation) × (1 − efficacité protection). "
-            "Sud/Ouest = risque fort ; brise-soleil / store extérieur = forte atténuation ; "
-            "Nord = quasi neutre."
-        ),
+        scale="Par châssis : note = 100 − risque(orientation) × (1 − efficacité protection).",
+        scale_points=[
+            "Sud / Ouest : risque fort",
+            "Brise-soleil / store extérieur / casquette : forte atténuation",
+            "Nord : quasi neutre",
+        ],
         recommendation=reco,
         breakdown=ScoreBreakdown(
             columns=["Pièce", "Façade", "Châssis m²", "Protection", "Note"],

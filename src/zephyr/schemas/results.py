@@ -52,7 +52,15 @@ class ScoreCriterion(BaseModel):
     score: float = Field(ge=0, le=100)
     weight: float = Field(ge=0)
     detail: str = Field(description="Mesure déterministe qui justifie la note.")
+    detail_points: list[str] = Field(
+        default_factory=list,
+        description="Mesure éclatée en puces (préférée à `detail` pour l'affichage si non vide).",
+    )
     scale: str | None = Field(default=None, description="Échelle de notation (barème) du critère.")
+    scale_points: list[str] = Field(
+        default_factory=list,
+        description="Barème éclaté en puces (préféré à `scale` pour l'affichage si non vide).",
+    )
     recommendation: str | None = None
     breakdown: ScoreBreakdown | None = Field(
         default=None, description="Détail par pièce/poste + calcul de la note (dépliable)."
