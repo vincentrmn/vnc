@@ -389,6 +389,7 @@ table.kv td:last-child { text-align: right; font-variant-numeric: tabular-nums; 
 .field > .lab { font-weight: 600; font-size: .92rem; margin-bottom: .35rem; }
 .field .hint { color: var(--muted); font-size: .82rem; margin: .35rem 0 0; }
 .hint { color: var(--muted); font-size: .82rem; }
+.hint.err { color: var(--danger); font-weight: 600; }
 .uploader { border: 1.5px dashed var(--line); border-radius: var(--r1); padding: 1rem 1.1rem;
   background: var(--surface-2); }
 .uploader + .uploader { margin-top: .8rem; }
@@ -863,11 +864,23 @@ _CONFIG_JS = """
       : "Complète : import d'un plan puis traçage des pièces — analyse fine pièce par pièce."; }
     gate();
   }
+  function markCpe(){ window.__CPE_TOUCHED__=true; gate(); }
   function gate(){
     var btn=document.getElementById('go-btn'), hint=document.getElementById('go-hint');
-    var ok=(curMode()==='rapide') || hasPlan();
+    var planOk=(curMode()==='rapide') || hasPlan();
+    var cpeOk=!!window.__CPE_TOUCHED__;
+    var ok=planOk && cpeOk;
     if(btn){ btn.disabled=!ok; }
-    if(hint){ hint.style.display=(ok)?'none':''; }
+    if(hint){
+      if(ok){ hint.style.display='none'; hint.classList.remove('err'); }
+      else {
+        hint.style.display=''; hint.classList.add('err');
+        hint.textContent = !planOk
+          ? "Importez d'abord un plan pour continuer."
+          : "Renseignez le passeport énergétique : importez-le puis cliquez « Extraire », "
+            + "ou choisissez « Saisie à la main » et vérifiez les valeurs.";
+      }
+    }
   }
   // Remplace le bouton natif (texte abrégé selon l'OS) par un libellé clair en français.
   function enhanceFiles(){
@@ -886,9 +899,15 @@ _CONFIG_JS = """
     });
   }
   document.addEventListener('DOMContentLoaded', function(){
+    // Une extraction réussie (page rechargée) compte comme une action sur la carte CPE.
+    if(window.__CPE_EXTRACTED__){ window.__CPE_TOUCHED__=true; }
     Array.prototype.forEach.call(document.querySelectorAll('input[name=cpe_mode]'), function(r){
-      r.addEventListener('change', sync);
+      r.addEventListener('change', function(){ sync(); markCpe(); });
     });
+    var cpe=document.getElementById('in-cpe');
+    if(cpe){ cpe.addEventListener('change', markCpe); }
+    var eb=document.getElementById('envelope-block');
+    if(eb){ eb.addEventListener('input', markCpe); eb.addEventListener('change', markCpe); }
     var d=document.getElementById('in-dxf'), f=document.getElementById('in-floors');
     if(d){ d.addEventListener('change', gate); }
     if(f){ f.addEventListener('change', gate); }
@@ -1040,7 +1059,7 @@ def render_study_form(
   <div id="cpe-upload" style="margin-top:1rem">
     <form method="post" action="/etude/cpe" enctype="multipart/form-data" class="upload-row" id="cpe-form">
       <input type="hidden" name="cfg_snapshot" id="cfg_snapshot">
-      <input type="file" name="cpe" accept=".pdf">
+      <input type="file" name="cpe" accept=".pdf" id="in-cpe">
       <button class="btn" type="submit">Extraire</button>
     </form>
   </div>
