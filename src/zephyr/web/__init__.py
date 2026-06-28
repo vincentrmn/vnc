@@ -547,6 +547,11 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
   font-variant-numeric: tabular-nums; }
 .proc h3 { margin: .5rem 0 .3rem; font-size: 1.1rem; }
 .proc p { margin: 0; color: var(--muted); font-size: .95rem; }
+.pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s5); margin-top: var(--s2); }
+.pillar .ic { color: var(--primary); }
+.pillar h3 { margin: .7rem 0 .35rem; font-size: 1.15rem; letter-spacing: -.01em; }
+.pillar p { margin: 0; color: var(--muted); font-size: .95rem; line-height: 1.55; }
+.note-muted { color: var(--muted); font-size: .9rem; margin-top: var(--s3); max-width: 60ch; }
 .spec { border-top: 1px solid var(--line); margin-top: var(--s2); }
 .spec-row { display: grid; grid-template-columns: 1fr auto; gap: .4rem 1.5rem;
   padding: 1rem 0; border-bottom: 1px solid var(--line); align-items: baseline; }
@@ -588,6 +593,7 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 @media (max-width: 720px) {
   .process { grid-template-columns: 1fr; }
   .proc + .proc { border-left: 0; padding-left: 0; }
+  .pillars { grid-template-columns: 1fr; gap: var(--s4); }
   .score-hero { grid-template-columns: 1fr; }
 }
 /* ROI à livre ouvert : chaque poste = ligne dépliable (formule + montant dessous) */
@@ -771,14 +777,27 @@ thème-aware et rendu dans le PDF). <code>_icon("nom")</code> dans les pages.</p
 
 
 def render_landing() -> str:
-    """Landing page : proposition de valeur + comment ça marche + critères."""
+    """Landing page : le concept (confort/sobriété/pérennité) puis la méthode."""
+    pillars = [
+        ("sun", "Confort", "Un air sain et une température stable toute l'année, "
+         "obtenus par le bâtiment lui-même plutôt que par des systèmes."),
+        ("bulb", "Sobriété", "Pas de ventilation mécanique, peu ou pas de chauffage. "
+         "Moins de machines à entretenir, moins de pannes, moins de dépendance."),
+        ("building", "Pérennité", "Moins d'équipement à financer puis à remplacer. "
+         "Un bâtiment simple, qui dure et coûte moins sur la durée."),
+    ]
+    pillars_html = "".join(
+        f'<div class="pillar">{_icon(ic, 24)}<h3>{html.escape(t)}</h3>'
+        f"<p>{html.escape(d)}</p></div>"
+        for ic, t, d in pillars
+    )
     steps = [
-        ("01", "Déposez le plan & le CPE", "DXF ou PDF vectoriel ; le passeport "
-         "énergétique pré-remplit l'enveloppe (U, n50, inertie)."),
-        ("02", "Tracez, on mesure", "Pièces, châssis, façades sur le plan en fond. "
-         "Le code calcule surfaces et traversant ; pas de vision, pas d'à-peu-près."),
-        ("03", "Score + bilan", "Aptitude VNC notée et expliquée, puis le bilan "
-         "financier face à une VMC double-flux."),
+        ("01", "Déposez le plan et le passeport", "DXF ou PDF vectoriel ; le passeport "
+         "énergétique pré-remplit l'enveloppe (isolation, étanchéité, inertie)."),
+        ("02", "Tracez, on mesure", "Pièces, ouvrants et façades sur le plan en fond. "
+         "Le code calcule les surfaces et les flux d'air, sans approximation."),
+        ("03", "Aptitude et bilan", "Une note d'aptitude expliquée, des leviers "
+         "d'amélioration, et le bilan financier face à une installation mécanique."),
     ]
     steps_html = "".join(
         f'<div class="proc"><div class="num">{n}</div><h3>{html.escape(t)}</h3>'
@@ -786,10 +805,16 @@ def render_landing() -> str:
         for n, t, d in steps
     )
     crits = [
-        ("Ventilation", "35", "Traversant idéal ; sinon châssis ≥ 1,5 m (tirage mono-façade)."),
-        ("Inertie", "25", "Masse lue de la composition des parois ; free-cooling nocturne."),
-        ("Vitrage", "20", "Ratio surface vitrée / surface au sol, dans la bonne bande."),
-        ("Isolation", "20", "Niveau d'isolation : moins de pertes, meilleur bilan."),
+        ("Ventilation", "30", "Renouveler l'air naturellement : traversant, "
+         "ou ouvrants hauts pour le tirage."),
+        ("Inertie", "20", "La masse qui stabilise la température et stocke "
+         "la fraîcheur de la nuit."),
+        ("Isolation", "20", "Moins de pertes : la première condition pour "
+         "se passer de chauffage."),
+        ("Vitrage", "15", "Des surfaces vitrées mesurées : la lumière, "
+         "sans la surchauffe."),
+        ("Protections solaires", "15", "Stores, brise-soleil, casquettes : "
+         "tenir la chaleur d'été à l'extérieur."),
     ]
     crit_html = "".join(
         f'<div class="spec-row"><div class="t">{html.escape(t)}</div>'
@@ -798,30 +823,38 @@ def render_landing() -> str:
     )
     body = f"""
 <section class="hero-xl">
-  <div class="eyebrow"><span class="dot"></span> Pré-étude déterministe, Ventilation Naturelle Contrôlée</div>
-  <h1 class="display">La VNC, <em>pré-qualifiée</em> en quelques minutes.</h1>
-  <p class="lead-xl">Un plan, le CPE, et Zéphyr rend un score d'aptitude à la
-  ventilation naturelle, des leviers d'amélioration, et le bilan financier face à
-  une VMC double-flux. Du calcul déterministe, aucune simulation boîte noire.</p>
+  <div class="eyebrow"><span class="dot"></span> Pré-étude de faisabilité</div>
+  <h1 class="display">Le confort, <em>sans la machinerie</em>.</h1>
+  <p class="lead-xl">Certains bâtiments restent sains et tempérés toute l'année
+  presque sans équipement : leur masse, leur isolation et des ouvrants pilotés
+  suffisent. Moins de machines à installer et à entretenir, peu ou pas de chauffage.
+  Zéphyr estime si votre projet en est capable, et ce qu'il y a à y gagner.</p>
   <div class="cta-row">
     <a class="btn" href="/etude">Lancer une étude</a>
     <a class="btn ghost" href="#methode">Comment ça marche</a>
   </div>
 </section>
 <hr class="rule">
+<section>
+  <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>L'idée</h2></div>
+  <div class="pillars">{pillars_html}</div>
+</section>
 <section id="methode">
   <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Comment ça marche</h2></div>
   <div class="process">{steps_html}</div>
 </section>
 <section>
   <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Ce qu'on évalue</h2></div>
-  <p class="lead-xl" style="margin-bottom:var(--s2)">Quatre critères pondérés (poids
-  sur 100), notés en déterministe avec barème et recommandation.</p>
+  <p class="lead-xl" style="margin-bottom:var(--s2)">Cinq critères pondérés (poids
+  sur 100), notés en déterministe, chacun avec son barème et ses recommandations.</p>
   <div class="spec">{crit_html}</div>
+  <p class="note-muted">Le moyen : une ventilation naturelle pilotée par capteurs et
+  ouvrants motorisés, comparée à une ventilation mécanique double-flux dans le bilan
+  financier.</p>
 </section>
 <div class="disclaimer">{_icon("alert")} {html.escape(_DISCLAIMER)}</div>
 """
-    return _layout("Zéphyr — pré-étude VNC", body)
+    return _layout("Zéphyr — pré-étude de confort naturel", body)
 
 
 def render_error(message: str) -> str:
