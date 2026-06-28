@@ -60,7 +60,19 @@ _ICONS: dict[str, str] = {
     "sheet": '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/>',
     "save": '<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/>',
     "play": '<polygon points="6 3 20 12 6 21 6 3"/>',
+    "wind": '<path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/>',
+    "thermometer": '<path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/>',
+    "shield": '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    "external-link": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 }
+
+# Marque Zéphyr : badge carré vert + Z (SVG inline, hérite des couleurs de marque).
+_ZEPHYR_MARK = (
+    '<svg class="zmark" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">'
+    '<rect width="24" height="24" rx="6" fill="#3a5b42"/>'
+    '<path d="M8 8h8l-8 8h8" fill="none" stroke="#fff" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round"/></svg>'
+)
 
 
 def _icon(name: str, size: int = 16) -> str:
@@ -213,12 +225,15 @@ a:hover { text-decoration: underline; }
 h1, h2, h3 { letter-spacing: -.02em; }
 .wrap { max-width: 980px; margin: 0 auto; padding: 0 var(--s5); }
 .wrap.wide { max-width: 1500px; }
-nav {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: var(--s4) var(--s5); max-width: 1500px; margin: 0 auto;
-}
-.brand { font-weight: 700; letter-spacing: -.03em; font-size: 1.3rem; color: var(--ink); }
-.brand span { color: var(--primary); }
+nav { padding: var(--s4) 0; }
+.nav-inner { display: flex; align-items: center; justify-content: space-between; }
+.brand { display: inline-flex; align-items: center; gap: .5rem; font-weight: 700;
+  letter-spacing: -.03em; font-size: 1.3rem; color: var(--ink); }
+.brand:hover { text-decoration: none; }
+.brand .brand-korr { color: var(--muted); }
+.brand .brand-x { color: var(--muted); font-weight: 400; margin: 0 .05rem; }
+.brand .zmark { border-radius: 6px; }
+.brand .brand-name { color: var(--ink); }
 .nav-right { display: flex; align-items: center; gap: var(--s3); }
 .theme-toggle {
   display: inline-grid; place-items: center; width: 2.1rem; height: 2.1rem;
@@ -540,6 +555,7 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
   font-weight: 700; margin: var(--s4) 0; max-width: 16ch; }
 .display em { font-style: normal; color: var(--primary); }
 .lead-xl { font-size: 1.2rem; color: var(--muted); max-width: 52ch; line-height: 1.5; }
+.hero-xl .lead-xl { max-width: none; }
 .cta-row { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: var(--s5); }
 .rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .sec-head { display: flex; align-items: baseline; gap: .8rem; margin: var(--s7) 0 var(--s4); }
@@ -556,7 +572,13 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 .pillar .ic { color: var(--primary); }
 .pillar h3 { margin: .7rem 0 .35rem; font-size: 1.15rem; letter-spacing: -.01em; }
 .pillar p { margin: 0; color: var(--muted); font-size: .95rem; line-height: 1.55; }
-.note-muted { color: var(--muted); font-size: .9rem; margin-top: var(--s3); max-width: 60ch; }
+.note-muted { color: var(--muted); font-size: .9rem; margin-top: var(--s5); max-width: 60ch; }
+.crit-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s4);
+  margin-top: var(--s2); }
+.crit-cell { display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: .7rem; padding: var(--s5) var(--s2); }
+.crit-cell .ic { color: var(--primary); }
+.crit-cell .t { font-weight: 600; font-size: 1.02rem; }
 .video-ph { margin: var(--s6) 0 0; aspect-ratio: 16 / 9; width: 100%; border-radius: var(--r2);
   border: 1px dashed var(--line); background: var(--surface-2); display: flex;
   align-items: center; justify-content: center; gap: .6rem; color: var(--muted); }
@@ -603,6 +625,7 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
   .process { grid-template-columns: 1fr; }
   .proc + .proc { border-left: 0; padding-left: 0; }
   .pillars { grid-template-columns: 1fr; gap: var(--s4); }
+  .crit-grid { grid-template-columns: repeat(2, 1fr); }
   .score-hero { grid-template-columns: 1fr; }
 }
 /* ROI à livre ouvert : chaque poste = ligne dépliable (formule + montant dessous) */
@@ -699,6 +722,10 @@ def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> s
     """
     nav_cta = '<a class="btn" href="/etude">Lancer une étude</a>' if cta else ""
     wrap_cls = "wrap wide" if wide else "wrap"
+    korr_btn = (
+        '<a class="btn ghost sm" href="https://korr.lu" target="_blank" rel="noopener">'
+        f'korr {_icon("external-link", 14)}</a>'
+    )
     toggle = (
         '<button type="button" class="theme-toggle" id="themebtn" onclick="toggleTheme()" '
         f'title="Thème clair / sombre" aria-label="Basculer le thème">{_icon("moon", 18)}</button>'
@@ -709,11 +736,11 @@ def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> s
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,{_FAVICON_B64}">
 <script>{_THEME_INIT}</script>
 <style>{_CSS}</style></head><body>
-<nav><div class="brand">Zéphyr<span>.</span></div>
-<div class="nav-right">{toggle}{nav_cta}</div></nav>
+<nav><div class="{wrap_cls} nav-inner">
+<a class="brand" href="/"><span class="brand-korr">korr</span><span class="brand-x">×</span>{_ZEPHYR_MARK}<span class="brand-name">Zéphyr</span></a>
+<div class="nav-right">{toggle}{korr_btn}{nav_cta}</div></div></nav>
 <main class="{wrap_cls}">{body}</main>
-<footer class="wrap site-footer"><span>© {datetime.now().year} KORR</span>
-<a href="mailto:contact@korr.lu">Contact</a></footer>
+<footer class="wrap site-footer"><span>© {datetime.now().year} korr</span></footer>
 <script>{_THEME_TOGGLE_JS}</script>
 </body></html>"""
 
@@ -815,21 +842,15 @@ def render_landing() -> str:
         for n, t, d in steps
     )
     crits = [
-        ("Ventilation", "30", "Renouveler l'air naturellement : traversant, "
-         "ou ouvrants hauts pour le tirage."),
-        ("Inertie", "20", "La masse qui stabilise la température et stocke "
-         "la fraîcheur de la nuit."),
-        ("Isolation", "20", "Moins de pertes : la première condition pour "
-         "se passer de chauffage."),
-        ("Vitrage", "15", "Des surfaces vitrées mesurées : la lumière, "
-         "sans la surchauffe."),
-        ("Protections solaires", "15", "Stores, brise-soleil, casquettes : "
-         "tenir la chaleur d'été à l'extérieur."),
+        ("wind", "Ventilation"),
+        ("thermometer", "Inertie"),
+        ("shield", "Isolation"),
+        ("window", "Vitrage"),
+        ("sun", "Protections solaires"),
     ]
     crit_html = "".join(
-        f'<div class="spec-row"><div class="t">{html.escape(t)}</div>'
-        f'<div class="w">{w}</div><div class="d">{html.escape(d)}</div></div>'
-        for t, w, d in crits
+        f'<div class="crit-cell">{_icon(ic, 40)}<div class="t">{html.escape(t)}</div></div>'
+        for ic, t in crits
     )
     body = f"""
 <section class="hero-xl">
@@ -855,14 +876,11 @@ def render_landing() -> str:
 </section>
 <section>
   <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Ce qu'on évalue</h2></div>
-  <p class="lead-xl" style="margin-bottom:var(--s2)">Cinq critères pondérés (poids
-  sur 100), notés en déterministe, chacun avec son barème et ses recommandations.</p>
-  <div class="spec">{crit_html}</div>
+  <div class="crit-grid">{crit_html}</div>
   <p class="note-muted">Le moyen : une ventilation naturelle pilotée par capteurs et
   ouvrants motorisés, comparée à une ventilation mécanique double-flux dans le bilan
   financier.</p>
 </section>
-<div class="disclaimer">{_icon("alert")} {html.escape(_DISCLAIMER)}</div>
 """
     return _layout("Zéphyr — pré-étude de confort naturel", body)
 

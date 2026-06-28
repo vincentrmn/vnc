@@ -30,7 +30,8 @@ def test_landing_has_value_prop_and_cta() -> None:
     h = render_landing()
     assert "Zéphyr" in h
     assert "/etude" in h  # CTA vers le formulaire
-    assert "opposable" in h  # disclaimer
+    assert "korr" in h  # marque dans la nav + footer
+    assert "opposable" not in h  # le message de précaution n'est plus sur la home
 
 
 def test_landing_leads_with_concept_not_jargon() -> None:
