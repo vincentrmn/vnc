@@ -514,6 +514,16 @@ kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--
 .room-card.sel { border-color: var(--primary); box-shadow: inset 0 0 0 2px var(--primary); }
 .room-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; min-width: 0; }
 .room-head select { padding: .2rem; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+/* Extraction CPE : overlay + barre de progression « trickle » (durée inconnue) */
+.cpe-ovl { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 300;
+  display: flex; align-items: center; justify-content: center; }
+.cpe-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r2);
+  padding: 1.3rem 1.5rem; width: min(420px, 90vw); box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.cpe-card h4 { margin: 0 0 .25rem; font-size: 1.1rem; }
+.cpe-card p { margin: 0 0 .9rem; color: var(--muted); font-size: .9rem; }
+.cpe-track { height: .55rem; background: var(--surface-2); border-radius: var(--pill); overflow: hidden; }
+.cpe-fill { height: 100%; width: 8%; background: var(--primary); border-radius: var(--pill);
+  transition: width .25s ease; }
 /* Validation au tracé d'une pièce : modale centrée (suit l'écran, jamais coincée au scroll) */
 .trace-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 59; }
 .trace-pop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -969,11 +979,13 @@ _CONFIG_JS = """
     gate();
   }
   function markCpe(){ window.__CPE_TOUCHED__=true; gate(); }
+  function cpeMode(){ var r=document.querySelector('input[name=cpe_mode]:checked'); return r?r.value:'cpe'; }
+  // En mode upload : il faut une extraction RÉUSSIE. En saisie manuelle : un champ touché.
+  function cpeDone(){ return (cpeMode()==='cpe') ? !!window.__CPE_EXTRACTED__ : !!window.__CPE_TOUCHED__; }
   function gate(){
     var btn=document.getElementById('go-btn'), hint=document.getElementById('go-hint');
     var planOk=(curMode()==='rapide') || hasPlan();
-    var cpeOk=!!window.__CPE_TOUCHED__;
-    var ok=planOk && cpeOk;
+    var ok=planOk && cpeDone();
     if(btn){ btn.disabled=!ok; }
     if(hint){
       if(ok){ hint.style.display='none'; hint.classList.remove('err'); }
@@ -981,9 +993,42 @@ _CONFIG_JS = """
         hint.style.display=''; hint.classList.add('err');
         hint.textContent = !planOk
           ? "Importez d'abord un plan."
-          : "Renseignez le passeport énergétique.";
+          : (cpeMode()==='cpe'
+              ? "Importez le passeport énergétique (extraction automatique)."
+              : "Renseignez le passeport énergétique.");
       }
     }
+  }
+  // Aperçu config (restauré après le rechargement déclenché par l'extraction CPE).
+  function snapshotCfg(){
+    var snap={}, mf=document.getElementById('mainform');
+    if(mf){ Array.prototype.forEach.call(mf.elements, function(el){
+      if(!el.name){ return; }
+      if(el.type==='radio'||el.type==='checkbox'){ if(el.checked){ snap[el.name]=el.value; } }
+      else { snap[el.name]=el.value; }
+    }); }
+    var h=document.getElementById('cfg_snapshot'); if(h){ h.value=JSON.stringify(snap); }
+  }
+  // Barre de progression « trickle » pendant l'import + l'extraction (durée inconnue).
+  function showCpeProgress(){
+    removeCpeProgress();
+    var ov=document.createElement('div'); ov.id='cpe-ovl'; ov.className='cpe-ovl';
+    ov.innerHTML='<div class="cpe-card"><h4>Extraction du passeport…</h4>'+
+      '<p>Lecture du PDF et identification des valeurs (isolation, étanchéité, inertie…).</p>'+
+      '<div class="cpe-track"><div class="cpe-fill" id="cpe-fill"></div></div></div>';
+    document.body.appendChild(ov);
+    var p=8, fill=document.getElementById('cpe-fill'); fill.style.width=p+'%';
+    window.__cpeTimer=setInterval(function(){ p+=Math.max(0.6,(92-p)*0.06); if(p>92){ p=92; }
+      fill.style.width=p.toFixed(1)+'%'; }, 200);
+  }
+  function removeCpeProgress(){
+    if(window.__cpeTimer){ clearInterval(window.__cpeTimer); window.__cpeTimer=null; }
+    var o=document.getElementById('cpe-ovl'); if(o&&o.parentNode){ o.parentNode.removeChild(o); }
+  }
+  function autoExtractCpe(input){
+    var form=document.getElementById('cpe-form');
+    if(!form || !input.files || !input.files.length){ return; }
+    snapshotCfg(); showCpeProgress(); form.submit();   // recharge la page sur l'état extrait
   }
   // Remplace le bouton natif (texte abrégé selon l'OS) par un libellé clair en français.
   function enhanceFiles(){
@@ -1008,7 +1053,7 @@ _CONFIG_JS = """
       r.addEventListener('change', function(){ sync(); markCpe(); });
     });
     var cpe=document.getElementById('in-cpe');
-    if(cpe){ cpe.addEventListener('change', markCpe); }
+    if(cpe){ cpe.addEventListener('change', function(){ autoExtractCpe(cpe); }); }
     var eb=document.getElementById('envelope-block');
     if(eb){ eb.addEventListener('input', markCpe); eb.addEventListener('change', markCpe); }
     var d=document.getElementById('in-dxf'), f=document.getElementById('in-floors');
@@ -1020,15 +1065,7 @@ _CONFIG_JS = """
     // L'extraction CPE recharge la page : on embarque la config courante (mode + estimations)
     // pour la restaurer (sinon retour en « complète » et perte des saisies).
     var cf=document.getElementById('cpe-form');
-    if(cf){ cf.addEventListener('submit', function(){
-      var snap={}, mf=document.getElementById('mainform');
-      if(mf){ Array.prototype.forEach.call(mf.elements, function(el){
-        if(!el.name){ return; }
-        if(el.type==='radio'||el.type==='checkbox'){ if(el.checked){ snap[el.name]=el.value; } }
-        else { snap[el.name]=el.value; }
-      }); }
-      var h=document.getElementById('cfg_snapshot'); if(h){ h.value=JSON.stringify(snap); }
-    }); }
+    if(cf){ cf.addEventListener('submit', snapshotCfg); }
     enhanceFiles(); sync(); syncMode();
   });
 })();
@@ -1163,8 +1200,8 @@ def render_study_form(
     <form method="post" action="/etude/cpe" enctype="multipart/form-data" class="upload-row" id="cpe-form">
       <input type="hidden" name="cfg_snapshot" id="cfg_snapshot">
       <input type="file" name="cpe" accept=".pdf" id="in-cpe">
-      <button class="btn" type="submit">Extraire</button>
     </form>
+    <p class="hint" style="margin:.5rem 0 0">L'extraction démarre automatiquement dès l'import du passeport.</p>
   </div>
   {cpe_banner}
 

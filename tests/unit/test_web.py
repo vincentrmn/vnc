@@ -89,6 +89,16 @@ def test_study_form_cpe_or_manual_toggle() -> None:
     assert "__CPE_EXTRACTED__=true" in h2 and 'value="0.122"' in h2
 
 
+def test_cpe_auto_extracts_and_gates_on_extraction() -> None:
+    """Upload CPE : extraction auto (plus de bouton), barre de progression, blocage tant que non extrait."""
+    h = render_study_form()
+    assert "autoExtractCpe" in h  # extraction déclenchée au change du fichier
+    assert ">Extraire<" not in h  # plus de bouton manuel
+    assert "showCpeProgress" in h and 'class="cpe-track"' in h  # barre de progression
+    # En mode upload, le portail exige une extraction réussie (pas juste un fichier touché).
+    assert "function cpeDone()" in h and "__CPE_EXTRACTED__" in h
+
+
 def test_study_form_requires_cpe_action() -> None:
     """Le passeport doit être renseigné (upload OU saisie) avant de continuer."""
     h = render_study_form()
