@@ -90,49 +90,47 @@ def representative_building(
     deep: bool = False,
     inertia: InertiaClass = InertiaClass.LOURDE,
     hsp_m: float = 2.6,
-    room_size_m2: float = 25.0,
     building_id: str = "rapide",
 ) -> Building:
     """Bâtiment « représentatif » pour le mode RAPIDE (formulaire, sans plan).
 
-    Traduit quelques estimations haut-niveau en pièces de vie : une fraction
-    ``through_fraction`` de la surface est traversante (2 façades opposées), le reste
-    mono-façade ; le ``glazing_ratio`` fixe la surface de châssis par pièce ;
-    ``tall_windows`` règle la hauteur des baies ; ``deep`` allonge les pièces pour
-    déclencher la pénalité « plan trop profond ». Approximation assumée (faible
-    confiance), passée telle quelle dans le moteur déterministe.
+    On ne fabrique PAS des dizaines de pièces fictives : on modélise **deux zones
+    agrégées** dimensionnées par ``through_fraction`` — une zone traversante (2 façades
+    opposées) et une zone mono-façade — qui suffisent à porter exactement la même note
+    qu'une pondération par surface. ``glazing_ratio`` fixe le taux de vitrage,
+    ``tall_windows`` la hauteur des baies, ``deep`` déclenche la pénalité « trop
+    profond » (via un polygone allongé ; sinon aucun polygone → pas de pénalité).
+    Approximation assumée (faible confiance), passée telle quelle dans le moteur.
     """
-    n = max(1, round(total_floor_area_m2 / room_size_m2))
-    area_each = total_floor_area_m2 / n
-    n_through = round(n * max(0.0, min(1.0, through_fraction)))
+    frac = max(0.0, min(1.0, through_fraction))
     head = 2.5 if tall_windows else 1.6
-    if deep:
-        depth = 6.0 * hsp_m
-        width = max(area_each / depth, 0.5)
-    else:
-        width = depth = math.sqrt(area_each)
-    poly = [(0.0, 0.0), (width, 0.0), (width, depth), (0.0, depth)]
 
-    rooms: list[Room] = []
-    for i in range(n):
-        through = i < n_through
-        primary = Orientation.S if i % 2 == 0 else Orientation.E
-        orients = [primary, _OPPOSITE[primary]] if through else [primary]
-        win_each = max(glazing_ratio * area_each / len(orients), 0.05)
+    def zone(rid: str, name: str, area: float, orients: list[Orientation]) -> Room:
+        win_each = max(glazing_ratio * area / len(orients), 0.05)
         openings = [
-            Opening(id=f"r{i}_{o.value}", area_m2=win_each, orientation=o, head_height_m=head)
+            Opening(id=f"{rid}_{o.value}", area_m2=win_each, orientation=o, head_height_m=head)
             for o in orients
         ]
-        rooms.append(
-            Room(
-                id=f"r{i}",
-                label=RoomLabel.SEJOUR if through else RoomLabel.CHAMBRE,
-                area_m2=area_each,
-                height_m=hsp_m,
-                level=i % num_levels,
-                polygon=poly,
-                exterior_wall_orientations=orients,
-                openings=openings,
-            )
+        poly: list[tuple[float, float]] = []
+        if deep:  # polygone allongé → ratio profondeur/HSP au-delà des seuils
+            depth = 6.0 * hsp_m
+            poly = [(0.0, 0.0), (max(area / depth, 0.5), 0.0),
+                    (max(area / depth, 0.5), depth), (0.0, depth)]
+        return Room(
+            id=rid, name=name,
+            label=RoomLabel.SEJOUR if len(orients) >= 2 else RoomLabel.CHAMBRE,
+            area_m2=max(area, 0.1), height_m=hsp_m, level=0, polygon=poly,
+            exterior_wall_orientations=orients, openings=openings,
         )
+
+    rooms: list[Room] = []
+    a_through = total_floor_area_m2 * frac
+    a_mono = total_floor_area_m2 - a_through
+    if a_through > 0:
+        rooms.append(zone("z_through", "Surfaces traversantes", a_through,
+                          [Orientation.S, Orientation.N]))
+    if a_mono > 0:
+        rooms.append(zone("z_mono", "Surfaces mono-façade", a_mono, [Orientation.S]))
+    if not rooms:  # garde-fou (surface nulle)
+        rooms.append(zone("z_mono", "Surfaces mono-façade", total_floor_area_m2, [Orientation.S]))
     return Building(id=building_id, rooms=rooms, inertia_class=inertia, num_levels=num_levels)

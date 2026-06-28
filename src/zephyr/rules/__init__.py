@@ -57,6 +57,9 @@ _ROOM_FR: dict[str, str] = {
 
 
 def _room_fr(room: object) -> str:
+    name = getattr(room, "name", None)
+    if name:  # nom explicite (ex. zones agrégées du mode rapide)
+        return str(name)
     val = getattr(getattr(room, "label", None), "value", "autre")
     return _ROOM_FR.get(val, val.capitalize())
 
