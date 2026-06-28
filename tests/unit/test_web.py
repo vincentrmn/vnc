@@ -36,12 +36,12 @@ def test_landing_has_value_prop_and_cta() -> None:
 def test_landing_leads_with_concept_not_jargon() -> None:
     """La home vend le concept (confort/sobriété/pérennité), pas le jargon « VNC »."""
     h = render_landing()
-    assert "Le confort" in h  # hero orienté résultat
+    assert "se régule seul" in h  # hero orienté concept
     for pillar in ("Confort", "Sobriété", "Pérennité"):
         assert pillar in h
     assert "peu ou pas de chauffage" in h  # promesse chauffage nuancée
-    # Le sigle technique ne doit plus piloter le titre principal (reste possible en bas de page).
-    assert "<em>sans la machinerie</em>" in h
+    assert 'class="video-ph"' in h  # emplacement vidéo réservé sous le hero
+    assert "Comment ça marche ?" in h  # avec le point d'interrogation
 
 
 def test_design_system_charte() -> None:

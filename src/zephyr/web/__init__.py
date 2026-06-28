@@ -13,6 +13,7 @@ from __future__ import annotations
 import html
 import json
 from collections.abc import Mapping
+from datetime import datetime
 
 from zephyr.schemas import (
     Building,
@@ -58,6 +59,7 @@ _ICONS: dict[str, str] = {
     "bulb": '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
     "sheet": '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/>',
     "save": '<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/>',
+    "play": '<polygon points="6 3 20 12 6 21 6 3"/>',
 }
 
 
@@ -263,6 +265,9 @@ nav {
 }
 footer { color: var(--muted); font-size: .85rem; padding: var(--s6) 0 var(--s7);
   border-top: 1px solid var(--line); margin-top: var(--s7); }
+.site-footer { display: flex; gap: var(--s4); align-items: center; justify-content: space-between; }
+.site-footer a { color: var(--muted); }
+.site-footer a:hover { color: var(--primary); }
 /* Résultats */
 .result-head { display: flex; gap: var(--s5); align-items: center; flex-wrap: wrap; margin: var(--s4) 0; }
 .gauge { flex: 0 0 auto; }
@@ -552,6 +557,10 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 .pillar h3 { margin: .7rem 0 .35rem; font-size: 1.15rem; letter-spacing: -.01em; }
 .pillar p { margin: 0; color: var(--muted); font-size: .95rem; line-height: 1.55; }
 .note-muted { color: var(--muted); font-size: .9rem; margin-top: var(--s3); max-width: 60ch; }
+.video-ph { margin: var(--s6) 0 0; aspect-ratio: 16 / 9; width: 100%; border-radius: var(--r2);
+  border: 1px dashed var(--line); background: var(--surface-2); display: flex;
+  align-items: center; justify-content: center; gap: .6rem; color: var(--muted); }
+.video-ph .ic { color: var(--muted); }
 .spec { border-top: 1px solid var(--line); margin-top: var(--s2); }
 .spec-row { display: grid; grid-template-columns: 1fr auto; gap: .4rem 1.5rem;
   padding: 1rem 0; border-bottom: 1px solid var(--line); align-items: baseline; }
@@ -703,7 +712,8 @@ def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> s
 <nav><div class="brand">Zéphyr<span>.</span></div>
 <div class="nav-right">{toggle}{nav_cta}</div></nav>
 <main class="{wrap_cls}">{body}</main>
-<footer class="wrap">Zéphyr, pré-étude de faisabilité VNC. {html.escape(_DISCLAIMER)}</footer>
+<footer class="wrap site-footer"><span>© {datetime.now().year} KORR</span>
+<a href="mailto:contact@korr.lu">Contact</a></footer>
 <script>{_THEME_TOGGLE_JS}</script>
 </body></html>"""
 
@@ -823,16 +833,16 @@ def render_landing() -> str:
     )
     body = f"""
 <section class="hero-xl">
-  <div class="eyebrow"><span class="dot"></span> Pré-étude de faisabilité</div>
-  <h1 class="display">Le confort, <em>sans la machinerie</em>.</h1>
-  <p class="lead-xl">Certains bâtiments restent sains et tempérés toute l'année
-  presque sans équipement : leur masse, leur isolation et des ouvrants pilotés
-  suffisent. Moins de machines à installer et à entretenir, peu ou pas de chauffage.
-  Zéphyr estime si votre projet en est capable, et ce qu'il y a à y gagner.</p>
+  <h1 class="display">Le bâtiment qui <em>se régule seul</em>.</h1>
+  <p class="lead-xl">Nous pouvons concevoir des bâtiments qui restent sains et tempérés
+  toute l'année presque sans équipement : leur masse, leur isolation et des ouvrants
+  pilotés suffisent. Moins de machines à installer et à entretenir, peu ou pas de
+  chauffage. Zéphyr estime si votre projet en est capable, et les gains associés.</p>
   <div class="cta-row">
     <a class="btn" href="/etude">Lancer une étude</a>
-    <a class="btn ghost" href="#methode">Comment ça marche</a>
+    <a class="btn ghost" href="#methode">Comment ça marche ?</a>
   </div>
+  <div class="video-ph">{_icon("play", 22)} Vidéo à venir</div>
 </section>
 <hr class="rule">
 <section>
@@ -840,7 +850,7 @@ def render_landing() -> str:
   <div class="pillars">{pillars_html}</div>
 </section>
 <section id="methode">
-  <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Comment ça marche</h2></div>
+  <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Comment ça marche ?</h2></div>
   <div class="process">{steps_html}</div>
 </section>
 <section>
