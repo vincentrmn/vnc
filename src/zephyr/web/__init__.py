@@ -2650,10 +2650,10 @@ def render_results(
     banner = ""
     if quick:
         banner = (
-            f'<div class="quick-banner">{_icon("bulb")} <b>Estimation rapide</b> — '
-            "résultat indicatif calculé à partir de quelques données saisies (sans plan). "
+            f'<div class="quick-banner">{_icon("bulb")}<div><b>Estimation rapide.</b> '
+            "Résultat indicatif calculé à partir de quelques données saisies (sans plan). "
             "Pour une analyse fine pièce par pièce et un bilan financier détaillé, lancez "
-            'une <a href="/etude">étude complète</a> avec les plans.</div>'
+            'une <a href="/etude">étude complète</a> avec les plans.</div></div>'
         )
 
     actions = "" if quick else _results_actions()
