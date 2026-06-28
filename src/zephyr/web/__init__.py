@@ -890,6 +890,18 @@ _CONFIG_JS = """
     Array.prototype.forEach.call(document.querySelectorAll('input[name=etude_mode]'), function(r){
       r.addEventListener('change', syncMode);
     });
+    // L'extraction CPE recharge la page : on embarque la config courante (mode + estimations)
+    // pour la restaurer (sinon retour en « complète » et perte des saisies).
+    var cf=document.getElementById('cpe-form');
+    if(cf){ cf.addEventListener('submit', function(){
+      var snap={}, mf=document.getElementById('mainform');
+      if(mf){ Array.prototype.forEach.call(mf.elements, function(el){
+        if(!el.name){ return; }
+        if(el.type==='radio'||el.type==='checkbox'){ if(el.checked){ snap[el.name]=el.value; } }
+        else { snap[el.name]=el.value; }
+      }); }
+      var h=document.getElementById('cfg_snapshot'); if(h){ h.value=JSON.stringify(snap); }
+    }); }
     enhanceFiles(); sync(); syncMode();
   });
 })();
@@ -897,7 +909,7 @@ _CONFIG_JS = """
 
 
 def render_study_form(
-    prefill: Mapping[str, str] | None = None, *, cpe_banner: str = ""
+    prefill: Mapping[str, str] | None = None, *, cpe_banner: str = "", cpe_extracted: bool = False
 ) -> str:
     """Page 1 — configuration & plans : tout ce qui ne se lit pas sur les plans.
 
@@ -951,7 +963,10 @@ def render_study_form(
         "pvc",
     )
     depth_sel = select("q_depth", [("compact", "Compactes"), ("profond", "Profondes")], "compact")
-    extracted = bool(p)
+    extracted = cpe_extracted
+    mode = str(p.get("etude_mode", "complete"))
+    rapide_ck = " checked" if mode == "rapide" else ""
+    complete_ck = "" if mode == "rapide" else " checked"
     body = f"""
 <div class="form-head">
   <h1>Nouvelle étude</h1>
@@ -968,8 +983,8 @@ def render_study_form(
 <form id="mainform" method="post" action="/etude" enctype="multipart/form-data"></form>
 
 <div class="seg modeseg" role="tablist" style="margin:1rem 0 .3rem">
-  <label class="on"><input type="radio" name="etude_mode" value="complete" form="mainform" checked> Étude complète</label>
-  <label><input type="radio" name="etude_mode" value="rapide" form="mainform"> Étude rapide</label>
+  <label class="{"on" if mode != "rapide" else ""}"><input type="radio" name="etude_mode" value="complete" form="mainform"{complete_ck}> Étude complète</label>
+  <label class="{"on" if mode == "rapide" else ""}"><input type="radio" name="etude_mode" value="rapide" form="mainform"{rapide_ck}> Étude rapide</label>
 </div>
 <p class="hint" id="mode-hint" style="margin:0 0 1rem"></p>
 
@@ -1010,7 +1025,8 @@ def render_study_form(
   </div>
 
   <div id="cpe-upload" style="margin-top:1rem">
-    <form method="post" action="/etude/cpe" enctype="multipart/form-data" class="upload-row">
+    <form method="post" action="/etude/cpe" enctype="multipart/form-data" class="upload-row" id="cpe-form">
+      <input type="hidden" name="cfg_snapshot" id="cfg_snapshot">
       <input type="file" name="cpe" accept=".pdf">
       <button class="btn" type="submit">Extraire</button>
     </form>

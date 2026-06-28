@@ -72,8 +72,8 @@ def test_study_form_cpe_or_manual_toggle() -> None:
     assert 'name="cpe_mode"' in h and 'class="seg"' in h
     assert 'id="cpe-upload"' in h and 'id="envelope-block"' in h
     assert "__CPE_EXTRACTED__=false" in h  # pas d'extraction encore
-    # Après extraction (prefill) : flag vrai → les valeurs extraites s'affichent.
-    h2 = render_study_form({"u_wall": "0.122"})
+    # Après extraction (prefill + flag) : flag vrai → les valeurs extraites s'affichent.
+    h2 = render_study_form({"u_wall": "0.122"}, cpe_extracted=True)
     assert "__CPE_EXTRACTED__=true" in h2 and 'value="0.122"' in h2
 
 
