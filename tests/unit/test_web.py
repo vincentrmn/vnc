@@ -77,6 +77,15 @@ def test_study_form_cpe_or_manual_toggle() -> None:
     assert "__CPE_EXTRACTED__=true" in h2 and 'value="0.122"' in h2
 
 
+def test_study_form_requires_cpe_action() -> None:
+    """Le passeport doit être renseigné (upload OU saisie) avant de continuer."""
+    h = render_study_form()
+    # Drapeau « touché » + message d'erreur de blocage, et l'extraction réussie compte.
+    assert "__CPE_TOUCHED__" in h
+    assert "Renseignez le passeport énergétique" in h
+    assert "if(window.__CPE_EXTRACTED__){ window.__CPE_TOUCHED__=true; }" in h
+
+
 def test_study_form_prefills_envelope() -> None:
     h = render_study_form({"u_wall": "0.18", "n50": "0.6", "inertia": "lourde", "glazing": "0.12"})
     assert 'name="u_wall" value="0.18"' in h
