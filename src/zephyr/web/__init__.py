@@ -273,8 +273,8 @@ nav { padding: var(--s4) 0; }
   background: var(--warn-soft); border: 1px solid var(--warn-line); border-radius: var(--r1);
   padding: .7rem .9rem; font-size: .9rem; color: var(--warn); margin: var(--s5) 0;
 }
-footer { color: var(--muted); font-size: .85rem; padding: var(--s6) 0 var(--s7);
-  border-top: 1px solid var(--line); margin-top: var(--s7); }
+footer { color: var(--muted); font-size: .85rem; padding: var(--s6) 0 var(--s6);
+  border-top: 1px solid var(--line); margin-top: var(--s8); }
 .site-footer { display: flex; gap: var(--s4); align-items: center; justify-content: space-between; }
 .site-footer a { color: var(--muted); }
 .site-footer a:hover { color: var(--primary); }
@@ -396,6 +396,7 @@ table.kv td:last-child { text-align: right; font-variant-numeric: tabular-nums; 
 @media (max-width: 720px) {
   .steps, .crit-grid, .kpis, .form-grid { grid-template-columns: 1fr; }
   .hero h1 { font-size: 2rem; }
+  .hero-xl .display { white-space: normal; }
 }
 /* Page config : cartes, uploaders, toggle segmenté */
 .card > h2 { display: flex; align-items: center; gap: .5rem; font-size: 1.15rem; margin: 0 0 .2rem; }
@@ -549,6 +550,7 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 .display { font-size: clamp(2.5rem, 6.5vw, 5rem); line-height: 1.02; letter-spacing: -.045em;
   font-weight: 700; margin: var(--s4) 0; max-width: 16ch; }
 .display em { font-style: normal; color: var(--primary); }
+.hero-xl .display { white-space: nowrap; }
 .lead-xl { font-size: 1.2rem; color: var(--muted); max-width: 52ch; line-height: 1.5; }
 .hero-xl .lead-xl { max-width: none; }
 .cta-row { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: var(--s5); }
@@ -855,7 +857,10 @@ def render_landing() -> str:
     body = f"""
 <section class="hero-xl">
   <h1 class="display">Créer un <em>meilleur</em> bâti.</h1>
-  <p class="lead-xl">Des bâtiments sains et tempérés toute l'année, presque sans équipement.</p>
+  <p class="lead-xl">Nous pouvons concevoir des bâtiments qui restent sains et tempérés
+  toute l'année presque sans équipement : leur masse, leur isolation et des ouvrants
+  pilotés suffisent. Moins de machines à installer et à entretenir, peu ou pas de
+  chauffage. Zéphyr estime si votre projet en est capable, et les gains associés.</p>
   <div class="cta-row">
     <a class="btn" href="/etude">Lancer une étude</a>
     <a class="btn ghost" href="#methode">Comment ça marche ?</a>
