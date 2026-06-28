@@ -12,7 +12,15 @@ from __future__ import annotations
 
 import math
 
-from zephyr.schemas import Building, InertiaClass, Opening, Orientation, Room, RoomLabel
+from zephyr.schemas import (
+    Building,
+    InertiaClass,
+    Opening,
+    Orientation,
+    Room,
+    RoomLabel,
+    SolarProtection,
+)
 
 # Paires d'orientations opposées pour des pièces traversantes.
 _OPPOSITE = {
@@ -89,6 +97,7 @@ def representative_building(
     tall_windows: bool = True,
     deep: bool = False,
     inertia: InertiaClass = InertiaClass.LOURDE,
+    solar_protection: SolarProtection = SolarProtection.AUCUNE,
     hsp_m: float = 2.6,
     building_id: str = "rapide",
 ) -> Building:
@@ -108,7 +117,8 @@ def representative_building(
     def zone(rid: str, name: str, area: float, orients: list[Orientation]) -> Room:
         win_each = max(glazing_ratio * area / len(orients), 0.05)
         openings = [
-            Opening(id=f"{rid}_{o.value}", area_m2=win_each, orientation=o, head_height_m=head)
+            Opening(id=f"{rid}_{o.value}", area_m2=win_each, orientation=o, head_height_m=head,
+                    solar_protection=solar_protection)
             for o in orients
         ]
         poly: list[tuple[float, float]] = []

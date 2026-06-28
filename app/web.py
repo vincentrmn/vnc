@@ -32,6 +32,7 @@ from zephyr.schemas import (
     Orientation,
     ProjectType,
     SiteContext,
+    SolarProtection,
     StudyResult,
 )
 from zephyr.study import compute_study
@@ -176,6 +177,11 @@ def _quick_building(cfg: dict[str, str]) -> Building:
         sash = float(cfg.get("sash", "1.5"))
     except (TypeError, ValueError):
         sash = 1.5
+    solar = {
+        "aucune": SolarProtection.AUCUNE,
+        "partielle": SolarProtection.STORE_INT,
+        "bonne": SolarProtection.STORE_EXT,
+    }.get(cfg.get("q_solar", "partielle"), SolarProtection.STORE_INT)
     return representative_building(
         max(float(cfg.get("area", "800")), 1.0),
         num_levels=max(int(float(cfg.get("levels", "2"))), 1),
@@ -184,6 +190,7 @@ def _quick_building(cfg: dict[str, str]) -> Building:
         tall_windows=sash >= 1.5,
         deep=cfg.get("q_depth", "compact") == "profond",
         inertia=InertiaClass(cfg.get("inertia", "lourde")),
+        solar_protection=solar,
     )
 
 
@@ -387,6 +394,7 @@ async def submit_config(
     etude_mode: str = Form("complete"),
     q_through: float = Form(40.0),
     q_depth: str = Form("compact"),
+    q_solar: str = Form("partielle"),
 ) -> str:
     cfg = {
         "nature": nature, "project_type": project_type, "location": location,
@@ -396,7 +404,7 @@ async def submit_config(
         # Captés (pas encore câblés au calcul) — transmis pour le futur/report.
         "chauffage": chauffage, "ecs": ecs, "chassis_material": chassis_material,
         # Mode rapide (estimation sans plan).
-        "q_through": str(q_through), "q_depth": q_depth,
+        "q_through": str(q_through), "q_depth": q_depth, "q_solar": q_solar,
     }
     flags = {
         "noise": bool(noise), "pollution": bool(pollution),

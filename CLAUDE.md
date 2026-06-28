@@ -154,10 +154,11 @@ Ratios €/m² = ordres de grandeur LU/BE (à confronter à ≥ 2 devis), pas de
 
 | Critère | Poids | Mesure | Source |
 |---|---|---|---|
-| **Ventilation** | 35 | au prorata de la surface : traversant = 100, mono-façade **châssis ≥ 1,5 m** = 60, mono-façade bas = 20 (plancher), aveugle = 0 ; × 0,5 si plan trop profond (> 2,5× HSP simple-face, > 5× traversant) | plans + hauteurs |
-| **Vitrage** | 20 | **taux de surface vitrée, plus bas = mieux** : ≤ 1/8 (12,5 %) = 100, décroissance linéaire jusqu'au max 20 %, plancher 20 au-delà. **Mesuré en priorité depuis les châssis tracés** (Σ surfaces de châssis ÷ surface) ; CPE/saisie en repli ; **sans châssis tracé : 0** | châssis tracés (sinon CPE) |
-| **Inertie** | 25 | masse : lourde 100 / moyenne 60 / légère 25 | **CPE (composition parois)** |
+| **Ventilation** | 30 | au prorata de la surface **des pièces de vie** : traversant = 100, mono-façade **châssis ≥ 1,5 m** = 60, mono-façade bas = 20 (plancher), aveugle = 0 ; × 0,5 si plan trop profond. **Pièces de service exclues** | plans + hauteurs |
+| **Vitrage** | 15 | **taux de surface vitrée, plus bas = mieux** : ≤ 1/8 (12,5 %) = 100, décroissance jusqu'au max 20 %, plancher 20. **Mesuré par pièce de vie** depuis les châssis tracés (CPE en repli) ; **sans châssis : 0** ; service exclu | châssis tracés (sinon CPE) |
+| **Inertie** | 20 | masse : lourde 100 / moyenne 60 / légère 25 | **CPE (composition parois)** |
 | **Isolation** | 20 | U mur 0,15→100 … 1,0→0 (70 %) ; Uw 0,8→100 … 2,5→0 (30 %) | CPE |
+| **Protections solaires** | 15 | par châssis : note = 100 − risque(orientation) × (1 − efficacité). Sud/Ouest sans protection = note basse (**gros warning**) ; brise-soleil / store ext. / casquette = atténuation ; Nord ≈ neutre | châssis tracés (orientation + protection) |
 
 - Lettres : A ≥ 80, B ≥ 65, C ≥ 50, D ≥ 35, E < 35.
 - **Les ouvrants ne sont PAS un critère** : c'est notre dimensionnement → un coût ROI.
