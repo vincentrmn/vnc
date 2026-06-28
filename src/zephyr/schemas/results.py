@@ -32,6 +32,14 @@ class Range(BaseModel):
         return f"{self.central:.0f} [{self.low:.0f} – {self.high:.0f}]"
 
 
+class ScoreBreakdown(BaseModel):
+    """Détail tabulaire d'un critère (par pièce / par poste) + calcul de la note."""
+
+    columns: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+    formula: str | None = Field(default=None, description="Calcul de la note, valeurs substituées.")
+
+
 class ScoreCriterion(BaseModel):
     """Une composante du score d'aptitude VNC (déterministe).
 
@@ -46,6 +54,9 @@ class ScoreCriterion(BaseModel):
     detail: str = Field(description="Mesure déterministe qui justifie la note.")
     scale: str | None = Field(default=None, description="Échelle de notation (barème) du critère.")
     recommendation: str | None = None
+    breakdown: ScoreBreakdown | None = Field(
+        default=None, description="Détail par pièce/poste + calcul de la note (dépliable)."
+    )
 
 
 class VNCScore(BaseModel):

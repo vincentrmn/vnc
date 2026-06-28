@@ -25,6 +25,7 @@ from zephyr.schemas import (
     Building,
     EnvelopeData,
     InertiaClass,
+    ScoreBreakdown,
     ScoreCriterion,
     SiteContext,
     StudyResult,
@@ -44,6 +45,21 @@ TALL_SASH_M = 1.5
 GLAZING_OPTIMAL = 0.125  # 1/8 du ratio surface vitrée / surface de la pièce
 GLAZING_MAX = 0.20  # au-delà : trop vitré
 GLAZING_FLOOR_SCORE = 20.0
+
+# Libellés FR des pièces (affichage du détail par critère).
+_ROOM_FR: dict[str, str] = {
+    "sejour": "Séjour", "salle_a_manger": "Salle à manger", "chambre": "Chambre",
+    "cuisine": "Cuisine", "sdb": "Salle de bain", "wc": "WC", "entree": "Entrée",
+    "circulation": "Circulation", "bureau": "Bureau", "buanderie": "Buanderie",
+    "cellier": "Cellier", "dressing": "Dressing", "garage": "Garage",
+    "technique": "Local technique", "autre": "Autre",
+}
+
+
+def _room_fr(room: object) -> str:
+    val = getattr(getattr(room, "label", None), "value", "autre")
+    return _ROOM_FR.get(val, val.capitalize())
+
 
 # Notes d'inertie par classe (free-cooling nocturne + amortissement).
 _INERTIA_SCORE: dict[InertiaClass, float] = {
@@ -102,6 +118,7 @@ def _ventilation_criterion(
     interior_area = 0.0
     credited = 0.0
     tall = sash_height_m is not None and sash_height_m >= TALL_SASH_M
+    rows: list[list[str]] = []
 
     for room in building.rooms:
         a = room.area_m2
@@ -109,22 +126,35 @@ def _ventilation_criterion(
         if not exposed:
             interior_area += a
             credit = 0.0
+            kind = "Aveugle"
         elif room.is_through:
             through_area += a
             credit = 1.0
+            kind = "Traversante"
         elif tall:
             single_tall_area += a
             credit = 0.6
+            kind = f"Mono-façade, châssis ≥ {TALL_SASH_M:g} m"
         else:
             single_low_area += a
             credit = 0.2  # plancher : exposé mais ni traversant ni châssis haut
+            kind = "Mono-façade basse"
+        base_pts = credit * 100.0
         # Pénalité de plan trop profond (la VNC ne balaie plus le fond).
+        deep = False
         ratio = room.depth_to_height_ratio
         if ratio is not None:
             limit = DEPTH_RATIO_CROSS if room.is_through else DEPTH_RATIO_SINGLE_SIDED
             if ratio > limit:
                 credit *= 0.5
+                deep = True
         credited += a * credit
+        n_open = len(room.openings)
+        n_fac = len(room.exterior_wall_orientations)
+        pts = f"{base_pts:.0f}" + (" × 0,5 (profonde)" if deep else "")
+        rows.append([
+            _room_fr(room), f"{a:.1f}", str(n_fac), str(n_open), kind, pts,
+        ])
 
     score = 100.0 * credited / total_area
     through_pct = 100.0 * through_area / total_area
@@ -150,6 +180,14 @@ def _ventilation_criterion(
                 "Améliorer le balayage : transferts d'air vers les pièces aveugles, "
                 "ouvrants traversants là où c'est possible."
             )
+    breakdown = ScoreBreakdown(
+        columns=["Pièce", "Surface m²", "Façades", "Châssis", "Type", "Points/100"],
+        rows=rows,
+        formula=(
+            "Note = Σ(surface × points) ÷ surface totale = "
+            f"{credited:.0f} ÷ {total_area:.0f} = {score:.0f}/100"
+        ),
+    )
     return ScoreCriterion(
         key="ventilation",
         label="Ventilation (traversant / châssis)",
@@ -161,6 +199,7 @@ def _ventilation_criterion(
             "mono-façade basse 20, aveugle 0 (note divisée par 2 si la pièce est trop profonde)."
         ),
         recommendation=reco,
+        breakdown=breakdown,
     )
 
 
@@ -174,6 +213,7 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
         f"plancher {GLAZING_FLOOR_SCORE:.0f} au-delà. Sans châssis tracé : 0."
     )
 
+    glazing_area: float | None = None
     if envelope.glazing_to_floor_ratio is not None:
         ratio = envelope.glazing_to_floor_ratio
         src = "CPE ou saisie"
@@ -190,19 +230,30 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
                 "Aucun châssis n'a été tracé : ajouter les ouvrants sur les façades pour "
                 "permettre la ventilation naturelle et l'éclairage."
             ),
+            breakdown=ScoreBreakdown(
+                columns=["Élément", "Valeur"],
+                rows=[["Châssis tracés", "aucun"], ["Note", "0/100"]],
+                formula="Sans châssis tracé, le taux de vitrage n'est pas exploitable : note = 0.",
+            ),
         )
     else:
-        glazing = sum(op.area_m2 for r in building.rooms for op in r.openings)
-        ratio = glazing / area
+        glazing_area = sum(op.area_m2 for r in building.rooms for op in r.openings)
+        ratio = glazing_area / area
         src = "baies du plan (hauteur supposée)"
 
     if ratio <= GLAZING_OPTIMAL:
         score = 100.0
+        calc = f"taux {ratio:.1%} ≤ {GLAZING_OPTIMAL:.1%} → note plafonnée à 100"
     elif ratio >= GLAZING_MAX:
         score = GLAZING_FLOOR_SCORE
+        calc = f"taux {ratio:.1%} ≥ {GLAZING_MAX:.0%} → note plancher {GLAZING_FLOOR_SCORE:.0f}"
     else:
         frac = (ratio - GLAZING_OPTIMAL) / (GLAZING_MAX - GLAZING_OPTIMAL)
         score = 100.0 - (100.0 - GLAZING_FLOOR_SCORE) * frac
+        calc = (
+            f"interpolation entre {GLAZING_OPTIMAL:.1%} (100) et {GLAZING_MAX:.0%} "
+            f"({GLAZING_FLOOR_SCORE:.0f}) → {score:.0f}"
+        )
 
     reco: str | None = None
     if ratio > GLAZING_MAX:
@@ -211,6 +262,13 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
             "de déperditions ; prévoir des protections solaires (sud/ouest) ou réduire les "
             "surfaces vitrées."
         )
+    rows = []
+    if glazing_area is not None:
+        rows.append(["Surface vitrée totale", f"{glazing_area:.1f} m²"])
+        rows.append(["Surface au sol", f"{area:.0f} m²"])
+    rows.append(["Taux de vitrage", f"{ratio:.1%}"])
+    rows.append(["Source", src])
+    rows.append(["Note", f"{score:.0f}/100"])
     return ScoreCriterion(
         key="vitrage",
         label="Vitrage (taux de surface vitrée)",
@@ -219,6 +277,9 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
         detail=f"taux de vitrage / plancher = {ratio:.0%} (source : {src})",
         scale=scale_txt,
         recommendation=reco,
+        breakdown=ScoreBreakdown(
+            columns=["Élément", "Valeur"], rows=rows, formula=f"Note : {calc}."
+        ),
     )
 
 
@@ -232,6 +293,14 @@ def _inertia_criterion(building: Building, weight: float) -> ScoreCriterion:
             f"Inertie {cls.value} : free-cooling nocturne moins efficace → renforcer la "
             "surventilation nocturne et les protections solaires (risque de surchauffe l'été)."
         )
+    fr = {
+        InertiaClass.LOURDE: "Lourde", InertiaClass.MOYENNE: "Moyenne",
+        InertiaClass.LEGERE: "Légère",
+    }
+    rows = [
+        [fr.get(c, c.value) + (" (retenue)" if c is cls else ""), f"{_INERTIA_SCORE[c]:.0f}/100"]
+        for c in (InertiaClass.LOURDE, InertiaClass.MOYENNE, InertiaClass.LEGERE)
+    ]
     return ScoreCriterion(
         key="inertie",
         label="Inertie / masse (composition des parois)",
@@ -240,6 +309,11 @@ def _inertia_criterion(building: Building, weight: float) -> ScoreCriterion:
         detail=f"classe d'inertie : {cls.value} (lue du CPE / composition des parois)",
         scale="Lourde = 100, moyenne = 60, légère = 25 (stockage de fraîcheur nocturne).",
         recommendation=reco,
+        breakdown=ScoreBreakdown(
+            columns=["Classe d'inertie", "Note"],
+            rows=rows,
+            formula=f"Classe retenue : {fr.get(cls, cls.value).lower()} → {score:.0f}/100.",
+        ),
     )
 
 
@@ -268,12 +342,17 @@ def _insulation_criterion(envelope: EnvelopeData, weight: float) -> ScoreCriteri
 
     parts: list[float] = []
     bits: list[str] = []
+    rows: list[list[str]] = []
     if u_wall is not None:
-        parts.append(wall_score(u_wall) * 0.7)
+        ws = wall_score(u_wall)
+        parts.append(ws * 0.7)
         bits.append(f"U mur {u_wall:.2f}")
+        rows.append([f"Murs (U = {u_wall:.2f})", f"{ws:.0f}/100", "70 %"])
     if u_win is not None:
-        parts.append(win_score(u_win) * 0.3)
+        vs = win_score(u_win)
+        parts.append(vs * 0.3)
         bits.append(f"Uw {u_win:.2f}")
+        rows.append([f"Vitrages (Uw = {u_win:.2f})", f"{vs:.0f}/100", "30 %"])
     wsum = (0.7 if u_wall is not None else 0.0) + (0.3 if u_win is not None else 0.0)
     score = sum(parts) / wsum if wsum else 60.0
     reco = None
@@ -290,6 +369,11 @@ def _insulation_criterion(envelope: EnvelopeData, weight: float) -> ScoreCriteri
         detail=" ; ".join(bits) + " W/m²K",
         scale="U mur 0,15→100 jusqu'à 1,0→0 (poids 70 %) ; Uw 0,8→100 jusqu'à 2,5→0 (30 %).",
         recommendation=reco,
+        breakdown=ScoreBreakdown(
+            columns=["Paroi", "Sous-note", "Poids"],
+            rows=rows,
+            formula=f"Note = moyenne pondérée des sous-notes = {score:.0f}/100.",
+        ),
     )
 
 

@@ -276,6 +276,21 @@ footer { color: var(--muted); font-size: .85rem; padding: var(--s6) 0 var(--s7);
 .track { background: var(--surface-2); border-radius: var(--pill); height: .7rem; overflow: hidden; }
 .fill { height: 100%; border-radius: var(--pill); }
 .bar-row .val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Critère dépliable : détail par pièce/poste + calcul de la note */
+.crit { border-bottom: 1px solid var(--line); }
+.crit > summary { list-style: none; cursor: pointer; border-bottom: 0; }
+.crit > summary::-webkit-details-marker { display: none; }
+.crit > summary .lab::before { content: '▸'; color: var(--muted); margin-right: .4rem;
+  display: inline-block; transition: transform .15s; }
+.crit[open] > summary .lab::before { transform: rotate(90deg); }
+.crit-detail { padding: .2rem 0 .9rem 1.1rem; }
+.crit-scale { font-size: .82rem; color: var(--muted); margin: .2rem 0 .5rem; }
+.crit-formula { font-size: .84rem; font-weight: 600; color: var(--ink); margin: .4rem 0 0; }
+table.bd { width: 100%; border-collapse: collapse; font-size: .82rem; margin: .2rem 0; }
+table.bd th { text-align: left; color: var(--muted); font-weight: 700; font-size: .7rem;
+  text-transform: uppercase; letter-spacing: .03em; padding: .3rem .45rem; border-bottom: 1px solid var(--line); }
+table.bd td { padding: .3rem .45rem; border-bottom: 1px solid var(--line); }
+table.bd td:not(:first-child) { font-variant-numeric: tabular-nums; }
 .reco { background: var(--primary-soft); border-left: 3px solid var(--primary); padding: .7rem .9rem;
   border-radius: var(--r1); margin: .5rem 0; }
 .flag { background: var(--danger-soft); border-left: 3px solid var(--danger); padding: .7rem .9rem;
@@ -1956,6 +1971,24 @@ def _gauge_svg(score: float, grade: str) -> str:
 </svg>"""
 
 
+def _breakdown_table(bd: object) -> str:
+    """Tableau du détail d'un critère (par pièce / par poste) + calcul de la note."""
+    rows = getattr(bd, "rows", None)
+    if not rows:
+        return ""
+    cols = getattr(bd, "columns", []) or []
+    head = (
+        "<tr>" + "".join(f"<th>{html.escape(c)}</th>" for c in cols) + "</tr>" if cols else ""
+    )
+    body = "".join(
+        "<tr>" + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in row) + "</tr>"
+        for row in rows
+    )
+    formula = getattr(bd, "formula", None)
+    fhtml = f'<p class="crit-formula">{html.escape(formula)}</p>' if formula else ""
+    return f'<table class="bd">{head}{body}</table>{fhtml}'
+
+
 def _criteria_bars(result: StudyResult) -> str:
     if result.score is None:
         return ""
@@ -1964,13 +1997,23 @@ def _criteria_bars(result: StudyResult) -> str:
         color = (
             "#1a9d5a" if c.score >= 75 else "#d9a400" if c.score >= 50 else "#e07b39"
         )
-        rows.append(
-            f'<div class="bar-row" title="{html.escape(c.scale or "")}">'
+        bar = (
             f'<div class="lab">{html.escape(c.label)}<small>{html.escape(c.detail)}</small></div>'
             f'<div class="track"><div class="fill" style="width:{c.score:.0f}%;'
             f'background:{color}"></div></div>'
-            f'<div class="val">{c.score:.0f}</div></div>'
+            f'<div class="val">{c.score:.0f}</div>'
         )
+        table = _breakdown_table(c.breakdown)
+        scale = (
+            f'<p class="crit-scale"><b>Barème :</b> {html.escape(c.scale)}</p>' if c.scale else ""
+        )
+        if table or scale:
+            rows.append(
+                f'<details class="crit"><summary class="bar-row">{bar}</summary>'
+                f'<div class="crit-detail">{scale}{table}</div></details>'
+            )
+        else:
+            rows.append(f'<div class="bar-row">{bar}</div>')
     return '<div class="bars">' + "".join(rows) + "</div>"
 
 
