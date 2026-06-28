@@ -285,7 +285,11 @@ footer { color: var(--muted); font-size: .85rem; padding: var(--s6) 0 var(--s7);
 .crit[open] > summary .lab::before { transform: rotate(90deg); }
 .crit-detail { padding: .2rem 0 .9rem 1.1rem; }
 .crit-summary { font-size: .88rem; color: var(--ink); margin: .2rem 0 .5rem; }
-.crit-scale { font-size: .82rem; color: var(--muted); margin: .2rem 0 .5rem; }
+.crit-scale { font-size: .82rem; color: var(--muted); margin: .55rem 0 .2rem; }
+.crit-list { margin: .15rem 0 .6rem; padding-left: 1.1rem; }
+.crit-list li { margin: .12rem 0; }
+ul.crit-list.crit-summary { color: var(--ink); font-size: .88rem; }
+.crit-scale + ul.crit-list { color: var(--muted); font-size: .82rem; }
 .crit-formula { font-size: .84rem; font-weight: 600; color: var(--ink); margin: .4rem 0 0; }
 table.bd { width: 100%; border-collapse: collapse; font-size: .82rem; margin: .2rem 0; }
 table.bd th { text-align: left; color: var(--muted); font-weight: 700; font-size: .7rem;
@@ -2094,12 +2098,28 @@ def _criteria_bars(result: StudyResult) -> str:
             f'<div class="val">{c.score:.0f}</div>'
         )
         table = _breakdown_table(c.breakdown)
-        scale = (
-            f'<p class="crit-scale"><b>Barème :</b> {html.escape(c.scale)}</p>' if c.scale else ""
-        )
-        detail = (
-            f'<p class="crit-summary">{html.escape(_cap(c.detail))}</p>' if c.detail else ""
-        )
+        # Détail (« résultats ») : puces si disponibles, sinon phrase.
+        pts = getattr(c, "detail_points", None) or []
+        if pts:
+            items = "".join(f"<li>{html.escape(_cap(p))}</li>" for p in pts)
+            detail = f'<ul class="crit-list crit-summary">{items}</ul>'
+        elif c.detail:
+            detail = f'<p class="crit-summary">{html.escape(_cap(c.detail))}</p>'
+        else:
+            detail = ""
+        # Barème : ligne d'intro + puces si disponibles.
+        spts = getattr(c, "scale_points", None) or []
+        if spts:
+            sitems = "".join(f"<li>{html.escape(_cap(p))}</li>" for p in spts)
+            lead = (
+                f'<p class="crit-scale"><b>Barème :</b> {html.escape(c.scale)}</p>'
+                if c.scale else '<p class="crit-scale"><b>Barème</b></p>'
+            )
+            scale = f'{lead}<ul class="crit-list">{sitems}</ul>'
+        elif c.scale:
+            scale = f'<p class="crit-scale"><b>Barème :</b> {html.escape(c.scale)}</p>'
+        else:
+            scale = ""
         if table or scale or detail:
             rows.append(
                 f'<details class="crit"><summary class="bar-row">{bar}</summary>'
