@@ -890,7 +890,7 @@ def render_landing() -> str:
   <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Comment ça marche ?</h2></div>
   <div class="process">{steps_html}</div>
 </section>
-<section>
+<section style="margin-bottom:12rem">
   <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Ce qu'on évalue</h2></div>
   <div class="crit-list-v">{crit_html}</div>
 </section>
