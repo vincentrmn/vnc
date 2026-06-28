@@ -66,13 +66,8 @@ _ICONS: dict[str, str] = {
     "external-link": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 }
 
-# Marque Zéphyr : badge carré vert + Z (SVG inline, hérite des couleurs de marque).
-_ZEPHYR_MARK = (
-    '<svg class="zmark" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">'
-    '<rect width="24" height="24" rx="6" fill="#3a5b42"/>'
-    '<path d="M8 8h8l-8 8h8" fill="none" stroke="#fff" stroke-width="2" '
-    'stroke-linecap="round" stroke-linejoin="round"/></svg>'
-)
+# Logo korr — PLACEHOLDER (wordmark texte). À remplacer par le vrai SVG/PNG fourni.
+_KORR_LOGO = '<span class="korr-logo">korr</span>'
 
 
 def _icon(name: str, size: int = 16) -> str:
@@ -230,10 +225,10 @@ nav { padding: var(--s4) 0; }
 .brand { display: inline-flex; align-items: center; gap: .5rem; font-weight: 700;
   letter-spacing: -.03em; font-size: 1.3rem; color: var(--ink); }
 .brand:hover { text-decoration: none; }
-.brand .brand-korr { color: var(--muted); }
 .brand .brand-x { color: var(--muted); font-weight: 400; margin: 0 .05rem; }
-.brand .zmark { border-radius: 6px; }
 .brand .brand-name { color: var(--ink); }
+.brand .dot-g { color: var(--primary); }
+.korr-logo { font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
 .nav-right { display: flex; align-items: center; gap: var(--s3); }
 .theme-toggle {
   display: inline-grid; place-items: center; width: 2.1rem; height: 2.1rem;
@@ -573,12 +568,13 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 .pillar h3 { margin: .7rem 0 .35rem; font-size: 1.15rem; letter-spacing: -.01em; }
 .pillar p { margin: 0; color: var(--muted); font-size: .95rem; line-height: 1.55; }
 .note-muted { color: var(--muted); font-size: .9rem; margin-top: var(--s5); max-width: 60ch; }
-.crit-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s4);
-  margin-top: var(--s2); }
-.crit-cell { display: flex; flex-direction: column; align-items: center; text-align: center;
-  gap: .7rem; padding: var(--s5) var(--s2); }
+.crit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--s5) var(--s5); margin-top: var(--s2); }
+.crit-cell { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem;
+  padding: var(--s4) 0; }
 .crit-cell .ic { color: var(--primary); }
-.crit-cell .t { font-weight: 600; font-size: 1.02rem; }
+.crit-cell .t { font-weight: 600; font-size: 1.08rem; }
+.crit-cell .d { color: var(--muted); font-size: .92rem; line-height: 1.5; }
 .video-ph { margin: var(--s6) 0 0; aspect-ratio: 16 / 9; width: 100%; border-radius: var(--r2);
   border: 1px dashed var(--line); background: var(--surface-2); display: flex;
   align-items: center; justify-content: center; gap: .6rem; color: var(--muted); }
@@ -625,7 +621,6 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
   .process { grid-template-columns: 1fr; }
   .proc + .proc { border-left: 0; padding-left: 0; }
   .pillars { grid-template-columns: 1fr; gap: var(--s4); }
-  .crit-grid { grid-template-columns: repeat(2, 1fr); }
   .score-hero { grid-template-columns: 1fr; }
 }
 /* ROI à livre ouvert : chaque poste = ligne dépliable (formule + montant dessous) */
@@ -720,11 +715,11 @@ def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> s
     L'onglet navigateur affiche toujours « Zéphyr » ; `title` reste pour la lisibilité
     des appels (et un éventuel usage futur).
     """
-    nav_cta = '<a class="btn" href="/etude">Lancer une étude</a>' if cta else ""
+    nav_cta = '<a class="btn" href="/etude">Lancer une étude !</a>' if cta else ""
     wrap_cls = "wrap wide" if wide else "wrap"
     korr_btn = (
-        '<a class="btn ghost sm" href="https://korr.lu" target="_blank" rel="noopener">'
-        f'korr {_icon("external-link", 14)}</a>'
+        '<a class="btn ghost sm" href="https://korr.lu" target="_blank" rel="noopener" '
+        f'aria-label="Site korr">{_KORR_LOGO} {_icon("external-link", 14)}</a>'
     )
     toggle = (
         '<button type="button" class="theme-toggle" id="themebtn" onclick="toggleTheme()" '
@@ -737,7 +732,7 @@ def _layout(title: str, body: str, *, cta: bool = True, wide: bool = False) -> s
 <script>{_THEME_INIT}</script>
 <style>{_CSS}</style></head><body>
 <nav><div class="{wrap_cls} nav-inner">
-<a class="brand" href="/"><span class="brand-korr">korr</span><span class="brand-x">×</span>{_ZEPHYR_MARK}<span class="brand-name">Zéphyr</span></a>
+<a class="brand" href="/">{_KORR_LOGO}<span class="brand-x">×</span><span class="brand-name">Zéphyr<span class="dot-g">.</span></span></a>
 <div class="nav-right">{toggle}{korr_btn}{nav_cta}</div></div></nav>
 <main class="{wrap_cls}">{body}</main>
 <footer class="wrap site-footer"><span>© {datetime.now().year} korr</span></footer>
@@ -816,8 +811,8 @@ thème-aware et rendu dans le PDF). <code>_icon("nom")</code> dans les pages.</p
 def render_landing() -> str:
     """Landing page : le concept (confort/sobriété/pérennité) puis la méthode."""
     pillars = [
-        ("sun", "Confort", "Un air sain et une température stable toute l'année, "
-         "obtenus par le bâtiment lui-même plutôt que par des systèmes."),
+        ("sun", "Confort", "Un air sain et une température stable toute l'année grâce à "
+         "la ventilation naturelle contrôlée, l'inertie du bâtiment et un pilotage intelligent."),
         ("bulb", "Sobriété", "Pas de ventilation mécanique, peu ou pas de chauffage. "
          "Moins de machines à entretenir, moins de pannes, moins de dépendance."),
         ("building", "Pérennité", "Moins d'équipement à financer puis à remplacer. "
@@ -829,12 +824,12 @@ def render_landing() -> str:
         for ic, t, d in pillars
     )
     steps = [
-        ("01", "Déposez le plan et le passeport", "DXF ou PDF vectoriel ; le passeport "
-         "énergétique pré-remplit l'enveloppe (isolation, étanchéité, inertie)."),
-        ("02", "Tracez, on mesure", "Pièces, ouvrants et façades sur le plan en fond. "
-         "Le code calcule les surfaces et les flux d'air, sans approximation."),
-        ("03", "Aptitude et bilan", "Une note d'aptitude expliquée, des leviers "
-         "d'amélioration, et le bilan financier face à une installation mécanique."),
+        ("01", "Configurez votre bâtiment", "Déposez vos plans (DXF ou PDF) et votre "
+         "passeport énergétique. Zéphyr analyse automatiquement le CPE."),
+        ("02", "Tracez, on mesure !", "Tracez rapidement les pièces importantes : "
+         "Zéphyr s'occupe de l'analyse."),
+        ("03", "Le bilan", "Une note instructive sur le potentiel du bâtiment, des "
+         "pistes d'amélioration et les gains financiers de l'opération."),
     ]
     steps_html = "".join(
         f'<div class="proc"><div class="num">{n}</div><h3>{html.escape(t)}</h3>'
@@ -842,19 +837,25 @@ def render_landing() -> str:
         for n, t, d in steps
     )
     crits = [
-        ("wind", "Ventilation"),
-        ("thermometer", "Inertie"),
-        ("shield", "Isolation"),
-        ("window", "Vitrage"),
-        ("sun", "Protections solaires"),
+        ("wind", "Ventilation", "L'air se renouvelle tout seul, par le tirage "
+         "et les courants traversants."),
+        ("thermometer", "Inertie", "La masse du bâti encaisse les écarts et garde "
+         "la fraîcheur de la nuit."),
+        ("shield", "Isolation", "Moins de pertes : moins de chauffage, "
+         "voire plus du tout."),
+        ("window", "Vitrage", "Assez de lumière, sans transformer les pièces "
+         "en serre."),
+        ("sun", "Protections solaires", "Le soleil d'hiver bienvenu, "
+         "celui d'été tenu dehors."),
     ]
     crit_html = "".join(
-        f'<div class="crit-cell">{_icon(ic, 40)}<div class="t">{html.escape(t)}</div></div>'
-        for ic, t in crits
+        f'<div class="crit-cell">{_icon(ic, 30)}<div class="t">{html.escape(t)}</div>'
+        f'<div class="d">{html.escape(d)}</div></div>'
+        for ic, t, d in crits
     )
     body = f"""
 <section class="hero-xl">
-  <h1 class="display">Le bâtiment qui <em>se régule seul</em>.</h1>
+  <h1 class="display">Créer un <em>meilleur</em> bâti.</h1>
   <p class="lead-xl">Nous pouvons concevoir des bâtiments qui restent sains et tempérés
   toute l'année presque sans équipement : leur masse, leur isolation et des ouvrants
   pilotés suffisent. Moins de machines à installer et à entretenir, peu ou pas de
@@ -877,9 +878,6 @@ def render_landing() -> str:
 <section>
   <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Ce qu'on évalue</h2></div>
   <div class="crit-grid">{crit_html}</div>
-  <p class="note-muted">Le moyen : une ventilation naturelle pilotée par capteurs et
-  ouvrants motorisés, comparée à une ventilation mécanique double-flux dans le bilan
-  financier.</p>
 </section>
 """
     return _layout("Zéphyr — pré-étude de confort naturel", body)
