@@ -155,7 +155,7 @@ Ratios €/m² = ordres de grandeur LU/BE (à confronter à ≥ 2 devis), pas de
 | Critère | Poids | Mesure | Source |
 |---|---|---|---|
 | **Ventilation** | 35 | au prorata de la surface : traversant = 100, mono-façade **châssis ≥ 1,5 m** = 60, mono-façade bas = 20 (plancher), aveugle = 0 ; × 0,5 si plan trop profond (> 2,5× HSP simple-face, > 5× traversant) | plans + hauteurs |
-| **Vitrage** | 20 | **taux de surface vitrée, plus bas = mieux** : ≤ 1/8 (12,5 %) = 100, décroissance linéaire jusqu'au max 20 %, plancher 20 au-delà. **Sans châssis tracé : 0** | CPE / saisie |
+| **Vitrage** | 20 | **taux de surface vitrée, plus bas = mieux** : ≤ 1/8 (12,5 %) = 100, décroissance linéaire jusqu'au max 20 %, plancher 20 au-delà. **Mesuré en priorité depuis les châssis tracés** (Σ surfaces de châssis ÷ surface) ; CPE/saisie en repli ; **sans châssis tracé : 0** | châssis tracés (sinon CPE) |
 | **Inertie** | 25 | masse : lourde 100 / moyenne 60 / légère 25 | **CPE (composition parois)** |
 | **Isolation** | 20 | U mur 0,15→100 … 1,0→0 (70 %) ; Uw 0,8→100 … 2,5→0 (30 %) | CPE |
 

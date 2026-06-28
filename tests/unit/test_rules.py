@@ -77,11 +77,32 @@ def test_traversant_beats_single_sided_low_sash() -> None:
 
 
 def test_excess_glazing_triggers_recommendation() -> None:
+    # Sans châssis tracé : repli sur le ratio CPE/saisie (ici 45 % → surchauffe).
+    no_glass = Building(
+        id="ng",
+        rooms=[Room(id="r", area_m2=25.0, height_m=2.6,
+                    exterior_wall_orientations=[Orientation.S])],
+    )
     env = EnvelopeData(u_wall_w_m2k=0.18, glazing_to_floor_ratio=0.45)
-    score = score_building(_good_building(), env)
+    score = score_building(no_glass, env)
     vit = next(c for c in score.criteria if c.key == "vitrage")
     assert vit.score < 100
     assert vit.recommendation is not None and "surchauffe" in vit.recommendation.lower()
+
+
+def test_glazing_measured_from_traced_windows() -> None:
+    """Le taux vient des châssis tracés (mesuré), pas du CPE, dès qu'il y a des ouvrants."""
+    b = Building(
+        id="g",
+        rooms=[Room(id="r", area_m2=20.0, height_m=2.6,
+                    exterior_wall_orientations=[Orientation.S],
+                    openings=[Opening(id="w", area_m2=5.0, orientation=Orientation.S)])],
+    )
+    # CPE annonce 8 % mais 5 m² / 20 m² = 25 % réels → c'est le mesuré qui prime.
+    env = EnvelopeData(u_wall_w_m2k=0.18, glazing_to_floor_ratio=0.08)
+    vit = next(c for c in score_building(b, env).criteria if c.key == "vitrage")
+    assert "châssis tracés" in vit.detail
+    assert vit.score < 100  # 25 % → mauvais, alors que le CPE 8 % aurait donné 100
 
 
 def test_light_inertia_triggers_recommendation() -> None:

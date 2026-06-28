@@ -213,12 +213,18 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
         f"plancher {GLAZING_FLOOR_SCORE:.0f} au-delà. Sans châssis tracé : 0."
     )
 
+    # Priorité au MESURÉ : si des châssis sont tracés, on calcule le taux depuis leur
+    # surface (Σ surfaces de châssis ÷ surface au sol), pièce par pièce. Le ratio du CPE
+    # n'est utilisé qu'en repli (aucun châssis tracé) ; sinon note nulle.
     glazing_area: float | None = None
-    if envelope.glazing_to_floor_ratio is not None:
+    if has_openings:
+        glazing_area = sum(op.area_m2 for r in building.rooms for op in r.openings)
+        ratio = glazing_area / area
+        src = "châssis tracés (surfaces mesurées)"
+    elif envelope.glazing_to_floor_ratio is not None:
         ratio = envelope.glazing_to_floor_ratio
-        src = "CPE ou saisie"
-    elif not has_openings:
-        # Aucun châssis tracé → pas de vitrage exploitable : note nulle.
+        src = "CPE ou saisie (aucun châssis tracé)"
+    else:
         return ScoreCriterion(
             key="vitrage",
             label="Vitrage (taux de surface vitrée)",
@@ -236,10 +242,6 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
                 formula="Sans châssis tracé, le taux de vitrage n'est pas exploitable : note = 0.",
             ),
         )
-    else:
-        glazing_area = sum(op.area_m2 for r in building.rooms for op in r.openings)
-        ratio = glazing_area / area
-        src = "baies du plan (hauteur supposée)"
 
     if ratio <= GLAZING_OPTIMAL:
         score = 100.0
@@ -262,13 +264,33 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
             "de déperditions ; prévoir des protections solaires (sud/ouest) ou réduire les "
             "surfaces vitrées."
         )
-    rows = []
+
     if glazing_area is not None:
-        rows.append(["Surface vitrée totale", f"{glazing_area:.1f} m²"])
-        rows.append(["Surface au sol", f"{area:.0f} m²"])
-    rows.append(["Taux de vitrage", f"{ratio:.1%}"])
-    rows.append(["Source", src])
-    rows.append(["Note", f"{score:.0f}/100"])
+        # Détail pièce par pièce : surface des châssis ÷ surface de la pièce.
+        rows = [
+            [
+                _room_fr(r),
+                f"{sum(op.area_m2 for op in r.openings):.1f}",
+                f"{r.area_m2:.1f}",
+                (f"{sum(op.area_m2 for op in r.openings) / r.area_m2:.1%}" if r.area_m2 else "—"),
+            ]
+            for r in building.rooms
+        ]
+        breakdown = ScoreBreakdown(
+            columns=["Pièce", "Châssis m²", "Surface m²", "Taux"],
+            rows=rows,
+            formula=(
+                f"Taux global = {glazing_area:.1f} m² de châssis ÷ {area:.0f} m² "
+                f"= {ratio:.1%} → {calc.split('→')[-1].strip()}"
+            ),
+        )
+    else:
+        breakdown = ScoreBreakdown(
+            columns=["Élément", "Valeur"],
+            rows=[["Taux de vitrage", f"{ratio:.1%}"], ["Source", src],
+                  ["Note", f"{score:.0f}/100"]],
+            formula=f"Note : {calc}.",
+        )
     return ScoreCriterion(
         key="vitrage",
         label="Vitrage (taux de surface vitrée)",
@@ -277,9 +299,7 @@ def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float
         detail=f"taux de vitrage / plancher = {ratio:.0%} (source : {src})",
         scale=scale_txt,
         recommendation=reco,
-        breakdown=ScoreBreakdown(
-            columns=["Élément", "Valeur"], rows=rows, formula=f"Note : {calc}."
-        ),
+        breakdown=breakdown,
     )
 
 
