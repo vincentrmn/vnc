@@ -307,7 +307,7 @@ async def submit_cpe(request: Request) -> str:
 
     if not cpe_extraction_available():
         return render_study_form(
-            snap,
+            {**snap, "cpe_mode": "manual"},
             cpe_banner=render_cpe_banner(
                 None,
                 message="Texte du CPE lu, mais l'extraction automatique est indisponible "
@@ -317,8 +317,21 @@ async def submit_cpe(request: Request) -> str:
     try:
         ext = extract_cpe(cpe_text.text)
     except Exception as exc:  # noqa: BLE001 - l'extraction LLM peut échouer
+        low = str(exc).lower()
+        if any(s in low for s in ("credit balance", "quota", "rate limit", "429",
+                                  "billing", "insufficient", "401", "authentication")):
+            msg = (
+                "Le texte du CPE a été lu, mais l'extraction automatique est momentanément "
+                "indisponible (quota ou crédits de l'API épuisés). Passez en « Saisie à la "
+                "main » pour renseigner l'enveloppe — l'étude fonctionne normalement."
+            )
+        else:
+            msg = (
+                "Le texte du CPE a été lu, mais l'extraction automatique a échoué. "
+                "Saisissez l'enveloppe à la main ci-dessous."
+            )
         return render_study_form(
-            snap, cpe_banner=render_cpe_banner(None, message=f"Extraction CPE échouée : {exc}")
+            {**snap, "cpe_mode": "manual"}, cpe_banner=render_cpe_banner(None, message=msg)
         )
     return render_study_form(
         {**snap, **_cpe_prefill(ext)}, cpe_banner=render_cpe_banner(ext), cpe_extracted=True
