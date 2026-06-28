@@ -964,6 +964,7 @@ def render_study_form(
     )
     depth_sel = select("q_depth", [("compact", "Compactes"), ("profond", "Profondes")], "compact")
     extracted = cpe_extracted
+    cpe_manual = str(p.get("cpe_mode", "cpe")) == "manual"
     mode = str(p.get("etude_mode", "complete"))
     rapide_ck = " checked" if mode == "rapide" else ""
     complete_ck = "" if mode == "rapide" else " checked"
@@ -1020,8 +1021,8 @@ def render_study_form(
 <div class="card" style="margin:1.2rem 0">
   <h2>{_icon("file", 20)}Passeport énergétique</h2>
   <div class="seg" role="tablist">
-    <label class="on"><input type="radio" name="cpe_mode" value="cpe" checked> Upload du passeport</label>
-    <label><input type="radio" name="cpe_mode" value="manual"> Saisie à la main</label>
+    <label class="{"" if cpe_manual else "on"}"><input type="radio" name="cpe_mode" value="cpe"{"" if cpe_manual else " checked"}> Upload du passeport</label>
+    <label class="{"on" if cpe_manual else ""}"><input type="radio" name="cpe_mode" value="manual"{" checked" if cpe_manual else ""}> Saisie à la main</label>
   </div>
 
   <div id="cpe-upload" style="margin-top:1rem">

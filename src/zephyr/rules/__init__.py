@@ -121,8 +121,13 @@ def _building_sash_height(building: Building) -> float | None:
 def _ventilation_criterion(
     building: Building, sash_height_m: float | None, weight: float
 ) -> ScoreCriterion:
-    """Note la capacité géométrique à ventiler naturellement (traversant / châssis)."""
-    total_area = building.total_floor_area_m2 or 1.0
+    """Note la capacité géométrique à ventiler naturellement (traversant / châssis).
+
+    Ne juge que les **pièces de vie** : les pièces de service (WC, sdb, circulation,
+    technique…) ne pénalisent pas la note (les pièces humides ont une extraction
+    dédiée, hors VNC) — elles restent affichées comme « non comptées » pour la
+    transparence.
+    """
     through_area = 0.0
     single_tall_area = 0.0
     single_low_area = 0.0
@@ -130,9 +135,20 @@ def _ventilation_criterion(
     credited = 0.0
     tall = sash_height_m is not None and sash_height_m >= TALL_SASH_M
     rows: list[list[str]] = []
+    living = [r for r in building.rooms if _is_living(r)]
+    counted = living or list(building.rooms)  # garde-fou : aucune pièce de vie → tout compte
+    counted_ids = {id(r) for r in counted}
+    living_area = sum(r.area_m2 for r in counted) or 1.0
 
     for room in building.rooms:
         a = room.area_m2
+        n_open = len(room.openings)
+        n_fac = len(room.exterior_wall_orientations)
+        if id(room) not in counted_ids:
+            # Pièce de service : affichée mais non comptée dans la note.
+            rows.append([_room_fr(room), f"{a:.1f}", str(n_fac), str(n_open),
+                         "Service", "non comptée"])
+            continue
         exposed = bool(room.exterior_wall_orientations) or bool(room.openings)
         if not exposed:
             interior_area += a
@@ -160,18 +176,14 @@ def _ventilation_criterion(
                 credit *= 0.5
                 deep = True
         credited += a * credit
-        n_open = len(room.openings)
-        n_fac = len(room.exterior_wall_orientations)
         pts = f"{base_pts:.0f}" + (" × 0,5 (profonde)" if deep else "")
-        rows.append([
-            _room_fr(room), f"{a:.1f}", str(n_fac), str(n_open), kind, pts,
-        ])
+        rows.append([_room_fr(room), f"{a:.1f}", str(n_fac), str(n_open), kind, pts])
 
-    score = 100.0 * credited / total_area
-    through_pct = 100.0 * through_area / total_area
+    score = 100.0 * credited / living_area
+    through_pct = 100.0 * through_area / living_area
 
     def pct(x: float) -> str:
-        return f"{100.0 * x / total_area:.0f}%"
+        return f"{100.0 * x / living_area:.0f}%"
 
     detail = (
         f"{through_pct:.0f}% de la surface traversante, "
@@ -195,8 +207,9 @@ def _ventilation_criterion(
         columns=["Pièce", "Surface m²", "Façades", "Châssis", "Type", "Points/100"],
         rows=rows,
         formula=(
-            "Note = Σ(surface × points) ÷ surface totale = "
-            f"{credited:.0f} ÷ {total_area:.0f} = {score:.0f}/100"
+            "Note = Σ(surface × points) ÷ surface des pièces de vie = "
+            f"{credited:.0f} ÷ {living_area:.0f} = {score:.0f}/100 "
+            "(pièces de service exclues)"
         ),
     )
     return ScoreCriterion(
@@ -206,8 +219,9 @@ def _ventilation_criterion(
         weight=weight,
         detail=detail,
         scale=(
-            f"Au prorata des surfaces : traversante 100, châssis ≥ {TALL_SASH_M:g} m 60, "
-            "mono-façade basse 20, aveugle 0 (note divisée par 2 si la pièce est trop profonde)."
+            f"Au prorata des surfaces des pièces de vie : traversante 100, châssis ≥ "
+            f"{TALL_SASH_M:g} m 60, mono-façade basse 20, aveugle 0 (note divisée par 2 si la "
+            "pièce est trop profonde). Pièces de service (WC, sdb, circulation…) non comptées."
         ),
         recommendation=reco,
         breakdown=breakdown,
