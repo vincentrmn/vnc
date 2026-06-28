@@ -514,6 +514,16 @@ kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--
 .room-card.sel { border-color: var(--primary); box-shadow: inset 0 0 0 2px var(--primary); }
 .room-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; min-width: 0; }
 .room-head select { padding: .2rem; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+/* PDF par étage : liste ordonnée des fichiers accumulés (avec retrait) */
+.floors-ol { margin: .5rem 0 0; padding: 0; list-style: none; display: flex;
+  flex-direction: column; gap: .3rem; }
+.floors-ol li { display: flex; align-items: center; gap: .6rem; font-size: .85rem;
+  background: var(--surface-2); border-radius: var(--r1); padding: .35rem .6rem; }
+.floors-ol .ff-lvl { font-weight: 700; color: var(--primary); min-width: 2.6rem; }
+.floors-ol .ff-nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.floors-ol .ff-rm { background: transparent; border: 0; color: var(--muted); cursor: pointer;
+  font-size: .9rem; line-height: 1; padding: .1rem .2rem; }
+.floors-ol .ff-rm:hover { color: var(--danger); }
 /* Extraction CPE : overlay + barre de progression « trickle » (durée inconnue) */
 .cpe-ovl { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 300;
   display: flex; align-items: center; justify-content: center; }
@@ -1030,6 +1040,38 @@ _CONFIG_JS = """
     if(!form || !input.files || !input.files.length){ return; }
     snapshotCfg(); showCpeProgress(); form.submit();   // recharge la page sur l'état extrait
   }
+  function escapeHtml(s){ return (''+s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  // PDF par étage : un input file natif REMPLACE sa sélection à chaque ouverture.
+  // On accumule donc dans un DataTransfer (ajout progressif), avec liste ordonnée + retrait.
+  function setupFloors(){
+    var inp=document.getElementById('in-floors'); if(!inp){ return; }
+    var listEl=document.getElementById('floors-list');
+    var dt=new DataTransfer();
+    function key(f){ return f.name+'|'+f.size; }
+    function render(){
+      if(!listEl){ return; }
+      if(!dt.files.length){ listEl.innerHTML=''; return; }
+      var rows='';
+      for(var i=0;i<dt.files.length;i++){
+        var lvl=(i===0)?'RdC':('R+'+i);
+        rows+='<li><span class="ff-lvl">'+lvl+'</span><span class="ff-nm">'+escapeHtml(dt.files[i].name)+
+          '</span><button type="button" class="ff-rm" data-k="'+i+'" aria-label="Retirer">\\u2715</button></li>';
+      }
+      listEl.innerHTML='<ol class="floors-ol">'+rows+'</ol>';
+      Array.prototype.forEach.call(listEl.querySelectorAll('.ff-rm'), function(b){
+        b.onclick=function(){ var idx=parseInt(b.dataset.k,10), keep=new DataTransfer();
+          for(var j=0;j<dt.files.length;j++){ if(j!==idx){ keep.items.add(dt.files[j]); } }
+          dt=keep; inp.files=dt.files; render(); gate(); };
+      });
+    }
+    inp.addEventListener('change', function(){
+      var seen={}; for(var i=0;i<dt.files.length;i++){ seen[key(dt.files[i])]=1; }
+      for(var k=0;k<inp.files.length;k++){ var f=inp.files[k];
+        if(!seen[key(f)]){ dt.items.add(f); seen[key(f)]=1; } }
+      inp.files=dt.files; render(); gate();   // l'assignation ne re-déclenche pas 'change'
+    });
+  }
   // Remplace le bouton natif (texte abrégé selon l'OS) par un libellé clair en français.
   function enhanceFiles(){
     Array.prototype.forEach.call(document.querySelectorAll('input[type=file]'), function(inp){
@@ -1066,7 +1108,7 @@ _CONFIG_JS = """
     // pour la restaurer (sinon retour en « complète » et perte des saisies).
     var cf=document.getElementById('cpe-form');
     if(cf){ cf.addEventListener('submit', snapshotCfg); }
-    enhanceFiles(); sync(); syncMode();
+    setupFloors(); enhanceFiles(); sync(); syncMode();
   });
 })();
 """
@@ -1170,6 +1212,8 @@ def render_study_form(
   <div class="field" style="margin-bottom:0">
     <div class="lab">Ou un PDF par niveau, du bas vers le haut (1<sup>er</sup> fichier = RdC)</div>
     <input type="file" name="floor_pdfs" accept=".pdf" multiple form="mainform" id="in-floors">
+    <p class="hint" style="margin:.35rem 0 0">Ajoutez-les en une fois ou un par un : ils s'accumulent (ordre = du bas vers le haut).</p>
+    <div id="floors-list"></div>
   </div>
 </div>
 

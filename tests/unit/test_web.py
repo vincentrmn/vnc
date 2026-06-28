@@ -90,7 +90,7 @@ def test_study_form_cpe_or_manual_toggle() -> None:
 
 
 def test_cpe_auto_extracts_and_gates_on_extraction() -> None:
-    """Upload CPE : extraction auto (plus de bouton), barre de progression, blocage tant que non extrait."""
+    """Upload CPE : extraction auto, barre de progression, blocage si non extrait."""
     h = render_study_form()
     assert "autoExtractCpe" in h  # extraction déclenchée au change du fichier
     assert ">Extraire<" not in h  # plus de bouton manuel
