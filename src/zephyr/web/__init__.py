@@ -568,13 +568,12 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 .pillar h3 { margin: .7rem 0 .35rem; font-size: 1.15rem; letter-spacing: -.01em; }
 .pillar p { margin: 0; color: var(--muted); font-size: .95rem; line-height: 1.55; }
 .note-muted { color: var(--muted); font-size: .9rem; margin-top: var(--s5); max-width: 60ch; }
-.crit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: var(--s5) var(--s5); margin-top: var(--s2); }
-.crit-cell { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem;
-  padding: var(--s4) 0; }
-.crit-cell .ic { color: var(--primary); }
-.crit-cell .t { font-weight: 600; font-size: 1.08rem; }
-.crit-cell .d { color: var(--muted); font-size: .92rem; line-height: 1.5; }
+.crit-list-v { border-top: 1px solid var(--line); margin-top: var(--s2); }
+.crit-item { display: grid; grid-template-columns: auto 1fr; gap: var(--s4); align-items: start;
+  padding: var(--s4) 0; border-bottom: 1px solid var(--line); }
+.crit-item .ic { color: var(--primary); margin-top: .15rem; }
+.crit-item .t { font-weight: 600; font-size: 1.08rem; }
+.crit-item .d { color: var(--muted); font-size: .95rem; line-height: 1.5; margin-top: .15rem; }
 .video-ph { margin: var(--s6) 0 0; aspect-ratio: 16 / 9; width: 100%; border-radius: var(--r2);
   border: 1px dashed var(--line); background: var(--surface-2); display: flex;
   align-items: center; justify-content: center; gap: .6rem; color: var(--muted); }
@@ -837,29 +836,26 @@ def render_landing() -> str:
         for n, t, d in steps
     )
     crits = [
-        ("wind", "Ventilation", "L'air se renouvelle tout seul, par le tirage "
-         "et les courants traversants."),
-        ("thermometer", "Inertie", "La masse du bâti encaisse les écarts et garde "
-         "la fraîcheur de la nuit."),
-        ("shield", "Isolation", "Moins de pertes : moins de chauffage, "
-         "voire plus du tout."),
-        ("window", "Vitrage", "Assez de lumière, sans transformer les pièces "
-         "en serre."),
-        ("sun", "Protections solaires", "Le soleil d'hiver bienvenu, "
-         "celui d'été tenu dehors."),
+        ("wind", "Ventilation", "La capacité du bâtiment à renouveler l'air "
+         "naturellement, par tirage thermique et circulation entre les façades."),
+        ("thermometer", "Inertie", "La masse des parois, qui amortit les variations "
+         "de température et restitue la fraîcheur stockée pendant la nuit."),
+        ("shield", "Isolation", "Le niveau d'isolation de l'enveloppe : moins de "
+         "déperditions, donc un besoin de chauffage réduit."),
+        ("window", "Vitrage", "La proportion de surfaces vitrées : suffisante pour "
+         "l'éclairage naturel, sans provoquer de surchauffe."),
+        ("sun", "Protections solaires", "La présence de protections (stores, "
+         "brise-soleil, casquettes) limitant les apports solaires en été."),
     ]
     crit_html = "".join(
-        f'<div class="crit-cell">{_icon(ic, 30)}<div class="t">{html.escape(t)}</div>'
-        f'<div class="d">{html.escape(d)}</div></div>'
+        f'<div class="crit-item">{_icon(ic, 26)}<div><div class="t">{html.escape(t)}</div>'
+        f'<div class="d">{html.escape(d)}</div></div></div>'
         for ic, t, d in crits
     )
     body = f"""
 <section class="hero-xl">
   <h1 class="display">Créer un <em>meilleur</em> bâti.</h1>
-  <p class="lead-xl">Nous pouvons concevoir des bâtiments qui restent sains et tempérés
-  toute l'année presque sans équipement : leur masse, leur isolation et des ouvrants
-  pilotés suffisent. Moins de machines à installer et à entretenir, peu ou pas de
-  chauffage. Zéphyr estime si votre projet en est capable, et les gains associés.</p>
+  <p class="lead-xl">Des bâtiments sains et tempérés toute l'année, presque sans équipement.</p>
   <div class="cta-row">
     <a class="btn" href="/etude">Lancer une étude</a>
     <a class="btn ghost" href="#methode">Comment ça marche ?</a>
@@ -877,7 +873,7 @@ def render_landing() -> str:
 </section>
 <section>
   <div class="sec-head"><span class="idx">{_icon("arrow-right", 18)}</span><h2>Ce qu'on évalue</h2></div>
-  <div class="crit-grid">{crit_html}</div>
+  <div class="crit-list-v">{crit_html}</div>
 </section>
 """
     return _layout("Zéphyr — pré-étude de confort naturel", body)
