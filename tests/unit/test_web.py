@@ -33,6 +33,17 @@ def test_landing_has_value_prop_and_cta() -> None:
     assert "opposable" in h  # disclaimer
 
 
+def test_landing_leads_with_concept_not_jargon() -> None:
+    """La home vend le concept (confort/sobriété/pérennité), pas le jargon « VNC »."""
+    h = render_landing()
+    assert "Le confort" in h  # hero orienté résultat
+    for pillar in ("Confort", "Sobriété", "Pérennité"):
+        assert pillar in h
+    assert "peu ou pas de chauffage" in h  # promesse chauffage nuancée
+    # Le sigle technique ne doit plus piloter le titre principal (reste possible en bas de page).
+    assert "<em>sans la machinerie</em>" in h
+
+
 def test_design_system_charte() -> None:
     """DA KORR : Helvetica Neue, vert #3a5b42, tokens, bascule clair/sombre."""
     from zephyr.web import render_styleguide
