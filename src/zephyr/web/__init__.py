@@ -543,6 +543,10 @@ kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--
 .wintab { width: 100%; border-collapse: collapse; font-size: .8rem; }
 .wintab th { text-align: left; font-weight: 600; color: var(--muted); font-size: .72rem; padding: .1rem .2rem; }
 .wintab td { padding: .12rem .2rem; }
+.wintab .wref { font-weight: 700; color: var(--primary); white-space: nowrap; }
+.wintab tr.wprot td { padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
+.wprot-lbl { color: var(--muted); font-size: .72rem; margin-right: .45rem; }
+.wprot-sel { width: auto; min-width: 60%; padding: .15rem; }
 .iconbtn { border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer;
   border-radius: .35rem; padding: .15rem .35rem; font-size: .8rem; line-height: 0; }
 .iconbtn:hover { color: var(--danger); border-color: var(--danger); }
@@ -1438,7 +1442,7 @@ function panel(){
     '<label>Façades extérieures</label><div class="chips">'+orChips+'</div>'+
     '<label>Châssis '+(through(r)?'<span class="badge-ok">traversant</span>':'<span style="color:#888;font-size:.8rem">mono-façade</span>')+'</label>'+
     '<div id="p-wins">'+wins+'</div>'+
-    '<button type="button" id="p-add" class="btn ghost" style="margin-top:.5rem">+ châssis</button>';
+    '<button type="button" id="p-add" class="btn ghost" style="margin-top:.5rem">+ ajouter</button>';
   wire();
 }
 function wire(){
@@ -1623,6 +1627,13 @@ function render(){
       var ln=new Konva.Line({points:[seg[0][0],seg[0][1],seg[1][0],seg[1][1]], stroke:(op.openable?"#1a73e8":"#9aa3ad"), strokeWidth:pm(0.09), lineCap:"round"});
       ln.on("click tap",function(e){ if(mode==="idle"){ e.cancelBubble=true; B.rooms[i].openings.splice(k,1); render(); } });
       shapeLayer.add(ln);
+      // Référence du châssis (C1, C2…) posée juste à l'extérieur de la façade.
+      var wmx=(seg[0][0]+seg[1][0])/2, wmy=(seg[0][1]+seg[1][1])/2;
+      var wox=wmx-dcx, woy=wmy-dcy, wol=Math.hypot(wox,woy)||1;
+      var ct=new Konva.Text({x:wmx+wox/wol*pm(0.55), y:wmy+woy/wol*pm(0.55), text:"C"+(k+1),
+        fontSize:pm(0.32), fontStyle:"700", fontFamily:"Helvetica Neue, Arial, sans-serif",
+        fill:"#1a73e8", listening:false});
+      ct.offsetX(ct.width()/2); ct.offsetY(ct.height()/2); shapeLayer.add(ct);
     });
   });
   if(selGrp){ selGrp.moveToTop(); }  // pièce sélectionnée toujours au-dessus (contour visible)
@@ -1778,14 +1789,17 @@ function roomlist(){
       var fopts=ORS.map(function(o){ return '<option value="'+o+'"'+(o===op.orientation?" selected":"")+">"+(ORF[o]||o)+"</option>"; }).join("");
       var cur=op.solar_protection||"aucune";
       var popts=PROT.map(function(p){ return '<option value="'+p[0]+'"'+(p[0]===cur?" selected":"")+">"+p[1]+"</option>"; }).join("");
-      return '<tr><td><select data-wi="'+i+'" data-wj="'+j+'" data-wf="facade">'+fopts+'</select></td>'+
+      return '<tr>'+
+        '<td class="wref">C'+(j+1)+'</td>'+
+        '<td><select data-wi="'+i+'" data-wj="'+j+'" data-wf="facade">'+fopts+'</select></td>'+
         '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="w" type="number" step="0.1" value="'+fmt(op._w!=null?op._w:0)+'" style="width:54px;padding:.15rem"></td>'+
         '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="h" type="number" step="0.1" value="'+fmt(op._h!=null?op._h:0)+'" style="width:54px;padding:.15rem"></td>'+
         '<td style="color:var(--muted)">'+fmt(op.area_m2)+'</td>'+
-        '<td><select data-wi="'+i+'" data-wj="'+j+'" data-wf="prot">'+popts+'</select></td>'+
-        '<td><button type="button" data-wdel="'+i+"_"+j+'" class="iconbtn" title="supprimer">'+ICON_X+'</button></td></tr>';
+        '<td><button type="button" data-wdel="'+i+"_"+j+'" class="iconbtn" title="supprimer">'+ICON_X+'</button></td></tr>'+
+        '<tr class="wprot"><td></td><td colspan="5"><span class="wprot-lbl">Protection</span>'+
+          '<select class="wprot-sel" data-wi="'+i+'" data-wj="'+j+'" data-wf="prot">'+popts+'</select></td></tr>';
     }).join("");
-    var wintable=wins?('<table class="wintab"><tr><th>façade</th><th>l</th><th>h</th><th>m²</th><th>protection</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">Aucun châssis</div>';
+    var wintable=wins?('<table class="wintab"><tr><th>réf</th><th>Façade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">Aucun châssis</div>';
     return '<div class="room-card'+(i===sel?" sel":"")+'" data-sel="'+i+'">'+
       '<div class="room-head">'+
         '<span class="room-no">'+(i+1)+'</span>'+
@@ -1798,7 +1812,7 @@ function roomlist(){
       '</div>'+
       '<div class="room-sec"><span class="room-seclbl">Façades</span><div class="chips">'+chips+'</div></div>'+
       '<div class="room-sec"><span class="room-seclbl">Châssis</span>'+wintable+
-        '<button type="button" data-pick="'+i+'" class="btn ghost mini">+ châssis</button></div>'+
+        '<button type="button" data-pick="'+i+'" class="btn ghost mini">+ ajouter</button></div>'+
     "</div>";
   }).join("");
   Array.prototype.forEach.call(d.querySelectorAll("[data-sel]"),function(c){ c.onclick=function(e){ if(e.target.closest("select,input,button,label")){ return; } sel=parseInt(c.dataset.sel); if(multi){ goToLevel(B.rooms[sel].level); } render(); }; });
@@ -1896,7 +1910,7 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("t-finish").onclick=function(){ finishRoom(); };
   document.getElementById("t-cal").onclick=function(){ setMode(mode==="calibrate"?"idle":"calibrate"); };
   document.getElementById("t-win").onclick=function(){
-    if(sel<0){ var el=document.getElementById("modebanner"); if(el){ el.className="stage-mode"; el.textContent="Sélectionnez d'abord une pièce (sur le plan ou via « + châssis »), puis tracez sur sa façade."; } return; }
+    if(sel<0){ var el=document.getElementById("modebanner"); if(el){ el.className="stage-mode"; el.textContent="Sélectionnez d'abord une pièce (sur le plan ou via « + ajouter »), puis tracez sur sa façade."; } return; }
     setMode(mode==="window"?"idle":"window");
   };
   var tt=document.getElementById("tab-tools"), tr=document.getElementById("tab-rooms");
