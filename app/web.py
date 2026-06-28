@@ -366,11 +366,13 @@ async def resume_study(study: UploadFile | None = File(default=None)) -> str:  #
         )
     hidden = _hidden_fields(cfg, None)
     note = "Étude reprise depuis un fichier — vérifiez/éditez puis calculez."
-    # On rouvre l'éditeur de tracé complet (mêmes outils que la création), sur un fond
-    # vierge : l'ingénieur retrouve ses pièces et peut continuer l'édition. Repli sur
-    # l'éditeur de validation si la géométrie n'a pas de polygones exploitables.
+    # On rouvre l'éditeur de tracé complet (mêmes outils que la création) : les plans
+    # (images de fond + échelle) sont restaurés s'ils ont été sauvegardés, sinon fond
+    # vierge à l'échelle des pièces. Repli sur l'éditeur de validation si pas de polygones.
+    floors_raw = data.get("floors") or []
+    floors = floors_raw if isinstance(floors_raw, list) else []
     if any(r.polygon for r in building.rooms):
-        return render_tracing([], hidden, building=building)
+        return render_tracing(floors, hidden, building=building)
     return render_validation(building, hidden, [note])
 
 
