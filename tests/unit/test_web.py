@@ -37,7 +37,7 @@ def test_landing_has_value_prop_and_cta() -> None:
 def test_landing_leads_with_concept_not_jargon() -> None:
     """La home vend le concept (confort/sobriété/pérennité), pas le jargon « VNC »."""
     h = render_landing()
-    assert "se régule seul" in h  # hero orienté concept
+    assert "Créer un" in h and "<em>meilleur</em>" in h  # titre hero
     for pillar in ("Confort", "Sobriété", "Pérennité"):
         assert pillar in h
     assert "peu ou pas de chauffage" in h  # promesse chauffage nuancée
