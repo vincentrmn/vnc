@@ -49,6 +49,18 @@ class OpeningKind(StrEnum):
     GRILLE = "grille"
 
 
+class SolarProtection(StrEnum):
+    """Protection solaire d'un châssis (atténue la surchauffe estivale)."""
+
+    AUCUNE = "aucune"
+    STORE_INT = "store_interieur"
+    VOLET = "volet"
+    NATURELLE = "naturelle"  # masque / végétation
+    CASQUETTE = "casquette"  # débord / auvent
+    STORE_EXT = "store_exterieur"
+    BRISE_SOLEIL = "brise_soleil"
+
+
 class RoomLabel(StrEnum):
     """Étiquette sémantique d'une pièce (sortie du labelling LLM)."""
 
@@ -100,6 +112,10 @@ class Opening(BaseModel):
         gt=0,
         le=1,
         description="Fraction de la surface réellement utile au débit d'air.",
+    )
+    solar_protection: SolarProtection = Field(
+        default=SolarProtection.AUCUNE,
+        description="Protection solaire du châssis (brise-soleil, store ext., casquette…).",
     )
 
     @property

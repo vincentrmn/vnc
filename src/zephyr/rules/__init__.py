@@ -79,15 +79,37 @@ _INERTIA_SCORE: dict[InertiaClass, float] = {
     InertiaClass.LEGERE: 25.0,
 }
 
+# Affichage cardinal en français (la valeur stockée reste le code Orientation).
+ORIENT_FR: dict[str, str] = {
+    "N": "N", "NE": "NE", "E": "E", "SE": "SE", "S": "S", "SW": "SO", "W": "O", "NW": "NO",
+}
+# Risque de surchauffe par orientation (1 = fort soleil ; Sud/Ouest les pires).
+_SOLAR_RISK: dict[str, float] = {
+    "S": 1.0, "SW": 1.0, "W": 0.85, "SE": 0.85, "E": 0.5, "NW": 0.4, "NE": 0.3, "N": 0.15,
+}
+# Efficacité d'atténuation par type de protection solaire.
+_SOLAR_EFFICACY: dict[str, float] = {
+    "aucune": 0.0, "store_interieur": 0.35, "volet": 0.55, "naturelle": 0.5,
+    "casquette": 0.6, "store_exterieur": 0.8, "brise_soleil": 0.85,
+}
+_SOLAR_FR: dict[str, str] = {
+    "aucune": "Aucune", "store_interieur": "Store intérieur", "volet": "Volet",
+    "naturelle": "Masque / végétation", "casquette": "Casquette / débord",
+    "store_exterieur": "Store extérieur", "brise_soleil": "Brise-soleil",
+}
+# Châssis « à risque » exposés sans protection efficace (gros warning).
+_SOLAR_HIGH_RISK = 0.85
+
 
 @dataclass
 class ScoreWeights:
     """Pondérations des critères (somme libre ; normalisées au calcul)."""
 
-    ventilation: float = 35.0
-    vitrage: float = 20.0
-    inertie: float = 25.0
+    ventilation: float = 30.0
+    vitrage: float = 15.0
+    inertie: float = 20.0
     isolation: float = 20.0
+    protection_solaire: float = 15.0
 
 
 @dataclass
@@ -421,6 +443,71 @@ def _insulation_criterion(envelope: EnvelopeData, weight: float) -> ScoreCriteri
     )
 
 
+def _solar_criterion(building: Building, weight: float) -> ScoreCriterion:
+    """Note les protections solaires des châssis (anti-surchauffe estivale).
+
+    Un châssis exposé (Sud/Ouest) sans protection efficace est lourdement pénalisé ;
+    une bonne protection (store ext., brise-soleil, casquette) relève la note. Les
+    châssis Nord sont quasi neutres (peu de risque). Pondéré par surface de châssis.
+    """
+    rows: list[list[str]] = []
+    weighted = 0.0
+    total = 0.0
+    worst: tuple[float, str, str] | None = None  # (risk, pièce, façade) sans protection
+    for room in building.rooms:
+        for op in room.openings:
+            o = getattr(op.orientation, "value", str(op.orientation))
+            prot = getattr(op.solar_protection, "value", str(op.solar_protection))
+            risk = _SOLAR_RISK.get(o, 0.5)
+            eff = _SOLAR_EFFICACY.get(prot, 0.0)
+            wscore = 100.0 * (1.0 - risk * (1.0 - eff))
+            area = op.area_m2
+            weighted += wscore * area
+            total += area
+            rows.append([
+                _room_fr(room), ORIENT_FR.get(o, o), f"{area:.1f}",
+                _SOLAR_FR.get(prot, prot), f"{wscore:.0f}",
+            ])
+            if risk >= _SOLAR_HIGH_RISK and eff < 0.4 and (worst is None or risk > worst[0]):
+                worst = (risk, _room_fr(room), ORIENT_FR.get(o, o))
+
+    if total <= 0:
+        return ScoreCriterion(
+            key="protection_solaire", label="Protections solaires (anti-surchauffe)",
+            score=100.0, weight=weight,
+            detail="aucun châssis tracé (pas de risque de surchauffe à protéger)",
+            scale="Châssis exposés (Sud/Ouest) sans protection = note basse ; protégés = haute.",
+            breakdown=ScoreBreakdown(columns=["Élément", "Valeur"],
+                                     rows=[["Châssis", "aucun"], ["Note", "100/100"]],
+                                     formula="Aucun châssis : pas de surchauffe à maîtriser."),
+        )
+
+    score = weighted / total
+    reco = None
+    if worst is not None:
+        reco = (
+            f"⚠ {worst[1]} : châssis exposé {worst[2]} sans protection solaire efficace : "
+            "fort risque de surchauffe estivale. Ajouter un store extérieur, un brise-soleil "
+            "ou une casquette (priorité Sud/Ouest)."
+        )
+    return ScoreCriterion(
+        key="protection_solaire", label="Protections solaires (anti-surchauffe)",
+        score=round(score, 1), weight=weight,
+        detail=f"protection moyenne pondérée des châssis = {score:.0f}/100",
+        scale=(
+            "Par châssis : note = 100 − risque(orientation) × (1 − efficacité protection). "
+            "Sud/Ouest = risque fort ; brise-soleil / store extérieur = forte atténuation ; "
+            "Nord = quasi neutre."
+        ),
+        recommendation=reco,
+        breakdown=ScoreBreakdown(
+            columns=["Pièce", "Façade", "Châssis m²", "Protection", "Note"],
+            rows=rows,
+            formula=f"Note = moyenne des notes châssis pondérée par surface = {score:.0f}/100.",
+        ),
+    )
+
+
 def _site_flags(site: SiteContext) -> _SiteFlags:
     flags = _SiteFlags()
     if site.pollution_high:
@@ -454,6 +541,7 @@ def score_building(
         _glazing_criterion(building, envelope, w.vitrage),
         _inertia_criterion(building, w.inertie),
         _insulation_criterion(envelope, w.isolation),
+        _solar_criterion(building, w.protection_solaire),
     ]
     wsum = sum(c.weight for c in criteria) or 1.0
     global_score = sum(c.score * c.weight for c in criteria) / wsum

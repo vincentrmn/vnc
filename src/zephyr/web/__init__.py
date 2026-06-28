@@ -963,6 +963,12 @@ def render_study_form(
         "pvc",
     )
     depth_sel = select("q_depth", [("compact", "Compactes"), ("profond", "Profondes")], "compact")
+    solar_sel = select(
+        "q_solar",
+        [("aucune", "Aucune"), ("partielle", "Partielle (stores int.)"),
+         ("bonne", "Bonne (stores ext. / brise-soleil)")],
+        "partielle",
+    )
     extracted = cpe_extracted
     cpe_manual = str(p.get("cpe_mode", "cpe")) == "manual"
     mode = str(p.get("etude_mode", "complete"))
@@ -1015,6 +1021,7 @@ def render_study_form(
     <div class="field"><div class="lab">Part de surface traversante (%)</div>
       <input type="number" name="q_through" value="{v("q_through", "40")}" min="0" max="100" step="5" form="mainform"></div>
     <div class="field"><div class="lab">Pièces plutôt…</div>{depth_sel}</div>
+    <div class="field"><div class="lab">Protections solaires (façades exposées)</div>{solar_sel}</div>
   </div>
 </div>
 
@@ -1378,6 +1385,10 @@ var LABELS=[["sejour","Séjour"],["salle_a_manger","Salle à manger"],["chambre"
   ["cellier","Cellier"],["dressing","Dressing"],["garage","Garage"],
   ["technique","Local technique"],["autre","Autre"]];
 var LABMAP={}; LABELS.forEach(function(p){ LABMAP[p[0]]=p[1]; });
+// (valeur SolarProtection, libellé) — protection solaire d'un châssis.
+var PROT=[["aucune","Aucune"],["store_interieur","Store int."],["volet","Volet"],
+  ["naturelle","Masque/végé."],["casquette","Casquette"],["store_exterieur","Store ext."],
+  ["brise_soleil","Brise-soleil"]];
 var COLORS={sejour:"#cfe8cf",salle_a_manger:"#d7ecd0",chambre:"#cfe0f5",cuisine:"#f5e6cf",
   sdb:"#cfeef0",wc:"#e6cff5",entree:"#efe7d6",circulation:"#eeeeee",bureau:"#f5cfd6",
   buanderie:"#d6eef0",cellier:"#e8e2d2",dressing:"#efd9e8",garage:"#dcdcdc",technique:"#dddddd",autre:"#f0f0f0"};
@@ -1624,7 +1635,7 @@ function addWindow(a,b){
   var o=nearestOri(nx,ny), h=lastSash, w=Math.max(lenM,0.1);
   var op={id:r.id+"_w"+r.openings.length, kind:"window", orientation:o,
     area_m2:Math.max(w*h,0.1), sill_height_m:0.9, head_height_m:0.9+h,
-    openable:true, free_area_ratio:0.5, _w:w, _h:h, _seg:[a,b]};
+    openable:true, free_area_ratio:0.5, solar_protection:"aucune", _w:w, _h:h, _seg:[a,b]};
   r.openings.push(op);
   if(r.exterior_wall_orientations.indexOf(o)<0){ r.exterior_wall_orientations.push(o); }
   return {ri:sel, oi:r.openings.length-1};
@@ -1661,13 +1672,16 @@ function roomlist(){
     var chips=ORS.map(function(o){ return '<label class="chip"><input type="checkbox" data-i="'+i+'" data-or="'+o+'"'+(r.exterior_wall_orientations.indexOf(o)>=0?" checked":"")+">"+(ORF[o]||o)+"</label>"; }).join("");
     var wins=(r.openings||[]).map(function(op,j){
       var fopts=ORS.map(function(o){ return '<option value="'+o+'"'+(o===op.orientation?" selected":"")+">"+(ORF[o]||o)+"</option>"; }).join("");
+      var cur=op.solar_protection||"aucune";
+      var popts=PROT.map(function(p){ return '<option value="'+p[0]+'"'+(p[0]===cur?" selected":"")+">"+p[1]+"</option>"; }).join("");
       return '<tr><td><select data-wi="'+i+'" data-wj="'+j+'" data-wf="facade">'+fopts+'</select></td>'+
         '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="w" type="number" step="0.1" value="'+fmt(op._w!=null?op._w:0)+'" style="width:54px;padding:.15rem"></td>'+
         '<td><input data-wi="'+i+'" data-wj="'+j+'" data-wf="h" type="number" step="0.1" value="'+fmt(op._h!=null?op._h:0)+'" style="width:54px;padding:.15rem"></td>'+
         '<td style="color:var(--muted)">'+fmt(op.area_m2)+'</td>'+
+        '<td><select data-wi="'+i+'" data-wj="'+j+'" data-wf="prot">'+popts+'</select></td>'+
         '<td><button type="button" data-wdel="'+i+"_"+j+'" class="iconbtn" title="supprimer">'+ICON_X+'</button></td></tr>';
     }).join("");
-    var wintable=wins?('<table class="wintab"><tr><th>façade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">Aucun châssis</div>';
+    var wintable=wins?('<table class="wintab"><tr><th>façade</th><th>l</th><th>h</th><th>m²</th><th>protection</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">Aucun châssis</div>';
     return '<div class="room-card'+(i===sel?" sel":"")+'" data-sel="'+i+'">'+
       '<div class="room-head">'+
         '<span class="room-no">'+(i+1)+'</span>'+
@@ -1692,6 +1706,7 @@ function roomlist(){
   Array.prototype.forEach.call(d.querySelectorAll("[data-wf]"),function(el){ el.onchange=function(){
     var rm=B.rooms[parseInt(el.dataset.wi)], op=rm.openings[parseInt(el.dataset.wj)];
     if(el.dataset.wf==="facade"){ op.orientation=el.value; if(rm.exterior_wall_orientations.indexOf(el.value)<0){ rm.exterior_wall_orientations.push(el.value); } render(); return; }
+    if(el.dataset.wf==="prot"){ op.solar_protection=el.value; render(); return; }
     var v=parseFloat(el.value); if(!(v>0)){ return; }
     if(el.dataset.wf==="w"){ setWinWidth(op,v); } else { op._h=v; lastSash=v; winRecalc(op); }
     render();
@@ -1884,6 +1899,9 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
       puis glisser le long d'une façade (longueur = largeur ; une bulle demande la hauteur).</li>
       <li><b>Naviguer</b> : <kbd>molette</kbd> zoom, glisser = déplacer le plan,
       <kbd>Échap</kbd> quitte l'outil en cours.</li>
+      <li><b>Inutile de tracer</b> WC, salle de bain, circulation, garage, sous-sols :
+      concentrez-vous sur les <b>pièces de vie et bureaux</b> (les locaux de service
+      ne comptent pas dans les notes ventilation / vitrage).</li>
     </ol>
   </details>
 </div>

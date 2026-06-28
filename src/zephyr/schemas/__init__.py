@@ -13,6 +13,7 @@ from zephyr.schemas.building import (
     Orientation,
     Room,
     RoomLabel,
+    SolarProtection,
 )
 from zephyr.schemas.cpe import CpeExtraction
 from zephyr.schemas.results import (
@@ -38,6 +39,7 @@ __all__ = [
     "Orientation",
     "Room",
     "RoomLabel",
+    "SolarProtection",
     # cpe
     "CpeExtraction",
     # study

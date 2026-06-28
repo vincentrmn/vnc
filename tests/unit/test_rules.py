@@ -10,6 +10,7 @@ from zephyr.schemas import (
     Opening,
     Orientation,
     Room,
+    RoomLabel,
     SiteContext,
     Verdict,
 )
@@ -103,6 +104,26 @@ def test_glazing_measured_from_traced_windows() -> None:
     vit = next(c for c in score_building(b, env).criteria if c.key == "vitrage")
     assert "châssis tracés" in vit.detail
     assert vit.score < 100  # 25 % → mauvais, alors que le CPE 8 % aurait donné 100
+
+
+def test_solar_protection_criterion() -> None:
+    """Châssis Sud sans protection = note basse + warning ; protégé = note haute."""
+    from zephyr.schemas import SolarProtection
+
+    def south(prot: SolarProtection) -> Building:
+        return Building(id="b", rooms=[Room(
+            id="s", label=RoomLabel.SEJOUR, area_m2=25.0, height_m=2.6,
+            exterior_wall_orientations=[Orientation.S],
+            openings=[Opening(id="w", area_m2=4.0, orientation=Orientation.S,
+                              head_height_m=2.3, solar_protection=prot)],
+        )])
+
+    bad = next(c for c in score_building(south(SolarProtection.AUCUNE), _ENV).criteria
+               if c.key == "protection_solaire")
+    good = next(c for c in score_building(south(SolarProtection.BRISE_SOLEIL), _ENV).criteria
+                if c.key == "protection_solaire")
+    assert bad.score < 20 and bad.recommendation is not None
+    assert good.score > 70
 
 
 def test_light_inertia_triggers_recommendation() -> None:
