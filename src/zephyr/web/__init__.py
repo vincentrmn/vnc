@@ -2061,6 +2061,10 @@ document.addEventListener("DOMContentLoaded",function(){
   var se=document.querySelector('input[name=sash]'); if(se){ var sv=parseFloat(se.value); if(sv>0){ lastSash=sv; } }
   window.addEventListener("resize",function(){ fitStage(); render(); });
   if(window.TRACE && T.building){ loadResumed(); }   // reprise d'une étude téléchargée
+  // Dépose les plans pour la page de résultats (« Enregistrer le projet » avec le plan).
+  var vf=document.getElementById("valform");
+  if(vf){ vf.addEventListener("submit", function(){
+    try{ sessionStorage.setItem("zephyr_floors", JSON.stringify(T.floors||[])); }catch(e){} }); }
   setBanner(); applyFloor(); render();
 });
 """
@@ -2093,7 +2097,9 @@ function downloadStudy(){
     if(el.name!=='building_json'){ cfg[el.name]=(el.type==='checkbox')?(el.checked?'on':''):el.value; }
   });
   var bj=(document.getElementById('building_json')||{}).value||'';
-  var data={zephyr_study:1, config:cfg, building_json:bj};
+  // On embarque les plans (images de fond + échelle) pour les retrouver à la reprise.
+  var floors=(window.TRACE&&window.TRACE.floors)?window.TRACE.floors:[];
+  var data={zephyr_study:1, config:cfg, building_json:bj, floors:floors};
   var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='etude-zephyr.json'; document.body.appendChild(a); a.click(); a.remove();
@@ -2109,7 +2115,9 @@ function downloadProject(){
     if(el.name!=='building_json'){ cfg[el.name]=(el.type==='checkbox')?(el.checked?'on':''):el.value; }
   }); }
   var bj=(document.getElementById('building_json')||{}).value||'';
-  var data={zephyr_study:1, config:cfg, building_json:bj};
+  // Plans embarqués via sessionStorage (déposés par l'éditeur avant le calcul).
+  var floors=[]; try { floors=JSON.parse(sessionStorage.getItem('zephyr_floors')||'[]'); } catch(e){ floors=[]; }
+  var data={zephyr_study:1, config:cfg, building_json:bj, floors:floors};
   var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='projet-zephyr.json'; document.body.appendChild(a); a.click(); a.remove();
