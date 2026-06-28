@@ -66,8 +66,23 @@ _ICONS: dict[str, str] = {
     "external-link": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 }
 
-# Logo korr — PLACEHOLDER (wordmark texte). À remplacer par le vrai SVG/PNG fourni.
-_KORR_LOGO = '<span class="korr-logo">korr</span>'
+# Logo korr — wordmark vectoriel inline (carré-dans-cercle dans le « o », point + carré).
+# `currentColor` → reprend la couleur de marque (var(--primary)) et s'adapte au thème.
+_KORR_LOGO = (
+    '<svg class="korr-logo" viewBox="0 0 1260 470" xmlns="http://www.w3.org/2000/svg" '
+    'fill="currentColor" role="img" aria-label="korr">'
+    '<polygon points="112,185 300,80 300,195 112,300"/>'
+    '<polygon points="112,185 300,360 300,470 112,300"/>'
+    '<rect x="0" y="0" width="112" height="470"/>'
+    '<circle cx="480" cy="300" r="150" fill="none" stroke="currentColor" stroke-width="110"/>'
+    '<rect x="415" y="235" width="130" height="130"/>'
+    '<rect x="700" y="150" width="112" height="320"/>'
+    '<path d="M812 270 Q812 150 917 150" fill="none" stroke="currentColor" stroke-width="100"/>'
+    '<rect x="960" y="150" width="112" height="320"/>'
+    '<path d="M1072 270 Q1072 150 1150 150" fill="none" stroke="currentColor" stroke-width="100"/>'
+    '<rect x="1165" y="10" width="95" height="95"/>'
+    '<rect x="1165" y="375" width="95" height="95"/></svg>'
+)
 
 
 def _icon(name: str, size: int = 16) -> str:
@@ -228,7 +243,9 @@ nav { padding: var(--s4) 0; }
 .brand .brand-x { color: var(--muted); font-weight: 400; margin: 0 .05rem; }
 .brand .brand-name { color: var(--ink); }
 .brand .dot-g { color: var(--primary); }
-.korr-logo { font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+.korr-logo { height: .9em; width: auto; display: inline-block; vertical-align: -.12em;
+  color: var(--primary); }
+.btn .korr-logo { height: .95em; }
 .nav-right { display: flex; align-items: center; gap: var(--s3); }
 .theme-toggle {
   display: inline-grid; place-items: center; width: 2.1rem; height: 2.1rem;
