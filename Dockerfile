@@ -2,13 +2,21 @@
 # Build reproductible via uv + extras (app = FastAPI/uvicorn/multipart,
 # cao = ezdxf/shapely, viz = matplotlib, pdf = pymupdf, llm = SDK Anthropic pour
 # l'extraction CPE — actif si ANTHROPIC_API_KEY est défini). Pas de WeasyPrint.
+# Chromium est installé pour l'export PDF (impression de la page de résultats
+# telle quelle, graphes inclus — cf. zephyr.report.pdf_chrome).
 FROM python:3.11-slim
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    ZEPHYR_CHROMIUM=/usr/bin/chromium
 
 RUN pip install --no-cache-dir uv
+
+# Chromium headless + polices pour le rendu PDF.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium fonts-liberation fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

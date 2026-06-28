@@ -2002,22 +2002,19 @@ function downloadProject(){
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='projet-zephyr.json'; document.body.appendChild(a); a.click(); a.remove();
 }
-// PDF = impression de la page TELLE QUELLE (même design), tous les dépliants ouverts,
-// en thème clair. On s'appuie sur l'impression native du navigateur (Enregistrer en PDF)
-// + une feuille @media print (cf. _CSS) : zéro dépendance, fidélité totale.
+// PDF = téléchargement 1 clic. Le serveur imprime la page de résultats elle-même
+// via Chromium headless (même design, graphes, dépliants ouverts) et renvoie le PDF
+// en pièce jointe. On poste le formulaire dans une iframe cachée → pas de navigation.
 function exportPdf(){
-  var html=document.documentElement, prevTheme=html.getAttribute('data-theme');
-  var opened=[];
-  Array.prototype.forEach.call(document.querySelectorAll('details'), function(d){
-    if(!d.open){ d.open=true; opened.push(d); } });
-  html.setAttribute('data-theme','light');
-  function restore(){
-    opened.forEach(function(d){ d.open=false; });
-    if(prevTheme){ html.setAttribute('data-theme', prevTheme); }
-    window.removeEventListener('afterprint', restore);
-  }
-  window.addEventListener('afterprint', restore);
-  setTimeout(function(){ window.print(); }, 60);
+  var f=document.getElementById('valform'); if(!f){ return; }
+  var ifr=document.getElementById('pdf-sink');
+  if(!ifr){ ifr=document.createElement('iframe'); ifr.id='pdf-sink'; ifr.name='pdf-sink';
+    ifr.style.display='none'; document.body.appendChild(ifr); }
+  var act=f.getAttribute('action'), tgt=f.getAttribute('target');
+  f.setAttribute('action','/etude/rapport'); f.setAttribute('target','pdf-sink');
+  f.submit();
+  if(act){ f.setAttribute('action',act); } else { f.removeAttribute('action'); }
+  if(tgt){ f.setAttribute('target',tgt); } else { f.removeAttribute('target'); }
 }
 function exportCsv(){
   var el=document.getElementById('calc-data');

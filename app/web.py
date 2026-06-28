@@ -24,6 +24,7 @@ from zephyr.builders import parametric_building, representative_building
 from zephyr.climate import synthetic_climate
 from zephyr.presets import penalty_params_for
 from zephyr.report import render_report
+from zephyr.report.pdf_chrome import html_to_pdf
 from zephyr.roi import ROIParameters
 from zephyr.schemas import (
     Building,
@@ -520,6 +521,24 @@ async def export_report(request: Request) -> Response:
     if cfg.get("ovr_num_ouvrants_override", ""):
         from_geometry = False
     result = _study_for_report(building, cfg, flags, from_geometry=from_geometry)
+
+    # PDF = la page de résultats elle-même, imprimée par Chromium headless (même design,
+    # graphes inclus), avec tous les dépliants ouverts. Fidélité totale, 1 clic.
+    page = render_results(result, building=building, cfg=cfg)
+    expand = (
+        '<script>document.querySelectorAll("details").forEach('
+        "function(d){d.open=true;});</script></body>"
+    )
+    page = page.replace("</body>", expand, 1)
+    pdf = html_to_pdf(page)
+    if pdf is not None:
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="rapport-vnc.pdf"'},
+        )
+
+    # Repli : WeasyPrint (ou HTML) si Chromium est indisponible dans l'environnement.
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         out = Path(tmp.name)
     written = render_report(result, out, building=building)

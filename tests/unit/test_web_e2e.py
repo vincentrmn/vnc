@@ -202,6 +202,20 @@ def test_config_has_resume_and_editor_has_download() -> None:
     assert "downloadStudy()" in render_tracing(floors, "")
 
 
+def test_export_report_returns_document() -> None:
+    """L'export PDF renvoie un document (PDF via Chromium, ou repli)."""
+    r = client.post(
+        "/etude/rapport",
+        data={"project_type": "logement", "area": "800", "levels": "2", "inertia": "lourde"},
+    )
+    assert r.status_code == 200
+    ctype = r.headers.get("content-type", "")
+    assert "application/pdf" in ctype or "text/html" in ctype
+    # Si Chromium est présent (image Docker / dev), c'est bien un vrai PDF en pièce jointe.
+    if "application/pdf" in ctype:
+        assert r.content[:5] == b"%PDF-"
+
+
 def test_cpe_upload_rejects_scan() -> None:
     pytest.importorskip("fitz")
     import tempfile
