@@ -270,11 +270,28 @@ def _cpe_prefill(ext: object) -> dict[str, str]:
 
 
 @app.post("/etude/cpe", response_class=HTMLResponse)
-async def submit_cpe(cpe: UploadFile | None = File(default=None)) -> str:  # noqa: B008
-    """Extrait un CPE (PDF vectoriel) et pré-remplit le formulaire (humain valide)."""
-    raw = await cpe.read() if cpe is not None else b""
+async def submit_cpe(request: Request) -> str:
+    """Extrait un CPE (PDF vectoriel) et pré-remplit le formulaire (humain valide).
+
+    Restaure la config courante (mode rapide/complet + saisies) via ``cfg_snapshot``
+    pour ne pas repartir en « complète » et perdre les estimations après extraction.
+    """
+    import json
+
+    form = await request.form()
+    snap: dict[str, str] = {}
+    snap_raw = form.get("cfg_snapshot")
+    if snap_raw:
+        try:
+            snap = {k: str(v) for k, v in json.loads(str(snap_raw)).items()}
+        except (ValueError, TypeError):
+            snap = {}
+    cpe = form.get("cpe")
+    raw = await cpe.read() if (cpe is not None and not isinstance(cpe, str)) else b""
     if not raw:
-        return render_study_form(cpe_banner=render_cpe_banner(None, message="Aucun CPE déposé."))
+        return render_study_form(
+            snap, cpe_banner=render_cpe_banner(None, message="Aucun CPE déposé.")
+        )
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(raw)
         tmp_path = Path(tmp.name)
@@ -284,25 +301,28 @@ async def submit_cpe(cpe: UploadFile | None = File(default=None)) -> str:  # noq
     try:
         cpe_text = parse_cpe(tmp_path)
     except Exception as exc:  # noqa: BLE001 - surface l'erreur (scan refusé, etc.)
-        return render_study_form(cpe_banner=render_cpe_banner(None, message=str(exc)))
+        return render_study_form(snap, cpe_banner=render_cpe_banner(None, message=str(exc)))
 
     from zephyr.llm import cpe_extraction_available, extract_cpe
 
     if not cpe_extraction_available():
         return render_study_form(
+            snap,
             cpe_banner=render_cpe_banner(
                 None,
                 message="Texte du CPE lu, mais l'extraction automatique est indisponible "
                 "(clé API absente sur ce déploiement). Saisissez l'enveloppe à la main.",
-            )
+            ),
         )
     try:
         ext = extract_cpe(cpe_text.text)
     except Exception as exc:  # noqa: BLE001 - l'extraction LLM peut échouer
         return render_study_form(
-            cpe_banner=render_cpe_banner(None, message=f"Extraction CPE échouée : {exc}")
+            snap, cpe_banner=render_cpe_banner(None, message=f"Extraction CPE échouée : {exc}")
         )
-    return render_study_form(_cpe_prefill(ext), cpe_banner=render_cpe_banner(ext))
+    return render_study_form(
+        {**snap, **_cpe_prefill(ext)}, cpe_banner=render_cpe_banner(ext), cpe_extracted=True
+    )
 
 
 @app.post("/etude/reprendre", response_class=HTMLResponse)

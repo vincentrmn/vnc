@@ -48,6 +48,22 @@ def test_quick_mode_flow_to_results() -> None:
     assert 'id="valform"' not in r.text  # pas d'hypothèses éditables en rapide
 
 
+def test_cpe_extraction_preserves_mode_and_inputs() -> None:
+    """L'extraction CPE ne doit pas rebasculer en « complète » ni perdre les saisies rapides."""
+    import io
+    import json as _json
+
+    snap = _json.dumps({"etude_mode": "rapide", "area": "800", "q_through": "60"})
+    r = client.post(
+        "/etude/cpe",
+        files={"cpe": ("x.pdf", io.BytesIO(b"pas un vrai pdf"), "application/pdf")},
+        data={"cfg_snapshot": snap},
+    )
+    assert r.status_code == 200
+    assert 'name="etude_mode" value="rapide"' in r.text and "checked" in r.text
+    assert 'name="area" value="800"' in r.text  # estimations conservées
+
+
 def test_dxf_flow_validation_then_results() -> None:
     assert _DXF.exists(), "lancer scripts/make_sample_dxf.py"
     with _DXF.open("rb") as fh:
