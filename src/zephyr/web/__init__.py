@@ -839,7 +839,8 @@ _CONFIG_JS = """
 (function(){
   function sync(){
     var r=document.querySelector('input[name=cpe_mode]:checked'), m=r?r.value:'cpe';
-    Array.prototype.forEach.call(document.querySelectorAll('.seg label'), function(l){
+    // Ne cibler QUE le toggle CPE (pas .modeseg, qui partage la classe .seg).
+    Array.prototype.forEach.call(document.querySelectorAll('.seg:not(.modeseg) label'), function(l){
       l.classList.toggle('on', l.querySelector('input').value===m);
     });
     var up=document.getElementById('cpe-upload'), env=document.getElementById('envelope-block'),
@@ -866,8 +867,8 @@ _CONFIG_JS = """
     if(est){ est.style.display=rapide?'':'none'; }
     var mh=document.getElementById('mode-hint');
     if(mh){ mh.textContent=rapide
-      ? "Rapide : quelques estimations, sans plan ni traçage — résultat indicatif (tendance)."
-      : "Complète : import d'un plan puis traçage des pièces — analyse fine pièce par pièce."; }
+      ? "Rapide : quelques estimations, sans plan ni traçage, pour un résultat indicatif (tendance)."
+      : "Complète : import d'un plan puis traçage des pièces, pour une analyse fine pièce par pièce."; }
     gate();
   }
   function markCpe(){ window.__CPE_TOUCHED__=true; gate(); }
