@@ -66,22 +66,19 @@ _ICONS: dict[str, str] = {
     "external-link": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 }
 
-# Logo korr — wordmark vectoriel inline (carré-dans-cercle dans le « o », point + carré).
+# Logo korr OFFICIEL (fichier Drive « Korr Logo Positif NBKG SVG.svg »), recadré sur
+# le seul wordmark « korr. » (baseline « intelligence for the built world » retirée).
 # `currentColor` → reprend la couleur de marque (var(--primary)) et s'adapte au thème.
 _KORR_LOGO = (
-    '<svg class="korr-logo" viewBox="0 0 1260 470" xmlns="http://www.w3.org/2000/svg" '
+    '<svg class="korr-logo" viewBox="26 -1 292.2 104.5" xmlns="http://www.w3.org/2000/svg" '
     'fill="currentColor" role="img" aria-label="korr">'
-    '<polygon points="112,185 300,80 300,195 112,300"/>'
-    '<polygon points="112,185 300,360 300,470 112,300"/>'
-    '<rect x="0" y="0" width="112" height="470"/>'
-    '<circle cx="480" cy="300" r="150" fill="none" stroke="currentColor" stroke-width="110"/>'
-    '<rect x="415" y="235" width="130" height="130"/>'
-    '<rect x="700" y="150" width="112" height="320"/>'
-    '<path d="M812 270 Q812 150 917 150" fill="none" stroke="currentColor" stroke-width="100"/>'
-    '<rect x="960" y="150" width="112" height="320"/>'
-    '<path d="M1072 270 Q1072 150 1150 150" fill="none" stroke="currentColor" stroke-width="100"/>'
-    '<rect x="1165" y="10" width="95" height="95"/>'
-    '<rect x="1165" y="375" width="95" height="95"/></svg>'
+    '<path d="M27.14,0h21.37v55.23l23.81-27.54h24.82l-28.83,32.71,31.27,39.59h-24.1l-20.94-26.68-6.02,6.46v20.23h-21.37V0Z"/>'
+    '<path d="M137.6,25.53c22.24,0,40.17,16.93,40.17,38.3s-17.93,38.3-40.17,38.3-40.17-16.93-40.17-38.3,17.79-38.3,40.17-38.3ZM137.6,84.69c11.54,0,20.7-9.16,20.7-20.86s-9.17-20.86-20.7-20.86-20.7,9.32-20.7,20.86,9.01,20.86,20.7,20.86Z"/>'
+    '<path d="M188.95,27.69h21.37v9.9c3.3-7.32,11.05-11.48,20.94-11.48,2.01,0,4.45.29,5.6.43v20.08c-2.01-.43-4.45-.72-7.17-.72-12.19,0-19.37,7.03-19.37,18.79v35.29h-21.37V27.69Z"/>'
+    '<path d="M247.62,27.69h21.37v9.9c3.3-7.32,11.05-11.48,20.94-11.48,2.01,0,4.45.29,5.6.43v20.08c-2.01-.43-4.45-.72-7.17-.72-12.19,0-19.37,7.03-19.37,18.79v35.29h-21.37V27.69Z"/>'
+    '<rect x="295.53" y="4.92" width="21.63" height="21.63"/>'
+    '<rect x="126.78" y="53.02" width="21.63" height="21.63"/>'
+    '<circle cx="306.35" cy="89.17" r="10.82"/></svg>'
 )
 
 
