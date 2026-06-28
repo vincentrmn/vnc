@@ -1459,7 +1459,7 @@ function panel(){
     '<label>Label</label><select id="p-label">'+labOpts+'</select>'+
     '<label>Niveau</label><input id="p-level" type="number" value="'+r.level+'">'+
     '<label>Façades extérieures</label><div class="chips">'+orChips+'</div>'+
-    '<label>Châssis '+(through(r)?'<span class="badge-ok">traversant</span>':'<span style="color:#888;font-size:.8rem">mono-façade</span>')+'</label>'+
+    '<label>Châssis '+(through(r)?'<span class="badge-ok">Traversant</span>':'<span style="color:#888;font-size:.8rem">mono-façade</span>')+'</label>'+
     '<div id="p-wins">'+wins+'</div>'+
     '<button type="button" id="p-add" class="btn ghost" style="margin-top:.5rem">+ Ajouter</button>';
   wire();
@@ -1679,7 +1679,7 @@ function updateScaleInfo(){
 var MODE_BANNER={
   rect:"Glissez en diagonale pour tracer un rectangle. Échap pour quitter.",
   draw:"Cliquez les coins ; re-cliquez le 1er point ou « Terminer la pièce ». Échap pour quitter.",
-  window:"Glissez le long de la façade de la pièce sélectionnée. Échap pour quitter.",
+  window:"Tracez le châssis sur la façade de la pièce sélectionnée (longueur = largeur de la baie). Échap pour quitter.",
   calibrate:"Cliquez deux points d'une cote connue. Échap pour quitter."
 };
 var MODEBTN={draw:"t-draw", rect:"t-rect", window:"t-win", calibrate:"t-cal"};
@@ -1832,7 +1832,7 @@ function roomlist(){
         '<button type="button" data-del="'+i+'" class="iconbtn" title="Supprimer la pièce">'+ICON_X+'</button>'+
         '<select data-lab="'+i+'">'+lab+'</select>'+
         '<b>'+fmt(r.area_m2)+' m²</b>'+
-        (through(r)?'<span class="badge-ok">traversant</span>':'')+
+        (through(r)?'<span class="badge-ok">Traversant</span>':'')+
         '<span class="grow"></span>'+
         '<label class="nivlbl">Niveau <input data-lvl="'+i+'" type="number" value="'+r.level+'" style="width:42px;padding:.15rem"></label>'+
       '</div>'+
@@ -1936,7 +1936,7 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("t-finish").onclick=function(){ finishRoom(); };
   document.getElementById("t-cal").onclick=function(){ setMode(mode==="calibrate"?"idle":"calibrate"); };
   document.getElementById("t-win").onclick=function(){
-    if(sel<0){ var el=document.getElementById("modebanner"); if(el){ el.className="stage-mode"; el.textContent="Sélectionnez d'abord une pièce (sur le plan ou via « + Ajouter »), puis tracez sur sa façade."; } return; }
+    if(sel<0){ var el=document.getElementById("modebanner"); if(el){ el.className="stage-mode"; el.textContent="Sélectionnez d'abord une pièce (sur le plan ou via « + Ajouter »), puis tracez le châssis sur sa façade."; } return; }
     setMode(mode==="window"?"idle":"window");
   };
   var tt=document.getElementById("tab-tools"), tr=document.getElementById("tab-rooms");
@@ -2058,7 +2058,7 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
       ou <b>Point par point</b> puis cliquer les coins (re-cliquer le 1<sup>er</sup>
       point ferme la pièce). Une bulle s'ouvre pour valider et nommer la pièce.</li>
       <li><b>Façades &amp; châssis</b> : sélectionner une pièce, bouton <b>Châssis</b>,
-      puis glisser le long d'une façade (longueur = largeur ; une bulle demande la hauteur).</li>
+      puis tracer le châssis sur la façade (longueur = largeur de la baie ; une bulle demande la hauteur).</li>
       <li><b>Naviguer</b> : <kbd>molette</kbd> zoom, glisser = déplacer le plan,
       <kbd>Échap</kbd> quitte l'outil en cours.</li>
       <li><b>Inutile de tracer</b> WC, salle de bain, circulation, garage, sous-sols :
@@ -2095,7 +2095,7 @@ def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
       <div class="pgroup">
         <div class="ptitle">Châssis</div>
         <button type="button" class="btn ghost" id="t-win">{_icon("window")} Tracer un châssis</button>
-        <span class="lbl" style="font-weight:400">Sélectionnez une pièce, puis glissez sur sa façade.</span>
+        <span class="lbl" style="font-weight:400">Sélectionnez une pièce, puis tracez le châssis sur sa façade.</span>
       </div>
       <div class="pgroup">
         <div class="ptitle">Vue</div>
