@@ -269,10 +269,11 @@ footer { color: var(--muted); font-size: .85rem; padding: var(--s6) 0 var(--s7);
 .badge { display: inline-block; padding: .3rem .8rem; border-radius: var(--r1); color: #fff;
   font-weight: 700; font-size: .9rem; }
 .bars { margin: var(--s4) 0; }
-.bar-row { display: grid; grid-template-columns: 220px 1fr 48px; gap: .7rem;
-  align-items: center; padding: .45rem 0; border-bottom: 1px solid var(--line); }
-.bar-row .lab { font-weight: 600; font-size: .92rem; }
-.track { background: var(--surface-2); border-radius: var(--pill); height: .7rem; overflow: hidden; }
+.bar-row { display: grid; grid-template-columns: 1fr 200px 44px; gap: .7rem;
+  align-items: center; padding: .4rem 0; border-bottom: 1px solid var(--line); }
+.bar-row .lab { font-weight: 600; font-size: .92rem; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.track { background: var(--surface-2); border-radius: var(--pill); height: .55rem; overflow: hidden; }
 .fill { height: 100%; border-radius: var(--pill); }
 .bar-row .val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 /* Critère dépliable : détail par pièce/poste + calcul de la note */
@@ -2055,6 +2056,11 @@ def _gauge_svg(score: float, grade: str) -> str:
 </svg>"""
 
 
+def _cap(text: str) -> str:
+    """Majuscule en début de phrase (laisse les chiffres / sigles intacts)."""
+    return text[:1].upper() + text[1:] if text else text
+
+
 def _breakdown_table(bd: object) -> str:
     """Tableau du détail d'un critère (par pièce / par poste) + calcul de la note."""
     rows = getattr(bd, "rows", None)
@@ -2092,7 +2098,7 @@ def _criteria_bars(result: StudyResult) -> str:
             f'<p class="crit-scale"><b>Barème :</b> {html.escape(c.scale)}</p>' if c.scale else ""
         )
         detail = (
-            f'<p class="crit-summary">{html.escape(c.detail)}</p>' if c.detail else ""
+            f'<p class="crit-summary">{html.escape(_cap(c.detail))}</p>' if c.detail else ""
         )
         if table or scale or detail:
             rows.append(
