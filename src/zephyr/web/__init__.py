@@ -357,10 +357,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 .form-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
   flex-wrap: wrap; }
 .resume { position: relative; }
-.resume > summary { cursor: pointer; color: var(--muted); font-size: .88rem; list-style: none;
-  display: inline-flex; align-items: center; gap: .35rem; }
+.resume > summary { cursor: pointer; color: var(--ink); font-size: .9rem; font-weight: 600;
+  list-style: none; display: inline-flex; align-items: center; gap: .4rem;
+  border: 1px solid var(--line); border-radius: var(--r1); padding: .55rem 1rem;
+  background: var(--surface); transition: border-color .15s, background .15s, color .15s; }
 .resume > summary::-webkit-details-marker { display: none; }
-.resume > summary:hover { color: var(--ink); }
+.resume > summary:hover, .resume[open] > summary { color: var(--primary-strong);
+  border-color: var(--primary); background: var(--primary-soft); }
 /* Panneau flottant : s'ouvre par-dessus, ne décale aucun contenu */
 .resume-form { position: absolute; right: 0; top: 1.8rem; z-index: 30; width: max-content; max-width: 340px;
   display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; background: var(--surface);
@@ -511,10 +514,12 @@ kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--
 .room-card.sel { border-color: var(--primary); box-shadow: inset 0 0 0 2px var(--primary); }
 .room-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; min-width: 0; }
 .room-head select { padding: .2rem; flex: 0 1 auto; min-width: 0; max-width: 100%; }
-/* Bulle de validation au tracé d'une pièce */
-.trace-pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--primary);
-  border-radius: var(--r1); padding: .6rem .7rem; box-shadow: 0 8px 24px rgba(0,0,0,.18);
-  display: flex; flex-direction: column; gap: .5rem; min-width: 200px; }
+/* Validation au tracé d'une pièce : modale centrée (suit l'écran, jamais coincée au scroll) */
+.trace-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 59; }
+.trace-pop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 60; background: var(--surface); border: 1px solid var(--primary);
+  border-radius: var(--r1); padding: .8rem .9rem; box-shadow: 0 12px 40px rgba(0,0,0,.28);
+  display: flex; flex-direction: column; gap: .5rem; min-width: 240px; }
 .trace-pop .tp-t { font-size: .85rem; font-weight: 700; color: var(--ink); }
 .trace-pop .tp-sel { padding: .4rem .5rem; border: 1px solid var(--line); border-radius: var(--r1);
   font: inherit; background: var(--surface-2); color: var(--ink); }
@@ -544,6 +549,7 @@ kbd { font: 600 .78rem/1 'Helvetica Neue', Arial, sans-serif; background: var(--
 .wintab th { text-align: left; font-weight: 600; color: var(--muted); font-size: .72rem; padding: .1rem .2rem; }
 .wintab td { padding: .12rem .2rem; }
 .wintab .wref { font-weight: 700; color: var(--primary); white-space: nowrap; }
+.wintab select[data-wf="facade"] { width: 64px; padding: .15rem; }
 .wintab tr.wprot td { padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
 .wprot-lbl { color: var(--muted); font-size: .72rem; margin-right: .45rem; }
 .wprot-sel { width: auto; min-width: 60%; padding: .15rem; }
@@ -686,6 +692,19 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
   padding: .8rem .4rem; border: 1px solid var(--line); border-radius: var(--r1);
   background: var(--surface); color: var(--ink); }
 .sg-icon code { font-size: .72rem; color: var(--muted); }
+/* Impression / export PDF : la page telle quelle, en clair, dépliants ouverts.
+   On force le rendu couleur, on masque le chrome interactif, on évite les coupures. */
+@media print {
+  nav, footer, .result-actions, .theme-toggle, .resume, .cta-row, .no-print { display: none !important; }
+  body { background: #fff !important; color: #111 !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  main.wrap, main.wrap.wide { max-width: 100% !important; padding: 0 !important; }
+  a { color: inherit !important; text-decoration: none !important; }
+  details > summary { list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  .card, details, .crit, .kpi, .concl-col, table, .bar-row { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+}
 """
 
 _DISCLAIMER = (
@@ -1089,7 +1108,7 @@ def render_study_form(
     <summary>{_icon("history")} Reprendre une étude</summary>
     <form method="post" action="/etude/reprendre" enctype="multipart/form-data" class="resume-form">
       <input type="file" name="study" accept=".json,application/json">
-      <button class="btn ghost sm" type="submit">Reprendre</button>
+      <button class="btn" type="submit">Reprendre</button>
     </form>
   </details>
 </div>
@@ -1442,7 +1461,7 @@ function panel(){
     '<label>Façades extérieures</label><div class="chips">'+orChips+'</div>'+
     '<label>Châssis '+(through(r)?'<span class="badge-ok">traversant</span>':'<span style="color:#888;font-size:.8rem">mono-façade</span>')+'</label>'+
     '<div id="p-wins">'+wins+'</div>'+
-    '<button type="button" id="p-add" class="btn ghost" style="margin-top:.5rem">+ ajouter</button>';
+    '<button type="button" id="p-add" class="btn ghost" style="margin-top:.5rem">+ Ajouter</button>';
   wire();
 }
 function wire(){
@@ -1624,8 +1643,7 @@ function render(){
     });
     (r.openings||[]).forEach(function(op,k){
       var seg=op._seg; if(!seg){ return; }
-      var ln=new Konva.Line({points:[seg[0][0],seg[0][1],seg[1][0],seg[1][1]], stroke:(op.openable?"#1a73e8":"#9aa3ad"), strokeWidth:pm(0.09), lineCap:"round"});
-      ln.on("click tap",function(e){ if(mode==="idle"){ e.cancelBubble=true; B.rooms[i].openings.splice(k,1); render(); } });
+      var ln=new Konva.Line({points:[seg[0][0],seg[0][1],seg[1][0],seg[1][1]], stroke:(op.openable?"#1a73e8":"#9aa3ad"), strokeWidth:pm(0.09), lineCap:"round", listening:false});
       shapeLayer.add(ln);
       // Référence du châssis (C1, C2…) posée juste à l'extérieur de la façade.
       var wmx=(seg[0][0]+seg[1][0])/2, wmy=(seg[0][1]+seg[1][1])/2;
@@ -1724,19 +1742,21 @@ function finishRect(e){
 // Bulle de validation d'une pièce qui vient d'être tracée (nommer / valider / supprimer).
 function showRoomPopup(i, x, y){
   var r=B.rooms[i]; if(!r){ return; }
+  // Modale centrée + fond : reste toujours visible à l'écran (plus de bulle coincée au scroll).
+  var back=document.createElement("div"); back.className="trace-backdrop";
   var pop=document.createElement("div"); pop.className="trace-pop";
-  pop.style.left=Math.min(x, window.innerWidth-230)+"px"; pop.style.top=(y+8)+"px";
   var opts=LABELS.map(function(p){ return '<option value="'+p[0]+'"'+(p[0]===r.label?" selected":"")+">"+p[1]+"</option>"; }).join("");
   pop.innerHTML='<div class="tp-t">Pièce tracée : '+fmt(r.area_m2)+' m²</div>'+
     '<select class="tp-sel">'+opts+'</select>'+
     '<div class="tp-row"><button type="button" class="btn sm tp-ok">Valider</button>'+
     '<button type="button" class="btn ghost sm tp-del">Supprimer</button></div>';
-  document.body.appendChild(pop);
+  document.body.appendChild(back); document.body.appendChild(pop);
   var selEl=pop.querySelector(".tp-sel");
-  function close(){ if(pop.parentNode){ pop.parentNode.removeChild(pop); } }
+  function close(){ if(pop.parentNode){ pop.parentNode.removeChild(pop); } if(back.parentNode){ back.parentNode.removeChild(back); } }
   selEl.onchange=function(){ r.label=selEl.value; render(); };
   pop.querySelector(".tp-ok").onclick=function(){ r.label=selEl.value; close(); render(); };
   pop.querySelector(".tp-del").onclick=function(){ var idx=B.rooms.indexOf(r); if(idx>=0){ B.rooms.splice(idx,1); } sel=-1; close(); render(); };
+  back.onclick=function(){ r.label=selEl.value; close(); render(); };  // clic dehors = valider
   selEl.focus();
 }
 function addWindow(a,b){
@@ -1765,13 +1785,19 @@ function showHeightPopup(ref, x, y){
   var r=B.rooms[ref.ri], op=r&&r.openings[ref.oi]; if(!op){ return; }
   var pop=document.createElement("div");
   pop.style.cssText="position:fixed;z-index:50;background:#fff;border:1px solid #0e9aa7;border-radius:.5rem;padding:.5rem .6rem;box-shadow:0 4px 16px rgba(0,0,0,.18);font:inherit";
-  pop.style.left=Math.min(x,window.innerWidth-180)+"px"; pop.style.top=(y+8)+"px";
-  pop.innerHTML='<div style="font-size:.8rem;font-weight:600;margin-bottom:.2rem">Hauteur du chassis (m)</div>'+
-    '<input type="number" step="0.1" value="'+fmt(op._h)+'" style="width:90px;padding:.3rem"> '+
-    '<button type="button" class="btn" style="padding:.3rem .6rem">OK</button>';
+  pop.style.left=Math.min(x,window.innerWidth-250)+"px"; pop.style.top=(y+8)+"px";
+  pop.style.minWidth="220px";
+  var cur=op.solar_protection||"aucune";
+  var popts=PROT.map(function(p){ return '<option value="'+p[0]+'"'+(p[0]===cur?" selected":"")+">"+p[1]+"</option>"; }).join("");
+  pop.innerHTML='<div style="font-size:.8rem;font-weight:600;margin-bottom:.2rem">Hauteur du châssis (m)</div>'+
+    '<input type="number" step="0.1" value="'+fmt(op._h)+'" style="width:100%;padding:.3rem;box-sizing:border-box">'+
+    '<div style="font-size:.8rem;font-weight:600;margin:.5rem 0 .2rem">Protection solaire</div>'+
+    '<select class="hp-prot" style="width:100%;padding:.3rem;box-sizing:border-box">'+popts+'</select>'+
+    '<div style="margin-top:.6rem;text-align:right"><button type="button" class="btn" style="padding:.3rem .8rem">OK</button></div>';
   document.body.appendChild(pop);
-  var inp=pop.querySelector("input"), ok=pop.querySelector("button");
-  function commit(){ var v=parseFloat(inp.value); if(v>0){ op._h=v; lastSash=v; winRecalc(op); } if(pop.parentNode){ pop.parentNode.removeChild(pop); } render(); }
+  var inp=pop.querySelector("input"), psel=pop.querySelector(".hp-prot"), ok=pop.querySelector("button");
+  function commit(){ var v=parseFloat(inp.value); if(v>0){ op._h=v; lastSash=v; winRecalc(op); }
+    op.solar_protection=psel.value; if(pop.parentNode){ pop.parentNode.removeChild(pop); } render(); }
   ok.onclick=commit;
   inp.onkeydown=function(e){ if(e.key==="Enter"){ commit(); } else if(e.key==="Escape"){ if(pop.parentNode){ pop.parentNode.removeChild(pop); } } };
   inp.focus(); inp.select();
@@ -1799,7 +1825,7 @@ function roomlist(){
         '<tr class="wprot"><td></td><td colspan="5"><span class="wprot-lbl">Protection</span>'+
           '<select class="wprot-sel" data-wi="'+i+'" data-wj="'+j+'" data-wf="prot">'+popts+'</select></td></tr>';
     }).join("");
-    var wintable=wins?('<table class="wintab"><tr><th>réf</th><th>Façade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">Aucun châssis</div>';
+    var wintable=wins?('<table class="wintab"><tr><th>Réf.</th><th>Façade</th><th>l</th><th>h</th><th>m²</th><th></th></tr>'+wins+"</table>"):'<div style="font-size:.8rem;color:var(--faint)">Aucun châssis</div>';
     return '<div class="room-card'+(i===sel?" sel":"")+'" data-sel="'+i+'">'+
       '<div class="room-head">'+
         '<span class="room-no">'+(i+1)+'</span>'+
@@ -1812,7 +1838,7 @@ function roomlist(){
       '</div>'+
       '<div class="room-sec"><span class="room-seclbl">Façades</span><div class="chips">'+chips+'</div></div>'+
       '<div class="room-sec"><span class="room-seclbl">Châssis</span>'+wintable+
-        '<button type="button" data-pick="'+i+'" class="btn ghost mini">+ ajouter</button></div>'+
+        '<button type="button" data-pick="'+i+'" class="btn ghost mini">+ Ajouter</button></div>'+
     "</div>";
   }).join("");
   Array.prototype.forEach.call(d.querySelectorAll("[data-sel]"),function(c){ c.onclick=function(e){ if(e.target.closest("select,input,button,label")){ return; } sel=parseInt(c.dataset.sel); if(multi){ goToLevel(B.rooms[sel].level); } render(); }; });
@@ -1910,7 +1936,7 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("t-finish").onclick=function(){ finishRoom(); };
   document.getElementById("t-cal").onclick=function(){ setMode(mode==="calibrate"?"idle":"calibrate"); };
   document.getElementById("t-win").onclick=function(){
-    if(sel<0){ var el=document.getElementById("modebanner"); if(el){ el.className="stage-mode"; el.textContent="Sélectionnez d'abord une pièce (sur le plan ou via « + ajouter »), puis tracez sur sa façade."; } return; }
+    if(sel<0){ var el=document.getElementById("modebanner"); if(el){ el.className="stage-mode"; el.textContent="Sélectionnez d'abord une pièce (sur le plan ou via « + Ajouter »), puis tracez sur sa façade."; } return; }
     setMode(mode==="window"?"idle":"window");
   };
   var tt=document.getElementById("tab-tools"), tr=document.getElementById("tab-rooms");
@@ -1976,14 +2002,35 @@ function downloadProject(){
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='projet-zephyr.json'; document.body.appendChild(a); a.click(); a.remove();
 }
+// PDF = impression de la page TELLE QUELLE (même design), tous les dépliants ouverts,
+// en thème clair. On s'appuie sur l'impression native du navigateur (Enregistrer en PDF)
+// + une feuille @media print (cf. _CSS) : zéro dépendance, fidélité totale.
 function exportPdf(){
-  var f=document.getElementById('valform'); if(!f){ return; }
-  f.action='/etude/rapport'; f.target='_blank'; f.submit();
+  var html=document.documentElement, prevTheme=html.getAttribute('data-theme');
+  var opened=[];
+  Array.prototype.forEach.call(document.querySelectorAll('details'), function(d){
+    if(!d.open){ d.open=true; opened.push(d); } });
+  html.setAttribute('data-theme','light');
+  function restore(){
+    opened.forEach(function(d){ d.open=false; });
+    if(prevTheme){ html.setAttribute('data-theme', prevTheme); }
+    window.removeEventListener('afterprint', restore);
+  }
+  window.addEventListener('afterprint', restore);
+  setTimeout(function(){ window.print(); }, 60);
 }
 function exportCsv(){
-  var el=document.getElementById('calc-data'); if(!el){ return; }
-  var rows=JSON.parse(el.textContent), out=[['Section','Poste','Formule','Montant (€)']];
-  rows.forEach(function(r){ out.push([r.section,r.label,r.formula,r.value]); });
+  var el=document.getElementById('calc-data');
+  if(!el){ alert("L'export Excel détaillé n'est disponible qu'en étude complète."); return; }
+  var rows=[]; try { rows=JSON.parse(el.textContent); } catch(e){ rows=[]; }
+  var SEC={capex_vmc:'CAPEX VMC',capex_vnc:'CAPEX VNC',opex_vmc:'OPEX VMC (an 1)',
+    opex_vnc:'OPEX VNC (an 1)',penalite:'Pénalité',synthese:'Synthèse'};
+  var out=[['Section','Poste','Détail du calcul','Montant (EUR)']];
+  rows.forEach(function(r){
+    var val=Math.round(Number(r.value)||0);
+    var formula=(''+(r.formula||'')).replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();
+    out.push([SEC[r.section]||r.section, r.label, formula, val]);
+  });
   var csv=out.map(function(row){ return row.map(function(c){
     return '"'+(''+c).replace(/"/g,'""')+'"'; }).join(';'); }).join('\\r\\n');
   var blob=new Blob(['\\ufeff'+csv],{type:'text/csv;charset=utf-8'});
@@ -2375,28 +2422,10 @@ _SENS_LABELS = {
 
 
 def _tornado(result: StudyResult) -> str:
-    if result.roi is None or not result.roi.sensitivity:
-        return ""
-    entries = sorted(result.roi.sensitivity, key=lambda e: e.swing, reverse=True)
-    top = entries[0].swing or 1.0
-    rows = []
-    for e in entries:
-        w = 100.0 * e.swing / top
-        rows.append(
-            '<div class="bar-row">'
-            f'<div class="lab">{html.escape(_SENS_LABELS.get(e.parameter, e.parameter))}</div>'
-            f'<div class="track"><div class="fill" style="width:{w:.0f}%;'
-            'background:#0e9aa7"></div></div>'
-            f'<div class="val">± {_eur(e.swing)}</div></div>'
-        )
-    return (
-        f"<details class='explain'><summary>{_icon('bulb')} Qu'est-ce qui fait le plus varier le "
-        "résultat ?</summary>"
-        "<p style='color:var(--muted);font-size:.85rem'>Plus la barre est longue, plus ce "
-        "paramètre fait bouger la rentabilité (VAN). C'est là qu'il faut fiabiliser une hypothèse "
-        "avant de décider.</p>"
-        '<div class="bars">' + "".join(rows) + "</div></details>"
-    )
+    # Masqué pour l'instant (décision produit) : on ne montre plus « ce qui fait varier
+    # le résultat » (sensibilité/tornado). Le câblage ROI reste en place ; on rebranchera
+    # l'affichage ici le jour voulu.
+    return ""
 
 
 def _tendance(score: float) -> tuple[str, str]:
@@ -2639,7 +2668,7 @@ def _hypotheses_form(result: StudyResult, building: object | None, cfg: Mapping[
         'Recalculez ensuite : tout est régénéré côté serveur. « Enregistrer le projet » (en haut) '
         'sauvegarde aussi vos hypothèses.</p>'
         f"{sections}"
-        f'<button type="submit" class="btn" style="margin-top:.8rem">{_icon("refresh")} Recalculer le bilan</button>'
+        f'<button type="submit" class="btn no-print" style="margin-top:.8rem">{_icon("refresh")} Recalculer le bilan</button>'
         "</details></form>"
         f'<script type="application/json" id="calc-data">{calc}</script>'
         f"<script>{_RESULTS_JS}</script>"
