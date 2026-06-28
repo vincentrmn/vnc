@@ -1671,6 +1671,36 @@ function levelsel(){
 function ptr(){ return stage.getRelativePointerPosition(); }
 
 function polyPxPoints(r){ var a=[]; r.polygon.forEach(function(m){ var p=toPx(m[0],m[1]); a.push(p[0],p[1]); }); return a; }
+// Reprise d'étude : place un segment de châssis (px) sur la façade correspondant à son orientation.
+function segForOpening(r, op){
+  if(!r.polygon || r.polygon.length<2){ return null; }
+  var c=centroidM(r), poly=r.polygon, best=null, bd=-1e9, dd=ORDIR[op.orientation]||[0,-1];
+  for(var i=0;i<poly.length;i++){
+    var a=poly[i], b=poly[(i+1)%poly.length];
+    var mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2, vx=mx-c[0], vy=my-c[1], L=Math.hypot(vx,vy)||1;
+    var dot=(vx/L)*dd[0]+(vy/L)*dd[1];
+    if(dot>bd){ bd=dot; best={a:a,b:b,mx:mx,my:my}; }
+  }
+  if(!best){ return null; }
+  var ex=best.b[0]-best.a[0], ey=best.b[1]-best.a[1], el=Math.hypot(ex,ey)||1; ex/=el; ey/=el;
+  var half=Math.min((op._w||0.5)/2, el/2);
+  return [toPx(best.mx-ex*half, best.my-ey*half), toPx(best.mx+ex*half, best.my+ey*half)];
+}
+// Charge une étude reprise (pièces + châssis) dans l'éditeur ; reconstruit la géométrie
+// transitoire des châssis (largeur/hauteur/segment) à partir des champs persistés.
+function loadResumed(){
+  var b=T.building; if(!b){ return; }
+  B=b; if(!B.rooms){ B.rooms=[]; }
+  B.rooms.forEach(function(r){
+    availLvls[r.level]=true;
+    (r.openings||[]).forEach(function(op){
+      var sill=(op.sill_height_m!=null)?op.sill_height_m:0.9;
+      var hh=(op.head_height_m!=null)?(op.head_height_m-sill):1.5; if(!(hh>0)){ hh=1.5; }
+      op._h=hh; op._w=Math.max((op.area_m2||0.1)/hh, 0.1); op._seg=segForOpening(r, op);
+    });
+  });
+  if(B.rooms.length){ curLvl=B.rooms[0].level; }
+}
 
 function render(){
   if(!stage){ return; }
@@ -2030,6 +2060,7 @@ document.addEventListener("DOMContentLoaded",function(){
   document.addEventListener("keydown",function(e){ if(e.key==="Escape" && mode!=="idle"){ setMode("idle"); } });
   var se=document.querySelector('input[name=sash]'); if(se){ var sv=parseFloat(se.value); if(sv>0){ lastSash=sv; } }
   window.addEventListener("resize",function(){ fitStage(); render(); });
+  if(window.TRACE && T.building){ loadResumed(); }   // reprise d'une étude téléchargée
   setBanner(); applyFloor(); render();
 });
 """
@@ -2118,15 +2149,45 @@ function exportCsv(){
 """
 
 
-def render_tracing(floors: list[dict[str, object]], hidden_fields: str) -> str:
+def _synthetic_floor(building: Building) -> dict[str, object]:
+    """Fond « vierge » dimensionné sur l'emprise des pièces (reprise sans plan image).
+
+    Permet de rouvrir une étude téléchargée dans l'éditeur de tracé complet : les
+    polygones (en mètres) se rendent sur un canevas blanc à l'échelle, et l'ingénieur
+    peut continuer à éditer / tracer.
+    """
+    xs = [p[0] for r in building.rooms for p in (r.polygon or [])]
+    ys = [p[1] for r in building.rooms for p in (r.polygon or [])]
+    if xs and ys:
+        span = max(max(xs) - min(xs), max(ys) - min(ys), 1.0)
+        mpp = span / 900.0
+        pad = 40.0
+        w = max(xs) / mpp + 2 * pad
+        h = max(ys) / mpp + 2 * pad
+    else:
+        mpp, w, h = 0.02, 1000.0, 700.0
+    return {"level": 0, "image_uri": "", "w": w, "h": h, "mpp": mpp}
+
+
+def render_tracing(
+    floors: list[dict[str, object]], hidden_fields: str, building: Building | None = None
+) -> str:
     """Éditeur de **tracé** : plan(s) en fond, l'ingénieur trace les pièces au clic.
 
     `floors` = liste de niveaux ``{level, image_uri, w, h, mpp}`` (un seul élément
     pour un plan/planche A0 unique ; plusieurs pour un PDF par étage). La mesure
     vient des clics calibrés (échelle par niveau), pas d'une lecture du raster.
     Produit un `building_json` (polygones en mètres) → mêmes résultats.
+
+    `building` (optionnel) : reprise d'une étude — on charge ses pièces dans
+    l'éditeur sur un fond vierge (cf. `_synthetic_floor`).
     """
-    data = json.dumps({"floors": floors})
+    resume_b: dict[str, object] | None = None
+    if building is not None:
+        resume_b = json.loads(building.model_dump_json())
+        if not floors:
+            floors = [_synthetic_floor(building)]
+    data = json.dumps({"floors": floors, "building": resume_b})
     body = f"""
 <div class="trace-head">
   <h1 style="margin-bottom:.2rem">Tracer le plan</h1>

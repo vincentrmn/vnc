@@ -191,7 +191,8 @@ def test_resume_study_from_file() -> None:
     blob = io.BytesIO(_json.dumps(study).encode())
     r = client.post("/etude/reprendre", files={"study": ("etude.json", blob, "application/json")})
     assert r.status_code == 200
-    assert "Validation de la géométrie" in r.text and "reprise depuis un fichier" in r.text
+    # On rouvre l'éditeur de tracé complet avec la pièce chargée dans window.TRACE.
+    assert "Tracer le plan" in r.text and '"building"' in r.text and '"r0"' in r.text
 
 
 def test_config_has_resume_and_editor_has_download() -> None:
