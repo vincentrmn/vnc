@@ -28,11 +28,11 @@ Le 5R1C avait été calibré contre une STD réelle (maison Heffingen) à ±2,5 
 
 À partir de plans (DXF ou **PDF vectoriel**) et du CPE, Zéphyr produit **en quelques minutes** :
 
-1. un **score d'aptitude VNC** (déterministe, 4 critères pondérés) avec des **recommandations** d'amélioration ;
-2. un **bilan financier** chiffré (VNC vs VMC double-flux), avec fourchettes et sensibilité (tornado) ;
+1. un **score d'aptitude VNC** (déterministe, **5 critères** pondérés) avec des **recommandations** d'amélioration ;
+2. un **bilan financier** chiffré (VNC vs VMC double-flux), avec fourchettes (la sensibilité/tornado est **calculée mais masquée** dans l'UI, cf. §6) ;
 3. le tout via une **plateforme web** où l'ingénieur dépose un plan, **valide/trace la géométrie**, et obtient le résultat.
 
-Contexte business : on **vend de la VNC** (ouvrants motorisés + capteurs + plateforme BOS). Zéphyr est un **accélérateur interne / outil de pré-qualification**, **jamais une étude opposable**.
+Contexte business : on **vend de la VNC** (ouvrants motorisés + capteurs + plateforme BOS), sous la marque **korr** — voir le positionnement *holistique* de la home (§5bis). Zéphyr est un **accélérateur interne / outil de pré-qualification**, **jamais une étude opposable**.
 
 Deux usages : **interne** (priorité, tolérance à l'approximation si honnête sur l'incertitude) et **client** (plus tard, curseur QA relevé — pas le sujet v1).
 
@@ -44,7 +44,7 @@ Deux usages : **interne** (priorité, tolérance à l'approximation si honnête 
 2. **Le code mesure, l'humain donne la topologie, le LLM explique.** Toute grandeur géométrique/physique est calculée par du code déterministe. Le LLM ne sert qu'au *narratif* (rédaction de sortie) et, plus tard, au *labelling* sémantique. **Interdit** : faire « mesurer » une géométrie par un modèle de vision.
 3. **Entrée = vecteur à l'échelle.** **DXF** (ezdxf) **et PDF vectoriel** (PyMuPDF). Un **PDF scanné** (image) est **refusé** — ce serait de la vision. Pas de DWG.
 4. **Reconnaissance auto faillible → tracé assisté.** Les vrais plans (présentation archi) n'ont souvent **ni libellés de pièces ni polygones propres** (murs en lignes doublées + mobilier + hachures, plusieurs plans par planche, échelle non triviale). La reconstruction automatique n'est **pas fiable** dessus. La réponse déterministe honnête : **afficher le plan en fond et laisser l'ingénieur tracer les pièces au clic**, le code mesurant à partir de coordonnées **calibrées** (échelle). C'est l'esprit « code mesure » : l'humain fournit la topologie, le code calcule surfaces/façades.
-5. **Honnêteté sur l'incertitude > fausse précision.** Fourchettes, pas de points magiques. Toujours afficher une sensibilité (tornado). Ne jamais survendre la VNC (on la vend → rester crédible).
+5. **Honnêteté sur l'incertitude > fausse précision.** Fourchettes, pas de points magiques. La sensibilité (tornado) reste **calculée** (câblage ROI intact) mais **masquée dans l'UI** (décision produit). Ne jamais survendre la VNC (on la vend → rester crédible).
 6. **Surcoût de chauffage VNC : CALCULÉ en degrés-jours, jamais postulé.** Voir §6. C'est une *différence de pertes de ventilation* non récupérées par la VNC, atténuée par la **commande à la demande**. Jamais 0, jamais un % de récupération posé en dur.
 7. **Bâtiments cibles : inertie lourde** (béton/maçonnerie) — hypothèse par défaut, lue du CPE.
 8. **Human-in-the-loop sur la géométrie.** L'ingénieur **valide/corrige/trace** la géométrie avant calcul (éditeur web). Étape produit centrale, pas un détail.
@@ -75,14 +75,14 @@ Deux usages : **interne** (priorité, tolérance à l'approximation si honnête 
 | `schemas` | Contrat pydantic v2 : `Building`/`Room`/`Opening`, `EnvelopeData`, `SiteContext`, `VNCScore`/`ScoreCriterion`, `HeatingPenalty`, `ROIResult`, `StudyResult`, `Verdict` | pydantic |
 | `ingestion` | DXF → entités brutes (`RawDXF` : polylignes, textes, lignes, **blocs INSERT**). **PDF vectoriel** → mêmes entités (`parse_pdf`) + `render_pdf_page` (image de fond pour le tracé). **CPE** → texte (`parse_cpe`). Refuse les scans. | ezdxf, **pymupdf** |
 | `geometry` | Reconstruit pièces (polygones fermés), labels (texte/calque FR/EN), **façades extérieures géométriques** (union des pièces → mur extérieur vs mitoyen, orientation cardinale, angle du Nord), châssis (lignes/blocs « fenêtre »), traversant. **Repli « pièces depuis les libellés »** (nom + surface) quand pas de polygones. | shapely |
-| `rules` | **Moteur de SCORE** (0–100) pondéré + recommandations : ventilation (traversant/châssis ≥1,5 m), vitrage (vitrée/sol), inertie (CPE), isolation (U). Drapeaux durs de site (pollution, occupation incompatible) → verdict NO_GO. | code pur |
+| `rules` | **Moteur de SCORE** (0–100) pondéré + recommandations : **5 critères** — ventilation (traversant/châssis ≥1,5 m), vitrage (mesuré par pièce de vie), inertie (CPE), isolation (U), **protections solaires** (par châssis : orientation × protection). Chaque critère porte `scale_points`/`detail_points` (puces). Drapeaux durs de site (pollution, occupation incompatible) → verdict NO_GO. | code pur |
 | `thermal` | **Pénalité de chauffage VNC en degrés-jours** (déterministe). C'est tout. | code pur + climate |
 | `climate` | EPW → degrés-jours/heures, irradiance verticale (géométrie solaire auto-portée). | parseur EPW maison |
 | `roi` | TCO/VAN paramétrique VNC vs VMC (cf. §6), sensibilité (tornado, SALib), fourchettes. | numpy, SALib |
 | `study` | Orchestrateur `compute_study` → `StudyResult` (score + pénalité + ROI). | — |
-| `web` | **Pages HTML du produit** (fonctions pures testables) : landing, formulaire de config, **éditeur de validation** (DXF reconstruit) et **éditeur de tracé** (PDF/plan en fond), page de résultats. + un peu de **JS vanilla** (SVG interactif). | stdlib HTML + JS |
+| `web` | **Pages HTML du produit** (fonctions pures testables) : landing (concept *holistique* + lockup **korr × Zéphyr**), formulaire de config, **éditeur de validation** (legacy, repli) et **éditeur de tracé** (Konva, plan en fond), page de résultats. JS embarqué (Konva/Chart.js). | stdlib HTML + JS |
 | `llm` | Service transverse : **narratif** (Opus) en sortie ; **extraction CPE** (Sonnet) texte → champs d'enveloppe, **chiffres vérifiés verbatim** (`extract_cpe` / `verify_cpe_extraction`). Labelling pièces différé. | SDK Anthropic |
-| `report` | Rapport HTML (PDF optionnel WeasyPrint). | HTML → PDF |
+| `report` | `pdf_chrome.html_to_pdf` : **export PDF = impression de la page de résultats elle-même par Chromium headless** (même design, graphes, dépliants ouverts). `render_report` (WeasyPrint/HTML) = repli si Chromium absent. | Chromium headless |
 | `viz` | Rendu matplotlib d'un plan reconstruit (PNG / data-URI). | matplotlib |
 | `builders` | `parametric_building` (saisie sans plan). | — |
 | `presets` | Hypothèses par type de projet (débit hygiénique, pondérations score). | — |
@@ -104,11 +104,15 @@ Deux usages : **interne** (priorité, tolérance à l'approximation si honnête 
 - **Graphes (résultats financiers)** : **Chart.js** (chargé via CDN `unpkg`) — axes/échelles/grille/tooltips natifs. Données injectées en bloc JSON, JS statique (validable `node --check`). Remplace les `polyline`/`svg` tracés à la main.
 - **Icônes** : **Lucide** (jeu minimaliste mono-couleur, trait, ISC). Les SVG sont **inlinés** (dict `_ICONS` + helper `_icon(name, size)` dans `web/__init__.py`) plutôt que chargés par CDN : rendu instantané, couleur héritée via `currentColor` (donc thème-aware), et **fonctionne dans le PDF WeasyPrint** où aucun JS ne tourne. Plus aucun emoji « type iPhone » dans l'UI. La charte (`/styleguide`) liste le jeu d'icônes. Le rapport PDF porte sa propre constante `_ALERT_SVG` (pas de dépendance `web`).
 - **LLM** : SDK Anthropic. Modèles : `claude-opus-4-8` (narratif), `claude-sonnet-4-6` (labelling), `claude-haiku-4-5-20251001` (labelling volume). Prompt caching sur le bloc statique. **Le narratif n'invente AUCUN chiffre.**
-- **Rapport** : HTML → PDF (`weasyprint`, optionnel).
+- **Export PDF** : **Chromium headless** (`report/pdf_chrome.py`, `--headless --print-to-pdf`) imprime la **page de résultats telle quelle** (CSS, graphes Chart.js, tous les `<details>` ouverts, thème clair forcé). Binaire localisé via `ZEPHYR_CHROMIUM` ou chemins usuels ; **aucune dépendance Python ajoutée** (sous-process). Repli `weasyprint`/HTML si Chromium absent. Le front poste `valform` dans une **iframe cachée** → téléchargement 1 clic sans navigation. Une feuille `@media print` masque le chrome interactif.
 - **Viz** : `matplotlib` (backend Agg).
 - **Tests** : `pytest`. **Qualité** : `ruff` (lint+format, line-length 100) + `mypy` (strict). `[tool.ruff.lint.per-file-ignores]` ignore E501 sur `src/zephyr/web/__init__.py` (JS/CSS embarqués).
 - **Extras** : `cao`, `climate`, `llm`, `report`, `viz`, `app`, `pdf`, `full`.
-- **Déploiement** : `Dockerfile` (python:3.11-slim + uv, extras `app cao viz pdf`, bind `0.0.0.0:$PORT`) + `railway.json`. Déployé sur **Railway** depuis `main` (auto-redeploy au push). Lancer en local : `./scripts/run_web.sh`.
+- **Déploiement** : `Dockerfile` (python:3.11-slim + uv, extras `app cao viz pdf llm`, **+ `apt chromium` + polices**, `ZEPHYR_CHROMIUM=/usr/bin/chromium`, bind `0.0.0.0:$PORT`) + `railway.json`. Déployé sur **Railway** depuis `main` (auto-redeploy au push). Lancer en local : `./scripts/run_web.sh`.
+
+### 5bis. Marque & positionnement (home)
+- **Marque korr** : la home est sous l'enseigne **korr** ; le header porte un lockup **korr × Zéphyr.** (logo korr officiel inline en SVG, recadré sur le seul wordmark « korr. » — fichier Drive *Korr Logo Positif NBKG SVG.svg* ; `Zéphyr.` avec point vert ; bouton vers le site korr). Logo en `currentColor` → couleur de marque, thème-aware. URL du site korr = **placeholder `https://korr.lu`** à confirmer.
+- **Discours holistique** (décision utilisateur) : on **ne vend pas « la VNC » (trop technique)** mais le **résultat** — un bâtiment confortable, sobre et durable qui se passe (presque) de machines (inspiration du concept *be 2226* sans le citer ni afficher « 22–26 °C »). Hero : *« Créer un meilleur bâti. »* (sur une ligne). 3 piliers : **Confort / Sobriété / Pérennité**. « Comment ça marche ? » en 3 étapes. « Ce qu'on évalue » = liste verticale des 5 critères (icône + texte pédagogique). Promesse chauffage **nuancée** : *« peu ou pas de chauffage »* (jamais « sans chauffage »). Footer minimal : `© {année} korr`. Emplacement **vidéo** réservé sous le hero. Le sigle « VNC » est relégué hors du discours d'accueil.
 
 ---
 
@@ -150,7 +154,7 @@ Ratios €/m² = ordres de grandeur LU/BE (à confronter à ≥ 2 devis), pas de
 
 ## 7. Le score d'aptitude VNC (module `rules`)
 
-**Score (0–100)** = moyenne pondérée de 4 critères, chacun noté en déterministe avec son **barème** (`ScoreCriterion.scale`) et une **recommandation** d'amélioration. Pondérations par défaut (`ScoreWeights`, surchargeables) :
+**Score (0–100)** = moyenne pondérée de **5 critères**, chacun noté en déterministe avec son **barème** (`ScoreCriterion.scale` + `scale_points` en puces) et une **recommandation** d'amélioration. Le détail mesuré est aussi éclaté en puces (`detail_points`). Affichage : une ligne par critère (libellé + barre + note, sur une seule ligne), **dépliable** vers les puces de détail, le barème et le tableau par pièce/châssis. Pondérations par défaut (`ScoreWeights`, surchargeables) :
 
 | Critère | Poids | Mesure | Source |
 |---|---|---|---|
@@ -172,11 +176,21 @@ C'est **le cœur du travail en cours**. Trois éléments à fiabiliser : **recon
 
 ### Données : plans vs CPE
 - **Plan (DXF/PDF) → géométrie** : pièces, **largeur** des baies, façades. Un plan 2D ne porte **pas** les hauteurs ni les matériaux.
-- **CPE / saisie client → le non-lisible** : **hauteur des châssis**, **ratio vitrage**, **composition des parois (inertie/masse)**, **isolation (U)**, perméabilité n50, nature (neuf/réno), angle du Nord. *Aujourd'hui ces champs sont saisis à la main dans le formulaire de config ; parser un CPE PDF automatiquement est un chantier futur (cf. §11).*
+- **CPE / saisie client → le non-lisible** : **hauteur des châssis**, **ratio vitrage**, **composition des parois (inertie/masse)**, **isolation (U)**, perméabilité n50, nature (neuf/réno), angle du Nord. **Extraction CPE automatique** (cf. §10) : à l'**import** du PDF (plus de bouton « Extraire »), une **barre de progression** s'affiche puis le formulaire est pré-rempli ; ou **saisie à la main**. Le bouton **« Continuer » est bloqué** tant que le passeport n'est pas réellement extrait (mode upload) ou renseigné (mode manuel).
 
 ### Deux modes selon le fichier
-1. **DXF avec polygones de pièces propres** → reconstruction auto (`build_building`) : pièces, façades extérieures **géométriques** (union → extérieur vs mitoyen, orientation, angle du Nord), châssis (lignes/blocs), traversant → **éditeur de validation interactif** (SVG cliquable : on corrige label/façades/châssis, le traversant se recalcule, châssis affichés sur la façade).
-2. **PDF (ou DXF sans polygones)** → **éditeur de TRACÉ** : plan rendu en image de fond, l'ingénieur **trace les pièces au clic**, le code calcule la surface réelle via l'**échelle calibrée** (par défaut A0 + 1:50 ; sinon **calibrage au clic d'une cote connue**). Façades et label par pièce. → produit le même `Building`.
+1. **DXF avec polygones de pièces propres** → reconstruction auto (`build_building`) → **éditeur de validation** (SVG, *legacy* : sert encore de repli quand pas d'image de plan).
+2. **PDF (ou DXF sans polygones)** → **éditeur de TRACÉ** (Konva) : plan en image de fond, l'ingénieur **trace les pièces au clic**, surface réelle via l'**échelle calibrée** (A0 + 1:50 par défaut ; sinon **calibrage au clic**). C'est l'éditeur de référence.
+
+### Châssis (éditeur de tracé)
+- **Tracer le châssis sur la façade** (on ne dit plus « glisser le long ») : longueur du tracé = largeur de baie, façade déduite. Au relâcher, une **bulle** demande la **hauteur ET la protection solaire** (dans le même pop-up, pour ne rien oublier).
+- Chaque châssis porte une **référence C1, C2…** affichée **sur le plan** (posée à l'extérieur de la façade) **et** en tête de ligne dans la carte de la pièce.
+- Carte de pièce : tableau châssis (Réf. / Façade / l / h / m²) + **protection sur une 2ᵉ ligne pleine largeur** ; suppression d'un châssis **uniquement via le bouton** de la carte (le clic-pour-supprimer sur le plan, dangereux, a été retiré).
+- **Multi-PDF par étage** : l'input fichier **accumule** les PDF (DataTransfer), avec liste ordonnée RdC/R+1/… et retrait individuel (un input natif remplace sinon sa sélection).
+
+### Sauvegarde / reprise (zéro BDD)
+- **Télécharger l'étude** (éditeur) / **Enregistrer le projet** (résultats) → un `.json` `{config, building_json, floors}` qui **embarque aussi les plans** (images de fond + échelle ; via `sessionStorage` côté résultats).
+- **Reprendre** (`/etude/reprendre`) **rouvre l'éditeur de tracé complet** : `loadResumed()` recharge les pièces et **reconstruit la géométrie transitoire des châssis** (largeur/hauteur depuis surface+hauteur, segment reposé sur la bonne façade via `segForOpening`). **Le plan réapparaît en fond** s'il était sauvegardé ; sinon **fond vierge à l'échelle** (`_synthetic_floor`). Repli sur l'éditeur de validation si aucune pièce n'a de polygone.
 
 Les deux éditeurs produisent un **`building_json`** (polygones en mètres) posté à `POST /etude/resultat`.
 
@@ -206,7 +220,7 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 │   ├── web/        pages HTML + JS (landing, config, validation, tracé, résultats)
 │   ├── viz/        rendu plan matplotlib
 │   ├── llm/        narratif Opus
-│   ├── report/     rapport HTML/PDF
+│   ├── report/     export PDF (pdf_chrome.py = Chromium ; __init__ = repli WeasyPrint/HTML)
 │   ├── builders.py presets.py
 ├── app/            web.py (FastAPI), main.py (ancien Streamlit, secondaire)
 └── tests/unit/  tests/validation/
@@ -214,9 +228,26 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 
 ---
 
-## 10. Roadmap
+## 10. Journal des évolutions (exhaustif)
 
-**Fait cette session** : pivot déterministe ; score + recommandations ; pénalité degrés-jours ; bilan financier détaillé ; plateforme web (landing/config/validation/résultats) ; déploiement Railway ; ingestion **PDF vectoriel** + rejet scans ; reconnaissance géométrique des **façades/traversant** + angle du Nord + blocs ; repli **pièces depuis libellés** ; **éditeur de validation interactif** (SVG) ; **éditeur de tracé** (plan en fond, calibrage, surfaces réelles).
+> Pas de roadmap : l'état ci-dessous est le **présent**. Les nouvelles pistes seront ouvertes dans une autre session.
+
+### Session courante (branding holistique, exports, CPE auto, reprise avec plan, UX châssis, etc.)
+Travaux réalisés et **mergés sur `main`** (déployés Railway) :
+
+- **Score — 5ᵉ critère « Protections solaires »** : `Opening.solar_protection` (enum `SolarProtection`) ; `rules._solar_criterion` (note châssis = 100 − risque(orientation) × (1 − efficacité), pondérée par surface) ; **gros warning + note basse** pour un châssis Sud/Ouest exposé sans protection ; rééquilibrage des poids **30/15/20/20/15** (ventilation/vitrage/inertie/isolation/solaire).
+- **Détail des critères en puces** : `ScoreCriterion.scale_points` + `detail_points` ; rendu en `<ul>` dans le dépliant ; chaque critère tient sur **une seule ligne** (barre fine, libellé `nowrap`).
+- **Sensibilité (tornado) masquée** dans l'UI (`_tornado` renvoie `""`) ; calcul ROI conservé.
+- **Export PDF serveur 1 clic** via **Chromium headless** (`report/pdf_chrome.py`) — la page de résultats imprimée à l'identique (graphes + dépliants ouverts, thème clair), feuille `@media print`, iframe cachée côté front, **Dockerfile installe `chromium`**. **Export Excel (CSV)** assaini (sections, montants entiers, formules nettoyées).
+- **CPE — extraction automatique à l'import** (plus de bouton « Extraire ») + **barre de progression** (overlay « trickle ») + **blocage de « Continuer »** tant que non extrait (mode upload) / renseigné (manuel).
+- **Multi-PDF par étage cumulatif** (DataTransfer + liste ordonnée RdC/R+1 + retrait).
+- **Reprise d'étude → éditeur de tracé complet** avec **pièces rechargées**, **châssis reconstruits** (C1/C2, protections) et **plan restauré** (images embarquées dans le `.json` ; repli fond vierge).
+- **Châssis** : protection proposée dans la **même bulle que la hauteur** ; **réf. C1/C2** sur le plan et dans la carte ; protection sur 2ᵉ ligne pleine largeur ; suppression seulement via le bouton de la carte ; libellés « Réf. », « + Ajouter », « Façade », tag « Traversant » (majuscules) ; consigne « tracez le châssis sur la façade ».
+- **Home / branding** : repositionnement *holistique* sous la marque **korr** (lockup **korr × Zéphyr.**, logo korr officiel SVG recadré, bouton site korr), hero « Créer un meilleur bâti. », 3 piliers, « Comment ça marche ? », critères en liste, footer minimal, emplacement vidéo, promesse chauffage nuancée (cf. §5bis).
+- **Onglet/identité** : titre d'onglet « Zéphyr », favicon ; bouton « Reprendre » redessiné (vrai bouton) ; marges/typo de la home ajustées.
+
+### Antérieur (résumé)
+Pivot déterministe ; score + recommandations ; pénalité degrés-jours ; bilan financier détaillé ; plateforme web (landing/config/validation/résultats) ; déploiement Railway ; ingestion **PDF vectoriel** + rejet scans ; reconnaissance géométrique des **façades/traversant** + angle du Nord + blocs ; repli **pièces depuis libellés** ; **éditeur de validation interactif** (SVG) ; **éditeur de tracé** (plan en fond, calibrage, surfaces réelles).
 
 **Fait depuis (éditeur de tracé)** : **zoom/pan** (molette + glisser, poignées à taille constante) ; **tracé des châssis** au glisser sur la façade (longueur → largeur de baie, façade déduite) ; **tracé universel sur DXF** (DXF rendu en image de fond quand la reconstruction auto ne donne pas de polygones propres — échelle exacte, sans calibrage) ; **multi-niveaux** (niveau courant + niveau par pièce, badge N{n}) ; **curseur de taille des repères** de tracé.
 
@@ -236,11 +267,6 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 - **Sortie rapide** : une **tendance** (Favorable ≥ 65 / À étudier 45–65 / Défavorable < 45) + **bandeau « estimation rapide »** + **bilan financier allégé** (ordres de grandeur, pas de livre ouvert/hypothèses/tornado) + **fourchette ROI élargie** (`StudyResult.mode = "rapide"`).
 - **Vitrage par pièce** (mode complet) : le taux est noté **pièce de vie par pièce de vie** (taux pièce → note → moyenne pondérée surface), les pièces de service (WC, sdb, circulation, technique…) étant exclues ; reco ciblée sur la pièce la plus vitrée.
 
-**Prochaines étapes (priorité = définition du bâtiment, puis méthode)** — cf. §11 pour les questions ouvertes :
-1. **CPE** : couvrir d'autres mises en page/versions (l'extraction est validée sur le format LuxEEB v6.25) ; affiner le choix Uw quand plusieurs types de fenêtres.
-2. **Portes intérieures** → chemins d'air pour un traversant « réel » (pas juste ≥ 2 façades).
-3. **Recalibrer les coûts ROI** par taille/typologie (cf. §6, limite petite échelle).
-
 ---
 
 ## 11. Garde-fous & questions ouvertes
@@ -259,7 +285,7 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 **Questions ouvertes (à trancher avec l'utilisateur) :**
 - **Traversant = façades opposées ?** Aujourd'hui `Room.is_through` = ≥ 2 façades distinctes. Une pièce d'angle (N + W, perpendiculaires) est donc comptée traversante — l'utilisateur a relevé que c'est discutable, puis a préféré laisser tel quel. À reconsidérer (seuil ≈ ≥ 135° entre façades).
 - **Échelle PDF** : par défaut A0 + 1:50. Généraliser (détection format, choix d'échelle, calibrage obligatoire si ambigu).
-- **CPE** : entrée manuelle vs parsing automatique.
+- **CPE** : *tranché* — extraction **automatique** à l'import (cf. §10), saisie manuelle en alternative. (Reste à couvrir d'autres mises en page que LuxEEB.)
 
 ---
 
@@ -268,7 +294,7 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 - Un ingénieur dépose un **DXF ou un PDF**, **valide ou trace** la géométrie (pièces, châssis, façades, traversant), et obtient **score + recommandations + bilan financier**.
 - La **définition du bâtiment** est fiable (surfaces justes via échelle calibrée ; façades/traversant corrects ou corrigeables).
 - Le **surcoût de chauffage** est calculé (degrés-jours), branché au ROI.
-- Toute sortie expose ses **hypothèses** et son **incertitude** (fourchettes, tornado). Aucun chiffre orphelin.
+- Toute sortie expose ses **hypothèses** et son **incertitude** (fourchettes ; tornado calculé mais masqué dans l'UI). Aucun chiffre orphelin.
 - La plateforme tourne en local (`run_web.sh`) **et** sur Railway.
 
 ---
@@ -291,9 +317,16 @@ Chronologie des choix actés avec l'utilisateur (pour qu'une nouvelle session ne
 
 1. **Abandon STD/5R1C** : la VNC est ~universellement éligible → pas de verdict thermique, un **score**. Pas de simulation (ni maison, ni EnergyPlus, ni ML).
 2. **Pénalité chauffage** : remplacée par un calcul **degrés-jours**.
-3. **Produit** : plateforme qui lit plans + CPE → **score (4 critères : ventilation/vitrage/inertie/isolation) + recos + ROI**.
+3. **Produit** : plateforme qui lit plans + CPE → **score + recos + ROI**. (Critères : ventilation/vitrage/inertie/isolation à l'origine, **+ protections solaires** depuis — cf. #9.)
 4. **Critère ventilation** : traversant idéal, sinon **châssis ≥ 1,5 m** (tirage mono-façade). **Les ouvrants = notre dimensionnement → coût ROI**, pas un critère.
 5. **Web** : FastAPI + pages HTML pures + JS vanilla. Streamlit relégué. Déploiement **Railway** (Dockerfile + railway.json).
 6. **Entrées** : DXF **et PDF vectoriel** (déterministe, zéro vision) ; **PDF scanné refusé**.
 7. **Reconstruction auto faillible** sur vrais plans → **éditeur de tracé** (plan en fond, clics calibrés). Validé sur un vrai PDF A0 1:50.
 8. **Focus** : d'abord la **définition du bâtiment** (pièces, châssis, traversant) et la **méthode** ; l'interprétation (notes/ROI) ensuite.
+9. **5ᵉ critère « Protections solaires »** ajouté (anti-surchauffe) ; poids 30/15/20/20/15.
+10. **Sensibilité (tornado) masquée** dans l'UI (calcul conservé).
+11. **Export PDF** = impression de la page par **Chromium headless** (fidélité totale), 1 clic ; **Excel** assaini. Choix d'aller au server-side malgré l'image Docker plus lourde.
+12. **CPE** : **extraction automatique à l'import** + barre de progression ; « Continuer » bloqué tant que non extrait/renseigné. (Tranche la question ouverte « manuel vs auto ».)
+13. **Reprise d'étude** : rouvre l'**éditeur de tracé** (pas l'éditeur de validation), avec **plan embarqué** dans le `.json` et restauré ; châssis reconstruits.
+14. **Branding holistique sous korr** : on vend le **résultat** (confort/sobriété/pérennité), pas « la VNC ». Marque **korr × Zéphyr**, langage propre (pas de « 2226 »/« 22–26 °C »), promesse chauffage **nuancée**. Nom **Zéphyr** conservé pour le moteur/outil.
+15. **À confirmer** : URL réelle du site korr (placeholder `https://korr.lu`).
