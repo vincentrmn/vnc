@@ -78,3 +78,61 @@ def parametric_building(
         )
 
     return Building(id=building_id, rooms=rooms, inertia_class=inertia, num_levels=num_levels)
+
+
+def representative_building(
+    total_floor_area_m2: float,
+    *,
+    num_levels: int = 2,
+    through_fraction: float = 0.4,
+    glazing_ratio: float = 0.15,
+    tall_windows: bool = True,
+    deep: bool = False,
+    inertia: InertiaClass = InertiaClass.LOURDE,
+    hsp_m: float = 2.6,
+    room_size_m2: float = 25.0,
+    building_id: str = "rapide",
+) -> Building:
+    """Bâtiment « représentatif » pour le mode RAPIDE (formulaire, sans plan).
+
+    Traduit quelques estimations haut-niveau en pièces de vie : une fraction
+    ``through_fraction`` de la surface est traversante (2 façades opposées), le reste
+    mono-façade ; le ``glazing_ratio`` fixe la surface de châssis par pièce ;
+    ``tall_windows`` règle la hauteur des baies ; ``deep`` allonge les pièces pour
+    déclencher la pénalité « plan trop profond ». Approximation assumée (faible
+    confiance), passée telle quelle dans le moteur déterministe.
+    """
+    n = max(1, round(total_floor_area_m2 / room_size_m2))
+    area_each = total_floor_area_m2 / n
+    n_through = round(n * max(0.0, min(1.0, through_fraction)))
+    head = 2.5 if tall_windows else 1.6
+    if deep:
+        depth = 6.0 * hsp_m
+        width = max(area_each / depth, 0.5)
+    else:
+        width = depth = math.sqrt(area_each)
+    poly = [(0.0, 0.0), (width, 0.0), (width, depth), (0.0, depth)]
+
+    rooms: list[Room] = []
+    for i in range(n):
+        through = i < n_through
+        primary = Orientation.S if i % 2 == 0 else Orientation.E
+        orients = [primary, _OPPOSITE[primary]] if through else [primary]
+        win_each = max(glazing_ratio * area_each / len(orients), 0.05)
+        openings = [
+            Opening(id=f"r{i}_{o.value}", area_m2=win_each, orientation=o, head_height_m=head)
+            for o in orients
+        ]
+        rooms.append(
+            Room(
+                id=f"r{i}",
+                label=RoomLabel.SEJOUR if through else RoomLabel.CHAMBRE,
+                area_m2=area_each,
+                height_m=hsp_m,
+                level=i % num_levels,
+                polygon=poly,
+                exterior_wall_orientations=orients,
+                openings=openings,
+            )
+        )
+    return Building(id=building_id, rooms=rooms, inertia_class=inertia, num_levels=num_levels)

@@ -563,6 +563,12 @@ h2 .ic { vertical-align: -.12em; margin-right: .45rem; color: var(--primary-stro
 .result-actions .ra-btns { display: flex; gap: .6rem; flex-wrap: wrap; }
 .hyp-grp { margin: .9rem 0 .2rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em;
   color: var(--muted); font-weight: 700; }
+/* Bandeau « estimation rapide » */
+.quick-banner { display: flex; align-items: flex-start; gap: .5rem; background: #fdf6e3;
+  border: 1px solid #efdfa6; border-radius: var(--r1); padding: .7rem .9rem; margin: 0 0 1.2rem;
+  font-size: .9rem; line-height: 1.45; }
+.quick-banner .ic { color: #c79400; flex: none; margin-top: .1rem; }
+:root[data-theme="dark"] .quick-banner { background: #29260f; border-color: #4a4320; }
 .explain table.kv td { font-size: .85rem; }
 /* Bilan : séparateur discret entre les colonnes VMC et VNC */
 .cost-cols > div:nth-child(2) { border-left: 1px solid var(--line); padding-left: var(--s4); }
@@ -830,15 +836,33 @@ _CONFIG_JS = """
     if(hint){ hint.style.display = (m==='cpe' && !ex)?'':'none'; }
     if(env){ env.style.display = (m==='manual' || (m==='cpe' && ex))?'':'none'; }
   }
+  function curMode(){
+    var r=document.querySelector('input[name=etude_mode]:checked');
+    return r?r.value:'complete';
+  }
   function hasPlan(){
     var d=document.getElementById('in-dxf'), f=document.getElementById('in-floors');
     return (d && d.files && d.files.length) || (f && f.files && f.files.length);
   }
+  function syncMode(){
+    var rapide=curMode()==='rapide';
+    Array.prototype.forEach.call(document.querySelectorAll('.modeseg label'), function(l){
+      l.classList.toggle('on', l.querySelector('input').value===curMode());
+    });
+    var plan=document.getElementById('card-plan'), est=document.getElementById('card-estim');
+    if(plan){ plan.style.display=rapide?'none':''; }
+    if(est){ est.style.display=rapide?'':'none'; }
+    var mh=document.getElementById('mode-hint');
+    if(mh){ mh.textContent=rapide
+      ? "Rapide : quelques estimations, sans plan ni traçage — résultat indicatif (tendance)."
+      : "Complète : import d'un plan puis traçage des pièces — analyse fine pièce par pièce."; }
+    gate();
+  }
   function gate(){
     var btn=document.getElementById('go-btn'), hint=document.getElementById('go-hint');
-    var ok=hasPlan();
+    var ok=(curMode()==='rapide') || hasPlan();
     if(btn){ btn.disabled=!ok; }
-    if(hint){ hint.style.display=ok?'none':''; }
+    if(hint){ hint.style.display=(ok)?'none':''; }
   }
   // Remplace le bouton natif (texte abrégé selon l'OS) par un libellé clair en français.
   function enhanceFiles(){
@@ -863,7 +887,10 @@ _CONFIG_JS = """
     var d=document.getElementById('in-dxf'), f=document.getElementById('in-floors');
     if(d){ d.addEventListener('change', gate); }
     if(f){ f.addEventListener('change', gate); }
-    enhanceFiles(); sync(); gate();
+    Array.prototype.forEach.call(document.querySelectorAll('input[name=etude_mode]'), function(r){
+      r.addEventListener('change', syncMode);
+    });
+    enhanceFiles(); sync(); syncMode();
   });
 })();
 """
@@ -923,6 +950,7 @@ def render_study_form(
         [("pvc", "PVC"), ("alu", "Aluminium"), ("bois", "Bois"), ("mixte", "Bois/alu")],
         "pvc",
     )
+    depth_sel = select("q_depth", [("compact", "Compactes"), ("profond", "Profondes")], "compact")
     extracted = bool(p)
     body = f"""
 <div class="form-head">
@@ -939,7 +967,13 @@ def render_study_form(
 <!-- Formulaire principal (vide) : les champs des cartes y sont rattachés via form="mainform". -->
 <form id="mainform" method="post" action="/etude" enctype="multipart/form-data"></form>
 
-<div class="card" style="margin:1.2rem 0">
+<div class="seg modeseg" role="tablist" style="margin:1rem 0 .3rem">
+  <label class="on"><input type="radio" name="etude_mode" value="complete" form="mainform" checked> Étude complète</label>
+  <label><input type="radio" name="etude_mode" value="rapide" form="mainform"> Étude rapide</label>
+</div>
+<p class="hint" id="mode-hint" style="margin:0 0 1rem"></p>
+
+<div class="card" id="card-plan" style="margin:1.2rem 0">
   <h2>{_icon("ruler", 20)}Plan</h2>
   <p class="sub">Plan vectoriel (DXF ou PDF) servant de fond pour tracer les pièces.
   Un PDF scanné n'est pas lu.</p>
@@ -950,6 +984,21 @@ def render_study_form(
   <div class="field" style="margin-bottom:0">
     <div class="lab">Ou un PDF par niveau, du bas vers le haut (1<sup>er</sup> fichier = RdC)</div>
     <input type="file" name="floor_pdfs" accept=".pdf" multiple form="mainform" id="in-floors">
+  </div>
+</div>
+
+<div class="card" id="card-estim" style="margin:1.2rem 0;display:none">
+  <h2>{_icon("ruler", 20)}Ventilation &amp; vitrage (estimation)</h2>
+  <p class="sub">En mode rapide, ces quelques estimations remplacent le tracé. La hauteur des
+  châssis et le taux de vitrage se règlent dans « Passeport énergétique ».</p>
+  <div class="form-grid">
+    <div class="field"><div class="lab">Surface totale (m²)</div>
+      <input type="number" name="area" value="{v("area", "800")}" step="10" form="mainform"></div>
+    <div class="field"><div class="lab">Nombre de niveaux</div>
+      <input type="number" name="levels" value="{v("levels", "2")}" min="1" form="mainform"></div>
+    <div class="field"><div class="lab">Part de surface traversante (%)</div>
+      <input type="number" name="q_through" value="{v("q_through", "40")}" min="0" max="100" step="5" form="mainform"></div>
+    <div class="field"><div class="lab">Pièces plutôt…</div>{depth_sel}</div>
   </div>
 </div>
 
@@ -2173,6 +2222,56 @@ def _tornado(result: StudyResult) -> str:
     )
 
 
+def _tendance(score: float) -> tuple[str, str]:
+    """Tendance d'aptitude (mode rapide) : Favorable / À étudier / Défavorable."""
+    if score >= 65:
+        return "Favorable", "#1a9d5a"
+    if score >= 45:
+        return "À étudier", "#d9a400"
+    return "Défavorable", "#c0392b"
+
+
+def _financial_quick(result: StudyResult) -> str:
+    """Bilan financier **allégé** (mode rapide) : ordres de grandeur, pas de détail."""
+    r = result.roi
+    if r is None:
+        return ""
+    npv = r.npv_delta_eur
+    if npv > 0:
+        tlab, tcol = "plutôt favorable", "#1a9d5a"
+    elif npv > -r.capex_vnc_eur * 0.1:
+        tlab, tcol = "à l'équilibre", "#d9a400"
+    else:
+        tlab, tcol = "plutôt défavorable", "#c0392b"
+    rng = ""
+    if r.npv_delta_range is not None:
+        rng = (
+            '<div style="font-size:.72rem;color:var(--muted)">fourchette large '
+            f"{_eur(r.npv_delta_range.low)} … {_eur(r.npv_delta_range.high)}</div>"
+        )
+    kpis = '<div class="kpis">' + "".join(
+        f'<div class="kpi"><div class="k">{k}{_info(t)}</div><div class="v">{v}</div>{sub}</div>'
+        for k, v, sub, t in [
+            ("CAPEX VMC (ordre de grandeur)", _eur(r.capex_vmc_eur), "",
+             "Investissement VMC double-flux estimé (ratios €/m²)."),
+            ("CAPEX VNC (ordre de grandeur)", _eur(r.capex_vnc_eur), "",
+             "Investissement VNC estimé."),
+            ("VAN économie VNC (indicative)", _eur(npv), rng,
+             "Économie actualisée VNC vs VMC. En mode rapide, fourchette volontairement large."),
+        ]
+    ) + "</div>"
+    return (
+        "<h2 class='sec'>Bilan financier — estimation</h2>"
+        f'<p style="margin:.2rem 0 .6rem">Tendance économique : '
+        f'<b style="color:{tcol}">{tlab}</b>.</p>'
+        f"{kpis}"
+        "<p style='color:var(--muted);font-size:.85rem;margin:.6rem 0'>Chiffres en "
+        "<b>ordre de grandeur</b> : le mode rapide ne détaille pas les postes. Pour un bilan "
+        "complet (CAPEX/OPEX détaillés, hypothèses éditables, sensibilité), lancez une "
+        "<b>étude complète</b> avec les plans.</p>"
+    )
+
+
 def _financial_section(result: StudyResult, hyp_html: str = "") -> str:
     """Bilan financier détaillé (façon comparatif Excel VNC vs VMC).
 
@@ -2448,32 +2547,50 @@ def render_results(
         except Exception:  # pragma: no cover - matplotlib absent
             plan = ""
 
+    quick = result.mode == "rapide"
     # Le titre reflète l'APTITUDE (la note), pas l'éligibilité de site : un bâtiment qui
     # score 80 est un bon candidat même si un drapeau de site (pollution…) impose une réserve,
-    # laquelle apparaît alors dans « Points de vigilance ».
-    title = {
-        "A": "Excellent candidat à la VNC",
-        "B": "Bon candidat à la VNC",
-        "C": "Candidat correct à la VNC",
-        "D": "Aptitude à la VNC limitée",
-        "E": "Peu adapté à la VNC",
-    }.get(s.grade, "Aptitude à la VNC") if s else "Aptitude à la VNC"
-    bordc = _GRADE_COLOR.get(s.grade, vcolor) if s else vcolor
+    # laquelle apparaît alors dans « Points de vigilance ». En rapide : une « tendance ».
+    if quick and s:
+        tlab, bordc = _tendance(s.global_score)
+        title = f"Tendance : {tlab}"
+    else:
+        title = {
+            "A": "Excellent candidat à la VNC",
+            "B": "Bon candidat à la VNC",
+            "C": "Candidat correct à la VNC",
+            "D": "Aptitude à la VNC limitée",
+            "E": "Peu adapté à la VNC",
+        }.get(s.grade, "Aptitude à la VNC") if s else "Aptitude à la VNC"
+        bordc = _GRADE_COLOR.get(s.grade, vcolor) if s else vcolor
 
-    hyp = _hypotheses_form(result, building, cfg or {})
+    banner = ""
+    if quick:
+        banner = (
+            f'<div class="quick-banner">{_icon("bulb")} <b>Estimation rapide</b> — '
+            "résultat indicatif calculé à partir de quelques données saisies (sans plan). "
+            "Pour une analyse fine pièce par pièce et un bilan financier détaillé, lancez "
+            'une <a href="/etude">étude complète</a> avec les plans.</div>'
+        )
+
+    actions = "" if quick else _results_actions()
+    fin = _financial_quick(result) if quick else _financial_section(
+        result, _hypotheses_form(result, building, cfg or {})
+    )
     body = f"""
 <div class="score-hero">
   {gauge}
   <h1 class="verdict-title" style="border-left:4px solid {bordc};padding-left:.7rem">{html.escape(title)}</h1>
 </div>
+{banner}
 {concl}
-{_results_actions()}
+{actions}
 <h2 class="sec">Détail par critère</h2>
 {_criteria_bars(result)}
 {_score_legend(result)}
 {recos}
 {plan}
-{_financial_section(result, hyp)}
+{fin}
 <div class="disclaimer">{_icon("alert")} {html.escape(_DISCLAIMER)}</div>
 <p><a class="btn ghost" href="/etude">{_icon("refresh")} Nouvelle étude</a></p>
 """

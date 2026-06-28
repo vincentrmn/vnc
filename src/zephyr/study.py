@@ -64,6 +64,7 @@ def compute_study(
     weights: ScoreWeights | None = None,
     size_from_geometry: bool = False,
     include_heating_penalty: bool = False,
+    quick: bool = False,
     with_narrative: bool = False,
 ) -> StudyResult:
     """Pipeline complet → `StudyResult` : score + pénalité chauffage + ROI.
@@ -96,11 +97,20 @@ def compute_study(
         specs.pop(HEATING_PENALTY_KEY, None)
     roi = compute_roi(roi_params, heating_penalty_eur_per_year=penalty_roi)
     roi.sensitivity = tornado(roi_params, heating_penalty_eur_per_year=penalty_roi, specs=specs)
-    mc = monte_carlo(roi_params, heating_penalty_eur_per_year=penalty_roi, specs=specs)
+    # En mode rapide, on élargit l'incertitude du Monte-Carlo (entrées peu fiables).
+    mc_specs = specs
+    if quick:
+        base = specs or default_tornado_specs(roi_params, penalty_roi)
+        mc_specs = {}
+        for k, (lo, hi) in base.items():
+            mid = (lo + hi) / 2.0
+            mc_specs[k] = (max(0.0, mid - 1.7 * (mid - lo)), mid + 1.7 * (hi - mid))
+    mc = monte_carlo(roi_params, heating_penalty_eur_per_year=penalty_roi, specs=mc_specs)
     roi.npv_delta_range = Range(low=mc["npv_p10"], central=roi.npv_delta_eur, high=mc["npv_p90"])
     roi.break_even_range = Range(low=mc["be_p10"], central=mc["be_p50"], high=mc["be_p90"])
     roi.assumptions["proba_van_favorable"] = f"{mc['prob_favorable']:.0%}"
     result.roi = roi
+    result.mode = "rapide" if quick else "complete"
     result.assumptions["surface_ventilee_m2"] = f"{roi_params.total_floor_area_m2:.0f}"
     result.assumptions["type_projet"] = project_type.value
 

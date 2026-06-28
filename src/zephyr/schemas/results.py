@@ -177,6 +177,10 @@ class StudyResult(BaseModel):
     """Agrégat final : éligibilité + score d'aptitude + pénalité chauffage + ROI."""
 
     verdict: Verdict
+    mode: str = Field(
+        default="complete",
+        description="Niveau d'étude : 'complete' (plans tracés) ou 'rapide' (formulaire).",
+    )
     score: VNCScore | None = None
     heating_penalty: HeatingPenalty | None = None
     roi: ROIResult | None = None

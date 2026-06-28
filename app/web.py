@@ -20,7 +20,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
-from zephyr.builders import parametric_building
+from zephyr.builders import parametric_building, representative_building
 from zephyr.climate import synthetic_climate
 from zephyr.presets import penalty_params_for
 from zephyr.report import render_report
@@ -124,7 +124,8 @@ def _apply_roi_overrides(roi_params: ROIParameters, cfg: dict[str, str]) -> ROIP
 
 
 def _study_for_report(
-    building: Building, cfg: dict[str, str], flags: dict[str, bool], *, from_geometry: bool = False
+    building: Building, cfg: dict[str, str], flags: dict[str, bool],
+    *, from_geometry: bool = False, quick: bool = False,
 ) -> StudyResult:
     from zephyr.presets import cost_preset_for, heating_price_for
 
@@ -153,14 +154,37 @@ def _study_for_report(
         project_type=ptype,
         penalty_params=penalty,
         size_from_geometry=from_geometry,
+        quick=quick,
     )
 
 
 def _compute_page(
-    building: Building, cfg: dict[str, str], flags: dict[str, bool], *, from_geometry: bool = False
+    building: Building, cfg: dict[str, str], flags: dict[str, bool],
+    *, from_geometry: bool = False, quick: bool = False,
 ) -> str:
-    result = _study_for_report(building, cfg, flags, from_geometry=from_geometry)
+    result = _study_for_report(building, cfg, flags, from_geometry=from_geometry, quick=quick)
     return render_results(result, building=building, cfg=cfg)
+
+
+def _quick_building(cfg: dict[str, str]) -> Building:
+    """Bâtiment représentatif (mode rapide) à partir du formulaire."""
+    try:
+        through = max(0.0, min(1.0, float(cfg.get("q_through", "40")) / 100.0))
+    except (TypeError, ValueError):
+        through = 0.4
+    try:
+        sash = float(cfg.get("sash", "1.5"))
+    except (TypeError, ValueError):
+        sash = 1.5
+    return representative_building(
+        max(float(cfg.get("area", "800")), 1.0),
+        num_levels=max(int(float(cfg.get("levels", "2"))), 1),
+        through_fraction=through,
+        glazing_ratio=float(cfg.get("glazing", "0.15")),
+        tall_windows=sash >= 1.5,
+        deep=cfg.get("q_depth", "compact") == "profond",
+        inertia=InertiaClass(cfg.get("inertia", "lourde")),
+    )
 
 
 def _dxf_tracing_page(raw: object, hidden: str) -> str:
@@ -327,6 +351,9 @@ async def submit_config(
     pollution: str | None = Form(None),
     security: str | None = Form(None),
     occ_incompatible: str | None = Form(None),
+    etude_mode: str = Form("complete"),
+    q_through: float = Form(40.0),
+    q_depth: str = Form("compact"),
 ) -> str:
     cfg = {
         "nature": nature, "project_type": project_type, "location": location,
@@ -335,11 +362,17 @@ async def submit_config(
         "sash": str(sash), "n50": str(n50),
         # Captés (pas encore câblés au calcul) — transmis pour le futur/report.
         "chauffage": chauffage, "ecs": ecs, "chassis_material": chassis_material,
+        # Mode rapide (estimation sans plan).
+        "q_through": str(q_through), "q_depth": q_depth,
     }
     flags = {
         "noise": bool(noise), "pollution": bool(pollution),
         "security": bool(security), "occ_incompatible": bool(occ_incompatible),
     }
+
+    # Mode RAPIDE : aucun plan, on construit un bâtiment représentatif → résultats directs.
+    if etude_mode == "rapide":
+        return _compute_page(_quick_building(cfg), cfg, flags, quick=True)
 
     cfg_with_flags = {**cfg, **{k: ("on" if v else "") for k, v in flags.items()}}
 

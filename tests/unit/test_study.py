@@ -70,3 +70,15 @@ def test_compute_study_no_go_propagates() -> None:
     assert res.verdict is Verdict.NO_GO
     # Même en no-go, le ROI reste calculé (info de décision).
     assert res.roi is not None
+
+
+def test_quick_mode_marks_mode_and_widens_range() -> None:
+    """Mode rapide : marque le résultat et élargit la fourchette ROI (entrées peu fiables)."""
+    full = compute_study(_building(), synthetic_climate(), envelope=_ENV)
+    quick = compute_study(_building(), synthetic_climate(), envelope=_ENV, quick=True)
+    assert quick.mode == "rapide" and full.mode == "complete"
+    assert quick.roi is not None and full.roi is not None
+    assert quick.roi.npv_delta_range is not None and full.roi.npv_delta_range is not None
+    span_q = quick.roi.npv_delta_range.high - quick.roi.npv_delta_range.low
+    span_f = full.roi.npv_delta_range.high - full.roi.npv_delta_range.low
+    assert span_q > span_f  # incertitude plus large en rapide

@@ -34,6 +34,20 @@ def test_parametric_flow_to_results() -> None:
     assert "à la VNC" in r.text and "Bilan financier" in r.text
 
 
+def test_quick_mode_flow_to_results() -> None:
+    """Mode rapide : formulaire (sans plan) → résultats indicatifs (tendance + bilan allégé)."""
+    r = client.post(
+        "/etude",
+        data={"etude_mode": "rapide", "project_type": "logement", "area": "800", "levels": "2",
+              "q_through": "60", "q_depth": "compact", "glazing": "0.12", "sash": "1.8",
+              "inertia": "lourde", "chauffage": "pac"},
+    )
+    assert r.status_code == 200
+    assert "Estimation rapide" in r.text and "Tendance :" in r.text
+    assert "Bilan financier — estimation" in r.text  # bilan allégé
+    assert 'id="valform"' not in r.text  # pas d'hypothèses éditables en rapide
+
+
 def test_dxf_flow_validation_then_results() -> None:
     assert _DXF.exists(), "lancer scripts/make_sample_dxf.py"
     with _DXF.open("rb") as fh:

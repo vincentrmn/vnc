@@ -61,6 +61,14 @@ def _room_fr(room: object) -> str:
     return _ROOM_FR.get(val, val.capitalize())
 
 
+# Pièces de vie (le critère vitrage ne porte que sur elles ; « autre » = ex. salle de jeu).
+_LIVING_LABELS = {"sejour", "salle_a_manger", "chambre", "cuisine", "bureau", "autre"}
+
+
+def _is_living(room: object) -> bool:
+    return getattr(getattr(room, "label", None), "value", "autre") in _LIVING_LABELS
+
+
 # Notes d'inertie par classe (free-cooling nocturne + amortissement).
 _INERTIA_SCORE: dict[InertiaClass, float] = {
     InertiaClass.LOURDE: 100.0,
@@ -203,103 +211,102 @@ def _ventilation_criterion(
     )
 
 
+def _glazing_score(ratio: float) -> float:
+    """Note de vitrage (0–100) pour un taux donné : plus c'est bas, mieux c'est."""
+    if ratio <= GLAZING_OPTIMAL:
+        return 100.0
+    if ratio >= GLAZING_MAX:
+        return GLAZING_FLOOR_SCORE
+    frac = (ratio - GLAZING_OPTIMAL) / (GLAZING_MAX - GLAZING_OPTIMAL)
+    return 100.0 - (100.0 - GLAZING_FLOOR_SCORE) * frac
+
+
 def _glazing_criterion(building: Building, envelope: EnvelopeData, weight: float) -> ScoreCriterion:
     """Note le taux de surface vitrée : plus il est bas, mieux c'est (surchauffe/déperditions)."""
-    area = building.total_floor_area_m2 or 1.0
-    has_openings = any(r.openings for r in building.rooms)
+    # On ne raisonne que sur les pièces de vie (le service borgne ne doit pas compter).
+    living = [r for r in building.rooms if _is_living(r) and r.area_m2 > 0]
+    target = living or [r for r in building.rooms if r.area_m2 > 0]
+    has_openings = any(r.openings for r in target)
     scale_txt = (
         f"Plus le taux est bas, mieux c'est : ≤ {GLAZING_OPTIMAL:.1%} (1/8) = 100, "
         f"décroissance linéaire jusqu'au maximum {GLAZING_MAX:.0%}, "
         f"plancher {GLAZING_FLOOR_SCORE:.0f} au-delà. Sans châssis tracé : 0."
     )
 
-    # Priorité au MESURÉ : si des châssis sont tracés, on calcule le taux depuis leur
-    # surface (Σ surfaces de châssis ÷ surface au sol), pièce par pièce. Le ratio du CPE
-    # n'est utilisé qu'en repli (aucun châssis tracé) ; sinon note nulle.
-    glazing_area: float | None = None
+    # Priorité au MESURÉ : si des châssis sont tracés, on note CHAQUE pièce de vie
+    # (taux de la pièce → note de la pièce), puis on agrège au prorata de la surface.
+    # Le ratio du CPE n'est utilisé qu'en repli (aucun châssis tracé) ; sinon note nulle.
     if has_openings:
-        glazing_area = sum(op.area_m2 for r in building.rooms for op in r.openings)
-        ratio = glazing_area / area
-        src = "châssis tracés (surfaces mesurées)"
-    elif envelope.glazing_to_floor_ratio is not None:
-        ratio = envelope.glazing_to_floor_ratio
-        src = "CPE ou saisie (aucun châssis tracé)"
-    else:
-        return ScoreCriterion(
-            key="vitrage",
-            label="Vitrage (taux de surface vitrée)",
-            score=0.0,
-            weight=weight,
-            detail="aucun châssis tracé (taux de vitrage = 0)",
-            scale=scale_txt,
-            recommendation=(
-                "Aucun châssis n'a été tracé : ajouter les ouvrants sur les façades pour "
-                "permettre la ventilation naturelle et l'éclairage."
-            ),
-            breakdown=ScoreBreakdown(
-                columns=["Élément", "Valeur"],
-                rows=[["Châssis tracés", "aucun"], ["Note", "0/100"]],
-                formula="Sans châssis tracé, le taux de vitrage n'est pas exploitable : note = 0.",
-            ),
-        )
-
-    if ratio <= GLAZING_OPTIMAL:
-        score = 100.0
-        calc = f"taux {ratio:.1%} ≤ {GLAZING_OPTIMAL:.1%} → note plafonnée à 100"
-    elif ratio >= GLAZING_MAX:
-        score = GLAZING_FLOOR_SCORE
-        calc = f"taux {ratio:.1%} ≥ {GLAZING_MAX:.0%} → note plancher {GLAZING_FLOOR_SCORE:.0f}"
-    else:
-        frac = (ratio - GLAZING_OPTIMAL) / (GLAZING_MAX - GLAZING_OPTIMAL)
-        score = 100.0 - (100.0 - GLAZING_FLOOR_SCORE) * frac
-        calc = (
-            f"interpolation entre {GLAZING_OPTIMAL:.1%} (100) et {GLAZING_MAX:.0%} "
-            f"({GLAZING_FLOOR_SCORE:.0f}) → {score:.0f}"
-        )
-
-    reco: str | None = None
-    if ratio > GLAZING_MAX:
+        rows: list[list[str]] = []
+        weighted = 0.0
+        living_area = 0.0
+        worst: tuple[float, str] | None = None
+        for r in target:
+            g = sum(op.area_m2 for op in r.openings)
+            rr = g / r.area_m2
+            rs = _glazing_score(rr)
+            weighted += rs * r.area_m2
+            living_area += r.area_m2
+            rows.append([_room_fr(r), f"{g:.1f}", f"{r.area_m2:.1f}", f"{rr:.1%}", f"{rs:.0f}"])
+            if rr > GLAZING_MAX and (worst is None or rr > worst[0]):
+                worst = (rr, _room_fr(r))
+        score = weighted / living_area if living_area else 100.0
+        glaz_tot = sum(sum(op.area_m2 for op in r.openings) for r in target)
+        ratio = glaz_tot / living_area if living_area else 0.0
+        src = "châssis tracés (mesuré par pièce de vie)"
         reco = (
-            f"Taux de vitrage élevé ({ratio:.0%} > {GLAZING_MAX:.0%}) : risque de surchauffe et "
-            "de déperditions ; prévoir des protections solaires (sud/ouest) ou réduire les "
-            "surfaces vitrées."
-        )
-
-    if glazing_area is not None:
-        # Détail pièce par pièce : surface des châssis ÷ surface de la pièce.
-        rows = [
-            [
-                _room_fr(r),
-                f"{sum(op.area_m2 for op in r.openings):.1f}",
-                f"{r.area_m2:.1f}",
-                (f"{sum(op.area_m2 for op in r.openings) / r.area_m2:.1%}" if r.area_m2 else "—"),
-            ]
-            for r in building.rooms
-        ]
+            f"{worst[1]} : taux de vitrage {worst[0]:.0%} (> {GLAZING_MAX:.0%}) — risque de "
+            "surchauffe/déperditions ; protections solaires ou réduction des surfaces vitrées."
+        ) if worst else None
         breakdown = ScoreBreakdown(
-            columns=["Pièce", "Châssis m²", "Surface m²", "Taux"],
+            columns=["Pièce", "Châssis m²", "Surface m²", "Taux", "Note"],
             rows=rows,
             formula=(
-                f"Taux global = {glazing_area:.1f} m² de châssis ÷ {area:.0f} m² "
-                f"= {ratio:.1%} → {calc.split('→')[-1].strip()}"
+                "Note = moyenne des notes pièces pondérée par surface = "
+                f"{score:.0f}/100 (pièces de vie uniquement ; taux moyen {ratio:.1%})."
             ),
         )
-    else:
-        breakdown = ScoreBreakdown(
-            columns=["Élément", "Valeur"],
-            rows=[["Taux de vitrage", f"{ratio:.1%}"], ["Source", src],
-                  ["Note", f"{score:.0f}/100"]],
-            formula=f"Note : {calc}.",
+        return ScoreCriterion(
+            key="vitrage", label="Vitrage (taux de surface vitrée)",
+            score=round(score, 1), weight=weight,
+            detail=f"taux de vitrage moyen (pièces de vie) = {ratio:.0%} (source : {src})",
+            scale=scale_txt, recommendation=reco, breakdown=breakdown,
         )
+
+    if envelope.glazing_to_floor_ratio is not None:
+        ratio = envelope.glazing_to_floor_ratio
+        score = _glazing_score(ratio)
+        reco = (
+            f"Taux de vitrage élevé ({ratio:.0%} > {GLAZING_MAX:.0%}) : risque de surchauffe et "
+            "de déperditions ; protections solaires (sud/ouest) ou réduction des surfaces vitrées."
+        ) if ratio > GLAZING_MAX else None
+        return ScoreCriterion(
+            key="vitrage", label="Vitrage (taux de surface vitrée)",
+            score=round(score, 1), weight=weight,
+            detail=f"taux de vitrage / plancher = {ratio:.0%} (source : CPE ou saisie)",
+            scale=scale_txt, recommendation=reco,
+            breakdown=ScoreBreakdown(
+                columns=["Élément", "Valeur"],
+                rows=[["Taux de vitrage", f"{ratio:.1%}"], ["Source", "CPE ou saisie"],
+                      ["Note", f"{score:.0f}/100"]],
+                formula=f"Note depuis le taux déclaré {ratio:.1%} → {score:.0f}/100.",
+            ),
+        )
+
     return ScoreCriterion(
-        key="vitrage",
-        label="Vitrage (taux de surface vitrée)",
-        score=round(score, 1),
-        weight=weight,
-        detail=f"taux de vitrage / plancher = {ratio:.0%} (source : {src})",
+        key="vitrage", label="Vitrage (taux de surface vitrée)",
+        score=0.0, weight=weight,
+        detail="aucun châssis tracé (taux de vitrage = 0)",
         scale=scale_txt,
-        recommendation=reco,
-        breakdown=breakdown,
+        recommendation=(
+            "Aucun châssis n'a été tracé : ajouter les ouvrants sur les façades pour "
+            "permettre la ventilation naturelle et l'éclairage."
+        ),
+        breakdown=ScoreBreakdown(
+            columns=["Élément", "Valeur"],
+            rows=[["Châssis tracés", "aucun"], ["Note", "0/100"]],
+            formula="Sans châssis tracé, le taux de vitrage n'est pas exploitable : note = 0.",
+        ),
     )
 
 

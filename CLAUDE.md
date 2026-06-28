@@ -230,6 +230,11 @@ Les deux éditeurs produisent un **`building_json`** (polygones en mètres) post
 - **Bilan financier** : **infobulles « i »** sur chaque terme (VAN, TCO, break-even, CAPEX, proba) ; **hypothèses éditables** (prix élec, WACC, horizon, abonnement BOS, prix/nb d'ouvrants) → **recalcul serveur** (`ovr_*` → `_apply_roi_overrides`) ; **export Excel (CSV)** côté client et **export PDF** (`POST /etude/rapport` → `render_report`).
 - **Design** : champs/sélecteurs épurés (fond `--surface-2`, **flèche custom** sur les `<select>` — fin du « combo noir »), suppression du séparateur « · », **enregistrement du projet (JSON)** en tête de résultats.
 
+**Fait depuis (deux modes d'étude)** :
+- **Mode « rapide » vs « complet »**, choisi en tête de `/etude` (toggle). **Complet** = flux actuel (plan obligatoire → traçage → analyse fine). **Rapide** = formulaire seul (surface, niveaux, % traversant, profondeur, + Passeport/CPE et taux vitrage/hauteur châssis), **sans plan ni traçage** — l'upload CPE reste possible. Un **seul moteur** : le rapide fabrique un `Building` représentatif (`builders.representative_building`) passé dans `compute_study(quick=True)`.
+- **Sortie rapide** : une **tendance** (Favorable ≥ 65 / À étudier 45–65 / Défavorable < 45) + **bandeau « estimation rapide »** + **bilan financier allégé** (ordres de grandeur, pas de livre ouvert/hypothèses/tornado) + **fourchette ROI élargie** (`StudyResult.mode = "rapide"`).
+- **Vitrage par pièce** (mode complet) : le taux est noté **pièce de vie par pièce de vie** (taux pièce → note → moyenne pondérée surface), les pièces de service (WC, sdb, circulation, technique…) étant exclues ; reco ciblée sur la pièce la plus vitrée.
+
 **Prochaines étapes (priorité = définition du bâtiment, puis méthode)** — cf. §11 pour les questions ouvertes :
 1. **CPE** : couvrir d'autres mises en page/versions (l'extraction est validée sur le format LuxEEB v6.25) ; affiner le choix Uw quand plusieurs types de fenêtres.
 2. **Portes intérieures** → chemins d'air pour un traversant « réel » (pas juste ≥ 2 façades).
